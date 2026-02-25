@@ -1,5 +1,6 @@
 {
-  "_comment": "Add this to your project's .claude/settings.json to enable Entendi observation and probing. Replace <ENTENDI_PATH> with the absolute path to your Entendi installation.",
+  "_comment_hooks": "Add this to your project's .claude/settings.local.json to enable Entendi observation hooks. Replace <ENTENDI_PATH> with the absolute path to your Entendi installation.",
+  "_comment_mcp": "The MCP server is registered separately via: claude mcp add entendi -- node <ENTENDI_PATH>/dist/mcp/server.js",
   "hooks": {
     "PostToolUse": [
       {

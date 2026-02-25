@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { readdirSync } from 'fs';
+import { chmodSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const hookDir = join('src', 'hooks');
@@ -36,3 +36,16 @@ await esbuild.build({
   banner: { js: '#!/usr/bin/env node' },
   external: ['@anthropic-ai/sdk'],
 });
+
+// Make all built entry points executable
+const outputs = [
+  ...hookFiles.map(f => join('dist', 'hooks', f.replace(/^src\/hooks\//, '').replace(/\.ts$/, '.js'))),
+  join('dist', 'mcp', 'server.js'),
+];
+for (const out of outputs) {
+  try {
+    chmodSync(out, 0o755);
+  } catch {
+    // file may not exist if build was partial
+  }
+}
