@@ -5,6 +5,10 @@ import { tmpdir } from 'os';
 import { StateManager } from '../../src/core/state-manager.js';
 import { handlePostToolUse } from '../../src/hooks/post-tool-use.js';
 import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
+import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
+import { buildSeedConceptNodes } from '../../src/config/seed-taxonomy.js';
+import { grmFisherInformation, grmBayesianUpdate } from '../../src/core/probabilistic-model.js';
+import { createDashboardApp } from '../../src/dashboard/server.js';
 
 describe('end-to-end flow', () => {
   let projectDir: string;
@@ -128,5 +132,94 @@ describe('end-to-end flow', () => {
     expect(postToolResult).toBeDefined();
     // Should have detected concepts from at least one of the packages
     expect(postToolResult!.hookSpecificOutput?.additionalContext).toBeTruthy();
+  });
+});
+
+describe('Phase 1a Integration', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'entendi-p1a-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('full cycle: install -> probe -> respond -> GRM update -> dashboard', async () => {
+    const dataDir = join(tmpDir, '.entendi');
+
+    // 1. Package install triggers probe
+    const installResult = await handlePostToolUse(
+      { session_id: 's1', cwd: tmpDir, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm install redis' }, tool_output: 'added redis@4' },
+      { skipLLM: true, dataDir, userId: 'student1' },
+    );
+    expect(installResult).toBeDefined();
+
+    // 2. Verify probe was created
+    const stateManager = new StateManager(dataDir, 'student1');
+    expect(stateManager.getProbeSession().pendingProbe).not.toBeNull();
+
+    // 3. User responds
+    const respondResult = await handleUserPromptSubmit(
+      { session_id: 's1', cwd: tmpDir, hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory data store used for caching to reduce database load.' },
+      { skipLLM: true, dataDir, userId: 'student1' },
+    );
+    expect(respondResult).toBeDefined();
+
+    // 4. Verify probe cleared and mastery updated
+    const sm2 = new StateManager(dataDir, 'student1');
+    expect(sm2.getProbeSession().pendingProbe).toBeNull();
+
+    // 5. Dashboard can serve the data
+    const app = createDashboardApp(tmpDir);
+    const graphRes = await app.request('/api/graph');
+    expect(graphRes.status).toBe(200);
+    const data = await graphRes.json() as any;
+    expect(Object.keys(data.concepts).length).toBeGreaterThan(0);
+  });
+
+  it('GRM update produces valid posteriors across rubric scores', () => {
+    for (const score of [0, 1, 2, 3] as const) {
+      const result = grmBayesianUpdate(score, 0.0, 1.5);
+      expect(result.converged).toBe(true);
+      expect(Number.isFinite(result.mu)).toBe(true);
+      expect(result.sigma).toBeGreaterThan(0);
+      expect(result.sigma).toBeLessThanOrEqual(1.5);
+    }
+  });
+
+  it('Fisher information is consistent across the ability range', () => {
+    for (const theta of [-3, -2, -1, 0, 1, 2, 3]) {
+      const fi = grmFisherInformation(theta);
+      expect(fi).toBeGreaterThan(0);
+      expect(Number.isFinite(fi)).toBe(true);
+    }
+  });
+
+  it('seed taxonomy integrates with knowledge graph', () => {
+    const seedNodes = buildSeedConceptNodes();
+    const graph = new KnowledgeGraph({ concepts: seedNodes, userStates: {} });
+
+    expect(graph.getAllConcepts().length).toBeGreaterThan(50);
+
+    const asyncConcept = graph.getConcept('async-programming');
+    expect(asyncConcept).toBeDefined();
+    expect(asyncConcept?.domain).toBe('programming-languages');
+
+    // New user -> novel
+    expect(graph.classifyNovelty('newuser', 'async-programming')).toBe('novel');
+
+    // Security concepts -> critical regardless of mastery
+    const secConcept = graph.getAllConcepts().find(c => c.domain === 'security');
+    if (secConcept) {
+      const state = graph.getUserConceptState('user1', secConcept.conceptId);
+      state.mastery.mu = 2.0;
+      state.assessmentCount = 5;
+      state.lastAssessed = new Date().toISOString();
+      state.memory.stability = 30;
+      graph.setUserConceptState('user1', secConcept.conceptId, state);
+      expect(graph.classifyNovelty('user1', secConcept.conceptId)).toBe('critical');
+    }
   });
 });
