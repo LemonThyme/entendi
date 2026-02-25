@@ -1,5 +1,6 @@
-import type { NoveltyLevel } from '../schemas/types.js';
-import { retrievability } from './probabilistic-model.js';
+import type { NoveltyLevel, GRMItemParams } from '../schemas/types.js';
+import { DEFAULT_GRM_PARAMS } from '../schemas/types.js';
+import { retrievability, grmFisherInformation } from './probabilistic-model.js';
 
 const PROBE_PROBABILITIES: Record<NoveltyLevel, number> = {
   routine: 0.05,
@@ -14,14 +15,17 @@ export function shouldProbe(novelty: NoveltyLevel, force?: boolean): boolean {
   return Math.random() < PROBE_PROBABILITIES[novelty];
 }
 
-interface ProbeCandidateInfo {
+export interface ProbeCandidateInfo {
   conceptId: string;
   mu: number;
   sigma: number;
+  stability: number;
   daysSinceAssessment: number;
+  itemParams: GRMItemParams;
 }
 
-/** Select the concept to probe by maximizing information value. */
+/** Select the concept to probe by maximizing information value.
+ *  Uses GRM Fisher information weighted by memory decay bonus. */
 export function selectConceptToProbe(candidates: ProbeCandidateInfo[]): string | null {
   if (candidates.length === 0) return null;
 
@@ -29,10 +33,10 @@ export function selectConceptToProbe(candidates: ProbeCandidateInfo[]): string |
   let bestScore = -Infinity;
 
   for (const c of candidates) {
-    const uncertainty = c.sigma * c.sigma;
-    const R = retrievability(c.daysSinceAssessment, Math.max(c.sigma * 10, 1));
+    const fisherInfo = grmFisherInformation(c.mu, c.itemParams);
+    const R = retrievability(c.daysSinceAssessment, c.stability);
     const decayBonus = 1 - R;
-    const score = uncertainty + decayBonus;
+    const score = fisherInfo * (1 + decayBonus);
 
     if (score > bestScore) {
       bestScore = score;

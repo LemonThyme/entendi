@@ -38,10 +38,20 @@ export class KnowledgeGraph {
 
   setUserConceptState(userId: string, conceptId: string, ucs: UserConceptState): void {
     const key = `${userId}:${conceptId}`;
+    // Cap assessment history at 50 events
+    if (ucs.history.length > 50) {
+      ucs.history = ucs.history.slice(-50);
+    }
     this.state.userStates[key] = ucs;
   }
 
   classifyNovelty(userId: string, conceptId: string): NoveltyLevel {
+    // Security domain concepts are always critical
+    const concept = this.state.concepts[conceptId];
+    if (concept && concept.domain === 'security') {
+      return 'critical';
+    }
+
     const key = `${userId}:${conceptId}`;
     const ucs = this.state.userStates[key];
 

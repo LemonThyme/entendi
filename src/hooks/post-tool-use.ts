@@ -6,9 +6,11 @@ import {
 } from '../core/concept-extraction.js';
 import { KnowledgeGraph } from '../core/knowledge-graph.js';
 import { StateManager } from '../core/state-manager.js';
-import { shouldProbe } from '../core/probe-scheduler.js';
+import { shouldProbe, selectConceptToProbe } from '../core/probe-scheduler.js';
+import type { ProbeCandidateInfo } from '../core/probe-scheduler.js';
 import { generateProbe } from '../core/probe-engine.js';
 import type { ConceptNode } from '../schemas/types.js';
+import { DEFAULT_GRM_PARAMS } from '../schemas/types.js';
 
 export interface PostToolUseOutput {
   hookSpecificOutput?: {
@@ -18,6 +20,8 @@ export interface PostToolUseOutput {
 
 interface PostToolUseOptions {
   skipLLM?: boolean;
+  dataDir?: string;
+  userId?: string;
 }
 
 export async function handlePostToolUse(
@@ -46,8 +50,8 @@ export async function handlePostToolUse(
   if (allConcepts.length === 0) return null;
 
   // 6. Load state and ensure concepts exist in knowledge graph
-  const dataDir = getDataDir(input.cwd);
-  const userId = getUserId();
+  const dataDir = options.dataDir ?? getDataDir(input.cwd);
+  const userId = options.userId ?? getUserId();
   const sm = new StateManager(dataDir, userId);
   const kg = sm.getKnowledgeGraph();
 
@@ -77,9 +81,33 @@ export async function handlePostToolUse(
     }
   }
 
-  // Classify novelty for the first concept (most relevant)
-  const primaryConcept = uniqueConcepts[0]!;
-  const novelty = kg.classifyNovelty(userId, primaryConcept.name);
+  // Build probe candidates from ALL unique concepts
+  const now = Date.now();
+  const candidates: ProbeCandidateInfo[] = uniqueConcepts.map((concept) => {
+    const ucs = kg.getUserConceptState(userId, concept.name);
+    const conceptNode = kg.getConcept(concept.name);
+    const daysSinceAssessment = ucs.lastAssessed
+      ? (now - new Date(ucs.lastAssessed).getTime()) / (1000 * 60 * 60 * 24)
+      : 365; // Never assessed = treat as very stale
+    return {
+      conceptId: concept.name,
+      mu: ucs.mastery.mu,
+      sigma: ucs.mastery.sigma,
+      stability: ucs.memory.stability,
+      daysSinceAssessment,
+      itemParams: conceptNode?.itemParams ?? DEFAULT_GRM_PARAMS,
+    };
+  });
+
+  // Use selectConceptToProbe to pick the best concept
+  const selectedConceptId = selectConceptToProbe(candidates);
+  if (!selectedConceptId) {
+    sm.save();
+    return null;
+  }
+
+  // Classify novelty for the selected concept
+  const novelty = kg.classifyNovelty(userId, selectedConceptId);
 
   // 7. Decide whether to probe — when skipLLM is true, force the probe
   const probeDecision = skipLLM ? true : shouldProbe(novelty);
@@ -94,10 +122,10 @@ export async function handlePostToolUse(
 
   if (skipLLM) {
     // Fallback: use a default probe question
-    question = `I noticed you're using ${primaryConcept.name}. Can you explain why you chose it for this project?`;
+    question = `I noticed you're using ${selectedConceptId}. Can you explain why you chose it for this project?`;
   } else {
     const probe = await generateProbe({
-      conceptName: primaryConcept.name,
+      conceptName: selectedConceptId,
       triggerContext: command,
       targetDepth: 0,
       previousResponses: [],
@@ -111,7 +139,7 @@ export async function handlePostToolUse(
   sm.setPendingProbe({
     probe: {
       probeId,
-      conceptId: primaryConcept.name,
+      conceptId: selectedConceptId,
       question,
       depth: 0,
       probeType,

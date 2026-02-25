@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
 import type { ConceptNode } from '../../src/schemas/types.js';
+import { createConceptNode } from '../../src/schemas/types.js';
 
 describe('KnowledgeGraph', () => {
   let kg: KnowledgeGraph;
@@ -130,6 +131,120 @@ describe('KnowledgeGraph', () => {
       const kg2 = KnowledgeGraph.fromJSON(json);
       expect(kg2.getConcept('redis')!.domain).toBe('databases');
       expect(kg2.getUserConceptState('user1', 'redis').mastery.mu).toBe(1.5);
+    });
+  });
+
+  describe('classifyNovelty (critical support)', () => {
+    it('classifies security concepts as critical regardless of mastery', () => {
+      const graph = new KnowledgeGraph();
+      const concept = createConceptNode({
+        conceptId: 'sql-injection',
+        domain: 'security',
+        specificity: 'technique',
+      });
+      graph.addConcept(concept);
+
+      const state = graph.getUserConceptState('user1', 'sql-injection');
+      state.mastery.mu = 2.0;
+      state.assessmentCount = 5;
+      state.lastAssessed = new Date().toISOString();
+      state.memory.stability = 30;
+      graph.setUserConceptState('user1', 'sql-injection', state);
+
+      const novelty = graph.classifyNovelty('user1', 'sql-injection');
+      expect(novelty).toBe('critical');
+    });
+
+    it('does not classify non-security concepts as critical', () => {
+      const graph = new KnowledgeGraph();
+      const concept = createConceptNode({
+        conceptId: 'redis',
+        domain: 'databases',
+        specificity: 'topic',
+      });
+      graph.addConcept(concept);
+
+      const novelty = graph.classifyNovelty('user1', 'redis');
+      expect(novelty).toBe('novel'); // No user state, so novel
+    });
+
+    it('classifies security concept as critical even with no user state', () => {
+      const graph = new KnowledgeGraph();
+      const concept = createConceptNode({
+        conceptId: 'xss',
+        domain: 'security',
+        specificity: 'technique',
+      });
+      graph.addConcept(concept);
+
+      const novelty = graph.classifyNovelty('user1', 'xss');
+      expect(novelty).toBe('critical');
+    });
+  });
+
+  describe('assessment history cap', () => {
+    it('caps history at 50 events', () => {
+      const graph = new KnowledgeGraph();
+      const state = graph.getUserConceptState('user1', 'test-concept');
+      for (let i = 0; i < 60; i++) {
+        state.history.push({
+          timestamp: new Date().toISOString(),
+          eventType: 'probe',
+          rubricScore: 2,
+          evaluatorConfidence: 0.8,
+          muBefore: 0,
+          muAfter: 0.5,
+          probeDepth: 0,
+          tutored: false,
+        });
+      }
+      graph.setUserConceptState('user1', 'test-concept', state);
+      const saved = graph.getUserConceptState('user1', 'test-concept');
+      expect(saved.history.length).toBeLessThanOrEqual(50);
+    });
+
+    it('keeps the most recent 50 events when capping', () => {
+      const graph = new KnowledgeGraph();
+      const state = graph.getUserConceptState('user1', 'test-concept');
+      for (let i = 0; i < 60; i++) {
+        state.history.push({
+          timestamp: new Date().toISOString(),
+          eventType: 'probe',
+          rubricScore: 2,
+          evaluatorConfidence: 0.8,
+          muBefore: i, // Use muBefore to identify the event
+          muAfter: 0.5,
+          probeDepth: 0,
+          tutored: false,
+        });
+      }
+      graph.setUserConceptState('user1', 'test-concept', state);
+      const saved = graph.getUserConceptState('user1', 'test-concept');
+      expect(saved.history.length).toBe(50);
+      // The first event retained should be the 11th original (index 10), muBefore=10
+      expect(saved.history[0].muBefore).toBe(10);
+      // The last event retained should be the 60th original (index 59), muBefore=59
+      expect(saved.history[49].muBefore).toBe(59);
+    });
+
+    it('does not truncate history at or below 50', () => {
+      const graph = new KnowledgeGraph();
+      const state = graph.getUserConceptState('user1', 'test-concept');
+      for (let i = 0; i < 50; i++) {
+        state.history.push({
+          timestamp: new Date().toISOString(),
+          eventType: 'probe',
+          rubricScore: 2,
+          evaluatorConfidence: 0.8,
+          muBefore: 0,
+          muAfter: 0.5,
+          probeDepth: 0,
+          tutored: false,
+        });
+      }
+      graph.setUserConceptState('user1', 'test-concept', state);
+      const saved = graph.getUserConceptState('user1', 'test-concept');
+      expect(saved.history.length).toBe(50);
     });
   });
 });

@@ -51,4 +51,26 @@ describe('handlePostToolUse', () => {
     const result = await handlePostToolUse(input, { skipLLM: true });
     expect(result).toBeNull();
   });
+
+  it('accepts dataDir and userId options', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const tmpDir = mkdtempSync(join(tmpdir(), 'entendi-ptu-'));
+    try {
+      const input = {
+        session_id: 'test',
+        cwd: '/tmp/test-project',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'npm install redis' },
+        tool_response: { stdout: 'added 1 package' },
+      };
+      const result = await handlePostToolUse(input, { skipLLM: true, dataDir: tmpDir, userId: 'test-user' });
+      expect(result).toBeDefined();
+      expect(result!.hookSpecificOutput?.additionalContext).toBeTruthy();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
