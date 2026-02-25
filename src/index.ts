@@ -7,7 +7,12 @@ export {
   fsrsStabilityAfterSuccess,
   fsrsDifficultyUpdate,
   mapRubricToFsrsGrade,
+  grmCategoryProbs,
+  grmBayesianUpdate,
+  grmUpdate,
+  grmFisherInformation,
 } from './core/probabilistic-model.js';
+export type { GRMUpdateResult } from './core/probabilistic-model.js';
 export {
   detectPackageInstall,
   parsePackageFromCommand,
