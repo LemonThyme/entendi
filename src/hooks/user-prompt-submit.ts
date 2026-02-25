@@ -228,7 +228,23 @@ async function handleTutorResponse(
       tutored: isTutored,
     };
 
-    ucs.mastery = updatedMastery;
+    if (currentPhase === 'phase4') {
+      // Tutored phase4: attenuate the update using tutoredEvidenceWeight
+      const weight = config.orgPolicy.tutoredEvidenceWeight;
+      ucs.mastery = {
+        mu: currentMastery.mu + weight * (updatedMastery.mu - currentMastery.mu),
+        sigma: currentMastery.sigma + weight * (updatedMastery.sigma - currentMastery.sigma),
+      };
+      // Do NOT update muUntutored/sigmaUntutored for phase4
+      ucs.tutoredAssessmentCount += 1;
+    } else {
+      // Phase1 (pre-teaching): full update to both primary and shadow
+      ucs.mastery = updatedMastery;
+      // Counterfactual: phase1 is pre-teaching evidence, updates shadow too
+      ucs.muUntutored = updatedMastery.mu;
+      ucs.sigmaUntutored = updatedMastery.sigma;
+      ucs.untutoredAssessmentCount += 1;
+    }
     ucs.memory = { stability: newStability, difficulty: newDifficulty };
     ucs.lastAssessed = new Date().toISOString();
     ucs.assessmentCount += 1;
@@ -402,6 +418,11 @@ export async function handleUserPromptSubmit(
     ucs.lastAssessed = new Date().toISOString();
     ucs.assessmentCount += 1;
     ucs.history.push(event);
+
+    // Counterfactual: untutored probe updates both primary and shadow
+    ucs.muUntutored = updatedMastery.mu;
+    ucs.sigmaUntutored = updatedMastery.sigma;
+    ucs.untutoredAssessmentCount += 1;
 
     kg.setUserConceptState(userId, probe.conceptId, ucs);
 
