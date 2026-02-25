@@ -149,9 +149,6 @@ export interface ProbeSessionState {
   probesThisSession: number;
 }
 
-/** @deprecated Use ProbeSessionState instead */
-export type ProbeState = ProbeSessionState;
-
 // --- Knowledge Graph State (JSON persistence) ---
 export interface KnowledgeGraphState {
   concepts: Record<string, ConceptNode>;

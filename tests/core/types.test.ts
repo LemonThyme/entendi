@@ -5,7 +5,6 @@ import {
   type ConceptNode,
   type KnowledgeGraphState,
   type ObservationEvent,
-  type ProbeState,
   type GRMItemParams,
   createInitialMastery,
   createInitialMemory,

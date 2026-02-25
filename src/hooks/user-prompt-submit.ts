@@ -140,5 +140,8 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
-  main().catch(() => process.exit(0));
+  main().catch((err) => {
+    process.stderr.write(`[Entendi] Hook error: ${String(err)}\n`);
+    process.exit(0);
+  });
 }

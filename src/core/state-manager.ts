@@ -3,6 +3,14 @@ import { join } from 'path';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import type { PendingProbe, ProbeSessionState } from '../schemas/types.js';
 
+/**
+ * Manages persistent state for Entendi (knowledge graph + probe session).
+ *
+ * IMPORTANT: This implementation assumes hooks execute sequentially within
+ * Claude Code (PostToolUse completes before the next UserPromptSubmit fires).
+ * Concurrent access from multiple hook instances could corrupt state.
+ * Phase 1 should use file locking or atomic writes (write-to-temp + rename).
+ */
 export class StateManager {
   private dataDir: string;
   private userId: string;
@@ -38,13 +46,21 @@ export class StateManager {
 
   private loadKnowledgeGraph(): KnowledgeGraph {
     const path = join(this.dataDir, 'knowledge-graph.json');
-    if (existsSync(path)) return KnowledgeGraph.fromJSON(readFileSync(path, 'utf-8'));
+    try {
+      if (existsSync(path)) return KnowledgeGraph.fromJSON(readFileSync(path, 'utf-8'));
+    } catch {
+      // Corrupted state file; reset to defaults
+    }
     return new KnowledgeGraph();
   }
 
   private loadProbeSession(): ProbeSessionState {
     const path = join(this.dataDir, 'probe-session.json');
-    if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf-8'));
+    try {
+      if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf-8'));
+    } catch {
+      // Corrupted state file; reset to defaults
+    }
     return { pendingProbe: null, lastProbeTime: null, probesThisSession: 0 };
   }
 }

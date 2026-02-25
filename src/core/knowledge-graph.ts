@@ -69,7 +69,7 @@ export class KnowledgeGraph {
   }
 
   toJSON(): string {
-    return JSON.stringify(this.state);
+    return JSON.stringify(this.state, null, 2);
   }
 
   static fromJSON(json: string): KnowledgeGraph {
