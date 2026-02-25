@@ -37,4 +37,40 @@ export {
   type SupportedLanguage,
 } from './core/ast-extraction.js';
 export { SEED_CONCEPTS, buildSeedConceptNodes, seedTaxonomyStats } from './config/seed-taxonomy.js';
+
+// Tutor engine
+export {
+  buildPhase1Prompt,
+  buildPhase2Prompt,
+  buildPhase3Prompt,
+  buildPhase4Prompt,
+  parseTutorResponse,
+  generateTutorQuestion,
+  type ParsedTutorResponse,
+} from './core/tutor-engine.js';
+
+// Tutor state machine
+export {
+  advanceTutorPhase,
+  isTutorActive,
+  isTutorOffered,
+  isPhaseScored,
+  shouldOfferTutor,
+  isTutorTimedOut,
+  TUTOR_TIMEOUT_MS,
+} from './core/tutor-session.js';
+
+// Config
+export {
+  createDefaultOrgPolicy,
+  createDefaultUserPreferences,
+  type OrgPolicy,
+  type UserPreferences,
+} from './config/org-policy.js';
+
+export {
+  loadConfig,
+  type ResolvedConfig,
+} from './config/config-loader.js';
+
 export * from './schemas/types.js';
