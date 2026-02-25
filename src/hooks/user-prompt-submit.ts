@@ -101,8 +101,8 @@ function buildPromptForPhase(
     case 'phase2':
       return buildPhase2Prompt({ conceptName, exchanges });
     case 'phase3': {
-      // Look for the last detected misconception
-      const lastMisconception = undefined; // Could be enhanced later
+      // Use stored misconception from previous phase generation
+      const lastMisconception = session.lastMisconception ?? undefined;
       return buildPhase3Prompt({ conceptName, exchanges, misconception: lastMisconception });
     }
     case 'phase4':
@@ -116,19 +116,103 @@ async function generateQuestionForPhase(
   phase: TutorPhase,
   session: TutorSession,
   skipLLM: boolean,
-): Promise<string> {
+): Promise<{ question: string; misconceptionDetected: string | null }> {
   if (skipLLM) {
-    return `[Entendi Tutor] Let's continue exploring ${session.conceptId}. Can you tell me more?`;
+    return {
+      question: `[Entendi Tutor] Let's continue exploring ${session.conceptId}. Can you tell me more?`,
+      misconceptionDetected: null,
+    };
   }
   const prompt = buildPromptForPhase(phase, session);
   const result = await generateTutorQuestion(prompt);
-  return `[Entendi Tutor] ${result.question}`;
+  return {
+    question: `[Entendi Tutor] ${result.question}`,
+    misconceptionDetected: result.misconceptionDetected,
+  };
 }
 
 // --- Accept/decline patterns ---
 
 const ACCEPT_PATTERN = /^(yes|yeah|sure|ok|y|please)\b/i;
 const DECLINE_PATTERN = /^(no|nah|skip|n|never mind)\b/i;
+
+// --- Shared mastery update helper (Issue 6: deduplication) ---
+
+interface MasteryUpdateParams {
+  sm: StateManager;
+  userId: string;
+  conceptId: string;
+  rubricScore: RubricScore;
+  confidence: number;
+  probeDepth: 0 | 1 | 2 | 3;
+  eventType: AssessmentEvent['eventType'];
+  tutored: boolean;
+  tutoredEvidenceWeight?: number;
+}
+
+function applyMasteryUpdate(params: MasteryUpdateParams): void {
+  const { sm, userId, conceptId, rubricScore, confidence, probeDepth, eventType, tutored, tutoredEvidenceWeight } = params;
+  const kg = sm.getKnowledgeGraph();
+  const ucs = kg.getUserConceptState(userId, conceptId);
+
+  // Apply time decay
+  let currentMastery = ucs.mastery;
+  let R = 1.0;
+  if (ucs.lastAssessed) {
+    const elapsedDays = (Date.now() - new Date(ucs.lastAssessed).getTime()) / (1000 * 60 * 60 * 24);
+    R = retrievability(elapsedDays, ucs.memory.stability);
+    currentMastery = decayPrior(currentMastery.mu, currentMastery.sigma, R);
+  }
+
+  // GRM update
+  const muBefore = currentMastery.mu;
+  const concept = kg.getConcept(conceptId);
+  const updatedMastery = grmUpdate(currentMastery, rubricScore, concept?.itemParams);
+
+  // FSRS update
+  const fsrsGrade = mapRubricToFsrsGrade(rubricScore);
+  let newStability = ucs.memory.stability;
+  let newDifficulty = ucs.memory.difficulty;
+  if (fsrsGrade >= 2) {
+    newStability = fsrsStabilityAfterSuccess(ucs.memory.stability, ucs.memory.difficulty, R, fsrsGrade);
+  }
+  newDifficulty = fsrsDifficultyUpdate(ucs.memory.difficulty, fsrsGrade);
+
+  // Assessment event
+  const event: AssessmentEvent = {
+    timestamp: new Date().toISOString(),
+    eventType,
+    rubricScore,
+    evaluatorConfidence: confidence,
+    muBefore,
+    muAfter: updatedMastery.mu,
+    probeDepth,
+    tutored,
+  };
+
+  // Apply mastery based on tutored/untutored
+  if (tutored && tutoredEvidenceWeight !== undefined) {
+    // Attenuated update for tutored assessments
+    ucs.mastery = {
+      mu: currentMastery.mu + tutoredEvidenceWeight * (updatedMastery.mu - currentMastery.mu),
+      sigma: currentMastery.sigma + tutoredEvidenceWeight * (updatedMastery.sigma - currentMastery.sigma),
+    };
+    ucs.tutoredAssessmentCount += 1;
+  } else {
+    // Full update + shadow update
+    ucs.mastery = updatedMastery;
+    ucs.muUntutored = updatedMastery.mu;
+    ucs.sigmaUntutored = updatedMastery.sigma;
+    ucs.untutoredAssessmentCount += 1;
+  }
+
+  ucs.memory = { stability: newStability, difficulty: newDifficulty };
+  ucs.lastAssessed = new Date().toISOString();
+  ucs.assessmentCount += 1;
+  ucs.history.push(event);
+
+  kg.setUserConceptState(userId, conceptId, ucs);
+}
 
 // --- Tutor response handler ---
 
@@ -161,6 +245,9 @@ async function handleTutorResponse(
     lastExchange.response = userResponse;
   }
 
+  // Update lastActivityAt on every user response (Issue 4)
+  session.lastActivityAt = new Date().toISOString();
+
   // Scoring for phase1 and phase4
   if (isPhaseScored(currentPhase)) {
     let evaluation: ProbeEvaluation;
@@ -183,74 +270,20 @@ async function handleTutorResponse(
       });
     }
 
-    // Bayesian update (same as probe flow)
-    const kg = sm.getKnowledgeGraph();
-    const ucs = kg.getUserConceptState(userId, session.conceptId);
-
-    let currentMastery = ucs.mastery;
-    let R = 1.0;
-    if (ucs.lastAssessed) {
-      const elapsedDays =
-        (Date.now() - new Date(ucs.lastAssessed).getTime()) / (1000 * 60 * 60 * 24);
-      R = retrievability(elapsedDays, ucs.memory.stability);
-      currentMastery = decayPrior(currentMastery.mu, currentMastery.sigma, R);
-    }
-
-    const muBefore = currentMastery.mu;
-    const concept = kg.getConcept(session.conceptId);
-    const conceptItemParams = concept?.itemParams;
-    const updatedMastery = grmUpdate(currentMastery, evaluation.rubricScore, conceptItemParams);
-
-    const fsrsGrade = mapRubricToFsrsGrade(evaluation.rubricScore);
-    let newStability = ucs.memory.stability;
-    let newDifficulty = ucs.memory.difficulty;
-
-    if (fsrsGrade >= 2) {
-      newStability = fsrsStabilityAfterSuccess(
-        ucs.memory.stability,
-        ucs.memory.difficulty,
-        R,
-        fsrsGrade,
-      );
-    }
-    newDifficulty = fsrsDifficultyUpdate(ucs.memory.difficulty, fsrsGrade);
-
-    const eventType = currentPhase === 'phase1' ? 'tutor_phase1' : 'tutor_phase4';
+    // Use shared mastery update helper (Issue 6)
     const isTutored = currentPhase === 'phase4';
-    const event: AssessmentEvent = {
-      timestamp: new Date().toISOString(),
-      eventType,
+    const eventType = currentPhase === 'phase1' ? 'tutor_phase1' : 'tutor_phase4';
+    applyMasteryUpdate({
+      sm,
+      userId,
+      conceptId: session.conceptId,
       rubricScore: evaluation.rubricScore,
-      evaluatorConfidence: evaluation.confidence,
-      muBefore,
-      muAfter: updatedMastery.mu,
+      confidence: evaluation.confidence,
       probeDepth: currentPhase === 'phase1' ? 1 : 3,
+      eventType,
       tutored: isTutored,
-    };
-
-    if (currentPhase === 'phase4') {
-      // Tutored phase4: attenuate the update using tutoredEvidenceWeight
-      const weight = config.orgPolicy.tutoredEvidenceWeight;
-      ucs.mastery = {
-        mu: currentMastery.mu + weight * (updatedMastery.mu - currentMastery.mu),
-        sigma: currentMastery.sigma + weight * (updatedMastery.sigma - currentMastery.sigma),
-      };
-      // Do NOT update muUntutored/sigmaUntutored for phase4
-      ucs.tutoredAssessmentCount += 1;
-    } else {
-      // Phase1 (pre-teaching): full update to both primary and shadow
-      ucs.mastery = updatedMastery;
-      // Counterfactual: phase1 is pre-teaching evidence, updates shadow too
-      ucs.muUntutored = updatedMastery.mu;
-      ucs.sigmaUntutored = updatedMastery.sigma;
-      ucs.untutoredAssessmentCount += 1;
-    }
-    ucs.memory = { stability: newStability, difficulty: newDifficulty };
-    ucs.lastAssessed = new Date().toISOString();
-    ucs.assessmentCount += 1;
-    ucs.history.push(event);
-
-    kg.setUserConceptState(userId, session.conceptId, ucs);
+      tutoredEvidenceWeight: isTutored ? config.orgPolicy.tutoredEvidenceWeight : undefined,
+    });
 
     // Set phase scores
     if (currentPhase === 'phase1') {
@@ -276,16 +309,21 @@ async function handleTutorResponse(
   }
 
   // Generate next question
-  const question = await generateQuestionForPhase(session.phase, session, skipLLM);
-  const exchange = createTutorExchange(session.phase, question);
+  const genResult = await generateQuestionForPhase(session.phase, session, skipLLM);
+  const exchange = createTutorExchange(session.phase, genResult.question);
   session.exchanges.push(exchange);
+
+  // Store misconception from LLM response for forwarding to next phase (Issue 5)
+  if (genResult.misconceptionDetected !== null) {
+    session.lastMisconception = genResult.misconceptionDetected;
+  }
 
   sm.setTutorSession(session);
   sm.save();
 
   return {
     hookSpecificOutput: {
-      additionalContext: question,
+      additionalContext: genResult.question,
     },
   };
 }
@@ -304,6 +342,11 @@ export async function handleUserPromptSubmit(
   const sm = new StateManager(dataDir, userId);
   const config = loadConfig(dataDir);
 
+  // Issue 3: Check org policy enabled flag
+  if (!config.orgPolicy.enabled) {
+    return null;
+  }
+
   const userResponse = (input.prompt as string) ?? '';
   const tutorSession = sm.getTutorSession();
 
@@ -320,16 +363,21 @@ export async function handleUserPromptSubmit(
       const advanced = advanceTutorPhase(session);
       session.phase = advanced.phase; // should be 'phase1'
 
-      const question = await generateQuestionForPhase(session.phase, session, skipLLM);
-      const exchange = createTutorExchange(session.phase, question);
+      const genResult = await generateQuestionForPhase(session.phase, session, skipLLM);
+      const exchange = createTutorExchange(session.phase, genResult.question);
       session.exchanges.push(exchange);
+
+      // Store misconception if detected
+      if (genResult.misconceptionDetected !== null) {
+        session.lastMisconception = genResult.misconceptionDetected;
+      }
 
       sm.setTutorSession(session);
       sm.save();
 
       return {
         hookSpecificOutput: {
-          additionalContext: question,
+          additionalContext: genResult.question,
         },
       };
     } else {
@@ -365,66 +413,17 @@ export async function handleUserPromptSubmit(
       });
     }
 
-    // Get or create the user concept state
-    const kg = sm.getKnowledgeGraph();
-    const ucs = kg.getUserConceptState(userId, probe.conceptId);
-
-    // Apply time decay to mastery
-    let currentMastery = ucs.mastery;
-    let R = 1.0;
-    if (ucs.lastAssessed) {
-      const elapsedDays =
-        (Date.now() - new Date(ucs.lastAssessed).getTime()) / (1000 * 60 * 60 * 24);
-      R = retrievability(elapsedDays, ucs.memory.stability);
-      currentMastery = decayPrior(currentMastery.mu, currentMastery.sigma, R);
-    }
-
-    // GRM Bayesian update
-    const muBefore = currentMastery.mu;
-    const concept = kg.getConcept(probe.conceptId);
-    const conceptItemParams = concept?.itemParams;
-    const updatedMastery = grmUpdate(currentMastery, evaluation.rubricScore, conceptItemParams);
-
-    // FSRS update
-    const fsrsGrade = mapRubricToFsrsGrade(evaluation.rubricScore);
-    let newStability = ucs.memory.stability;
-    let newDifficulty = ucs.memory.difficulty;
-
-    if (fsrsGrade >= 2) {
-      newStability = fsrsStabilityAfterSuccess(
-        ucs.memory.stability,
-        ucs.memory.difficulty,
-        R,
-        fsrsGrade,
-      );
-    }
-    newDifficulty = fsrsDifficultyUpdate(ucs.memory.difficulty, fsrsGrade);
-
-    // Record assessment event
-    const event: AssessmentEvent = {
-      timestamp: new Date().toISOString(),
-      eventType: 'probe',
+    // Use shared mastery update helper (Issue 6)
+    applyMasteryUpdate({
+      sm,
+      userId,
+      conceptId: probe.conceptId,
       rubricScore: evaluation.rubricScore,
-      evaluatorConfidence: evaluation.confidence,
-      muBefore,
-      muAfter: updatedMastery.mu,
+      confidence: evaluation.confidence,
       probeDepth: probe.depth,
+      eventType: 'probe',
       tutored: false,
-    };
-
-    // Update user concept state
-    ucs.mastery = updatedMastery;
-    ucs.memory = { stability: newStability, difficulty: newDifficulty };
-    ucs.lastAssessed = new Date().toISOString();
-    ucs.assessmentCount += 1;
-    ucs.history.push(event);
-
-    // Counterfactual: untutored probe updates both primary and shadow
-    ucs.muUntutored = updatedMastery.mu;
-    ucs.sigmaUntutored = updatedMastery.sigma;
-    ucs.untutoredAssessmentCount += 1;
-
-    kg.setUserConceptState(userId, probe.conceptId, ucs);
+    });
 
     // Clear pending probe
     sm.clearPendingProbe();
@@ -444,8 +443,24 @@ export async function handleUserPromptSubmit(
       )
     ) {
       const newTutorSession = createTutorSession(probe.conceptId, evaluation.rubricScore);
-      sm.setTutorSession(newTutorSession);
-      additionalContext += `\n[Entendi] Would you like me to help you understand ${probe.conceptId} better? (yes/no)`;
+
+      // Issue 1: If autoAcceptTutor, skip OFFERED and go straight to phase1
+      if (config.userPrefs.autoAcceptTutor) {
+        newTutorSession.phase = 'phase1';
+        const genResult = await generateQuestionForPhase('phase1', newTutorSession, skipLLM);
+        const exchange = createTutorExchange('phase1', genResult.question);
+        newTutorSession.exchanges.push(exchange);
+
+        if (genResult.misconceptionDetected !== null) {
+          newTutorSession.lastMisconception = genResult.misconceptionDetected;
+        }
+
+        sm.setTutorSession(newTutorSession);
+        additionalContext += `\n${genResult.question}`;
+      } else {
+        sm.setTutorSession(newTutorSession);
+        additionalContext += `\n[Entendi] Would you like me to help you understand ${probe.conceptId} better? (yes/no)`;
+      }
     }
 
     sm.save();
@@ -472,16 +487,21 @@ export async function handleUserPromptSubmit(
       const newSession = createTutorSession(matchedConcept, null);
       newSession.phase = 'phase1';
 
-      const question = await generateQuestionForPhase('phase1', newSession, skipLLM);
-      const exchange = createTutorExchange('phase1', question);
+      const genResult = await generateQuestionForPhase('phase1', newSession, skipLLM);
+      const exchange = createTutorExchange('phase1', genResult.question);
       newSession.exchanges.push(exchange);
+
+      // Store misconception if detected
+      if (genResult.misconceptionDetected !== null) {
+        newSession.lastMisconception = genResult.misconceptionDetected;
+      }
 
       sm.setTutorSession(newSession);
       sm.save();
 
       return {
         hookSpecificOutput: {
-          additionalContext: question,
+          additionalContext: genResult.question,
         },
       };
     }

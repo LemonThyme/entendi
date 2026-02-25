@@ -13,7 +13,7 @@ import type { TutorSession, TutorPhase, RubricScore } from '../../src/schemas/ty
 
 function makeSession(phase: TutorPhase, startedAt?: string): TutorSession {
   const session = createTutorSession('test-concept', 1 as RubricScore);
-  return { ...session, phase, ...(startedAt ? { startedAt } : {}) };
+  return { ...session, phase, ...(startedAt ? { startedAt, lastActivityAt: startedAt } : {}) };
 }
 
 describe('advanceTutorPhase', () => {
@@ -177,5 +177,38 @@ describe('isTutorTimedOut', () => {
     const oldTime = new Date(Date.now() - TUTOR_TIMEOUT_MS - 60000).toISOString();
     const session = makeSession('offered', oldTime);
     expect(isTutorTimedOut(session)).toBe(false);
+  });
+
+  it('uses lastActivityAt instead of startedAt for timeout (Issue 4)', () => {
+    // Session started 31 minutes ago but lastActivityAt is 5 minutes ago
+    const session = createTutorSession('test-concept', 1 as RubricScore);
+    session.phase = 'phase2';
+    session.startedAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    session.lastActivityAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+    // Should NOT be timed out because last activity was recent
+    expect(isTutorTimedOut(session)).toBe(false);
+  });
+
+  it('times out when lastActivityAt exceeds timeout threshold (Issue 4)', () => {
+    const session = createTutorSession('test-concept', 1 as RubricScore);
+    session.phase = 'phase2';
+    session.startedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    session.lastActivityAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+
+    // Should be timed out because last activity was >30 min ago
+    expect(isTutorTimedOut(session)).toBe(true);
+  });
+
+  it('falls back to startedAt when lastActivityAt is missing (Issue 4 backwards compat)', () => {
+    // Simulate a legacy session without lastActivityAt
+    const session = createTutorSession('test-concept', 1 as RubricScore);
+    session.phase = 'phase2';
+    session.startedAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    // @ts-expect-error: simulate legacy session without lastActivityAt
+    delete session.lastActivityAt;
+
+    // Should fall back to startedAt and time out
+    expect(isTutorTimedOut(session)).toBe(true);
   });
 });

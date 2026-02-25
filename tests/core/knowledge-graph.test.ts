@@ -351,6 +351,36 @@ describe('KnowledgeGraph', () => {
       expect(frontierHigh).toContain('mid-concept');
     });
 
+    it('sorts frontier by Fisher information descending (Issue 2)', () => {
+      const graph = new KnowledgeGraph();
+
+      // Concept A: mu near decision boundary (mu=0) => high Fisher info
+      graph.addConcept(createConceptNode({
+        conceptId: 'near-boundary',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+      const stateA = graph.getUserConceptState('user1', 'near-boundary');
+      stateA.mastery.mu = 0.0; // at the middle threshold => high Fisher info
+      graph.setUserConceptState('user1', 'near-boundary', stateA);
+
+      // Concept B: mu far from boundary (mu=-3) => low Fisher info
+      graph.addConcept(createConceptNode({
+        conceptId: 'far-from-boundary',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+      const stateB = graph.getUserConceptState('user1', 'far-from-boundary');
+      stateB.mastery.mu = -3.0; // far below all thresholds => low Fisher info
+      graph.setUserConceptState('user1', 'far-from-boundary', stateB);
+
+      const frontier = graph.getZPDFrontier('user1');
+      expect(frontier.length).toBe(2);
+      // The concept near the boundary (mu=0) should come first (higher Fisher info)
+      expect(frontier[0]).toBe('near-boundary');
+      expect(frontier[1]).toBe('far-from-boundary');
+    });
+
     it('returns empty array when all concepts are mastered', () => {
       const graph = new KnowledgeGraph();
       graph.addConcept(createConceptNode({

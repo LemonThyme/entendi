@@ -220,22 +220,27 @@ export interface TutorSession {
   conceptId: string;
   phase: TutorPhase;
   startedAt: string;
+  lastActivityAt: string;
   triggerProbeScore: RubricScore | null;
   exchanges: TutorExchange[];
   phase1Score: RubricScore | null;
   phase4Score: RubricScore | null;
+  lastMisconception: string | null;
 }
 
 export function createTutorSession(conceptId: string, triggerProbeScore: RubricScore | null): TutorSession {
+  const now = new Date().toISOString();
   return {
     sessionId: `tutor_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     conceptId,
     phase: 'offered',
-    startedAt: new Date().toISOString(),
+    startedAt: now,
+    lastActivityAt: now,
     triggerProbeScore,
     exchanges: [],
     phase1Score: null,
     phase4Score: null,
+    lastMisconception: null,
   };
 }
 

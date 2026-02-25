@@ -10,7 +10,7 @@ export interface ResolvedConfig {
 export function loadConfig(dataDir: string, userPrefsPath?: string): ResolvedConfig {
   return {
     orgPolicy: loadOrgPolicy(dataDir),
-    userPrefs: loadUserPreferences(userPrefsPath),
+    userPrefs: loadUserPreferences(userPrefsPath ?? join(dataDir, 'user-preferences.json')),
   };
 }
 

@@ -7,7 +7,7 @@ import {
   createEmptyGraphState,
   pMastery,
 } from '../schemas/types.js';
-import { retrievability } from './probabilistic-model.js';
+import { retrievability, grmFisherInformation } from './probabilistic-model.js';
 
 export class KnowledgeGraph {
   private state: KnowledgeGraphState;
@@ -110,6 +110,17 @@ export class KnowledgeGraph {
         frontier.push(concept.conceptId);
       }
     }
+
+    // Sort by Fisher information descending (most informative first)
+    frontier.sort((a, b) => {
+      const ucsA = this.getUserConceptState(userId, a);
+      const ucsB = this.getUserConceptState(userId, b);
+      const conceptA = this.getConcept(a);
+      const conceptB = this.getConcept(b);
+      const fisherA = grmFisherInformation(ucsA.mastery.mu, conceptA?.itemParams);
+      const fisherB = grmFisherInformation(ucsB.mastery.mu, conceptB?.itemParams);
+      return fisherB - fisherA;
+    });
 
     return frontier;
   }

@@ -36,6 +36,7 @@ export function shouldOfferTutor(
 
 export function isTutorTimedOut(session: TutorSession): boolean {
   if (session.phase === 'complete' || session.phase === 'offered') return false;
-  const elapsed = Date.now() - new Date(session.startedAt).getTime();
+  const referenceTime = session.lastActivityAt ?? session.startedAt;
+  const elapsed = Date.now() - new Date(referenceTime).getTime();
   return elapsed > TUTOR_TIMEOUT_MS;
 }
