@@ -4,3 +4,4 @@ dist/
 .env
 .claude/settings.local.json
 .entendi/
+.claude/worktrees/
