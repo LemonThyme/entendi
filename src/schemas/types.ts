@@ -43,6 +43,17 @@ export interface ConceptEdge {
   type: EdgeType;
 }
 
+// --- Population Statistics ---
+export interface PopulationStats {
+  meanMastery: number;
+  assessmentCount: number;
+  failureRate: number;
+}
+
+export function createDefaultPopulationStats(): PopulationStats {
+  return { meanMastery: 0, assessmentCount: 0, failureRate: 0 };
+}
+
 export interface ConceptNode {
   conceptId: string;
   aliases: string[];
@@ -52,6 +63,44 @@ export interface ConceptNode {
   itemParams: GRMItemParams;
   relationships: ConceptEdge[];
   lifecycle: ConceptLifecycle;
+  populationStats: PopulationStats;
+}
+
+// --- Taxonomy Seed Entry ---
+export interface TaxonomySeedEntry {
+  conceptId: string;
+  aliases: string[];
+  domain: string;
+  specificity: ConceptSpecificity;
+  parentConcept: string | null;
+  relationships: ConceptEdge[];
+}
+
+// --- Concept Node Factory ---
+export interface CreateConceptNodeSeed {
+  conceptId: string;
+  domain: string;
+  specificity: ConceptSpecificity;
+  aliases?: string[];
+  parentConcept?: string | null;
+  itemParams?: GRMItemParams;
+  relationships?: ConceptEdge[];
+  lifecycle?: ConceptLifecycle;
+  populationStats?: PopulationStats;
+}
+
+export function createConceptNode(seed: CreateConceptNodeSeed): ConceptNode {
+  return {
+    conceptId: seed.conceptId,
+    aliases: seed.aliases ?? [],
+    domain: seed.domain,
+    specificity: seed.specificity,
+    parentConcept: seed.parentConcept ?? null,
+    itemParams: seed.itemParams ?? DEFAULT_GRM_PARAMS,
+    relationships: seed.relationships ?? [],
+    lifecycle: seed.lifecycle ?? 'discovered',
+    populationStats: seed.populationStats ?? createDefaultPopulationStats(),
+  };
 }
 
 // --- User Concept State ---

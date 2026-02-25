@@ -20,6 +20,7 @@ describe('KnowledgeGraph', () => {
         itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [],
         lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       expect(kg.getConcept('redis')).toBeDefined();
       expect(kg.getConcept('redis')!.domain).toBe('databases');
@@ -34,11 +35,13 @@ describe('KnowledgeGraph', () => {
         conceptId: 'redis', aliases: [], domain: 'databases', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       kg.addConcept({
         conceptId: 'react', aliases: [], domain: 'frontend', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       expect(kg.getAllConcepts()).toHaveLength(2);
     });
@@ -50,6 +53,7 @@ describe('KnowledgeGraph', () => {
         conceptId: 'redis', aliases: [], domain: 'databases', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       const state = kg.getUserConceptState('user1', 'redis');
       expect(state.mastery.mu).toBe(0);
@@ -62,6 +66,7 @@ describe('KnowledgeGraph', () => {
         conceptId: 'redis', aliases: [], domain: 'databases', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       const state = kg.getUserConceptState('user1', 'redis');
       state.mastery.mu = 1.5;
@@ -81,6 +86,7 @@ describe('KnowledgeGraph', () => {
         conceptId: 'javascript', aliases: [], domain: 'languages', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       const state = kg.getUserConceptState('user1', 'javascript');
       state.mastery.mu = 3.0;
@@ -97,6 +103,7 @@ describe('KnowledgeGraph', () => {
         conceptId: 'rust', aliases: [], domain: 'languages', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       const state = kg.getUserConceptState('user1', 'rust');
       state.mastery.mu = -1.5;
@@ -113,6 +120,7 @@ describe('KnowledgeGraph', () => {
         conceptId: 'redis', aliases: ['Redis'], domain: 'databases', specificity: 'topic',
         parentConcept: null, itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [], lifecycle: 'validated',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       });
       const state = kg.getUserConceptState('user1', 'redis');
       state.mastery.mu = 1.5;

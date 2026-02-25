@@ -71,6 +71,7 @@ export async function handlePostToolUse(
         itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
         relationships: [],
         lifecycle: 'discovered',
+        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
       };
       kg.addConcept(node);
     }
