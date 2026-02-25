@@ -247,4 +247,135 @@ describe('KnowledgeGraph', () => {
       expect(saved.history.length).toBe(50);
     });
   });
+
+  describe('getZPDFrontier', () => {
+    it('returns concepts with no prerequisites and low mastery', () => {
+      const graph = new KnowledgeGraph();
+      graph.addConcept(createConceptNode({
+        conceptId: 'intro-js',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+      graph.addConcept(createConceptNode({
+        conceptId: 'intro-python',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+
+      const frontier = graph.getZPDFrontier('user1');
+      expect(frontier).toContain('intro-js');
+      expect(frontier).toContain('intro-python');
+    });
+
+    it('includes concepts whose prerequisites are mastered', () => {
+      const graph = new KnowledgeGraph();
+      graph.addConcept(createConceptNode({
+        conceptId: 'basics',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+      graph.addConcept(createConceptNode({
+        conceptId: 'advanced',
+        domain: 'languages',
+        specificity: 'topic',
+        relationships: [{ target: 'basics', type: 'requires' }],
+      }));
+
+      // Set prereq as mastered (mu=2.0 -> P~0.88)
+      const prereqState = graph.getUserConceptState('user1', 'basics');
+      prereqState.mastery.mu = 2.0;
+      graph.setUserConceptState('user1', 'basics', prereqState);
+
+      const frontier = graph.getZPDFrontier('user1');
+      expect(frontier).toContain('advanced');
+      // 'basics' should NOT be in the frontier since it's mastered
+      expect(frontier).not.toContain('basics');
+    });
+
+    it('excludes concepts whose prerequisites are not mastered', () => {
+      const graph = new KnowledgeGraph();
+      graph.addConcept(createConceptNode({
+        conceptId: 'prereq',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+      graph.addConcept(createConceptNode({
+        conceptId: 'dependent',
+        domain: 'languages',
+        specificity: 'topic',
+        relationships: [{ target: 'prereq', type: 'requires' }],
+      }));
+
+      // Default mu=0 -> P=0.5, below threshold of 0.7
+      const frontier = graph.getZPDFrontier('user1');
+      expect(frontier).toContain('prereq'); // no prereqs, low mastery
+      expect(frontier).not.toContain('dependent'); // prereq not mastered
+    });
+
+    it('excludes concepts already mastered', () => {
+      const graph = new KnowledgeGraph();
+      graph.addConcept(createConceptNode({
+        conceptId: 'mastered-concept',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+
+      // Set mu=2.0 -> P~0.88, above threshold
+      const state = graph.getUserConceptState('user1', 'mastered-concept');
+      state.mastery.mu = 2.0;
+      graph.setUserConceptState('user1', 'mastered-concept', state);
+
+      const frontier = graph.getZPDFrontier('user1');
+      expect(frontier).not.toContain('mastered-concept');
+    });
+
+    it('respects custom mastery threshold', () => {
+      const graph = new KnowledgeGraph();
+      graph.addConcept(createConceptNode({
+        conceptId: 'mid-concept',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+
+      // mu=1.0 -> P~0.73: mastered at 0.7 but not at 0.8
+      const state = graph.getUserConceptState('user1', 'mid-concept');
+      state.mastery.mu = 1.0;
+      graph.setUserConceptState('user1', 'mid-concept', state);
+
+      // At threshold 0.7, this concept IS mastered (P~0.73 >= 0.7)
+      const frontierLow = graph.getZPDFrontier('user1', 0.7);
+      expect(frontierLow).not.toContain('mid-concept');
+
+      // At threshold 0.8, this concept is NOT mastered (P~0.73 < 0.8)
+      const frontierHigh = graph.getZPDFrontier('user1', 0.8);
+      expect(frontierHigh).toContain('mid-concept');
+    });
+
+    it('returns empty array when all concepts are mastered', () => {
+      const graph = new KnowledgeGraph();
+      graph.addConcept(createConceptNode({
+        conceptId: 'concept-a',
+        domain: 'languages',
+        specificity: 'topic',
+      }));
+      graph.addConcept(createConceptNode({
+        conceptId: 'concept-b',
+        domain: 'languages',
+        specificity: 'topic',
+        relationships: [{ target: 'concept-a', type: 'requires' }],
+      }));
+
+      // Master both concepts
+      const stateA = graph.getUserConceptState('user1', 'concept-a');
+      stateA.mastery.mu = 2.0;
+      graph.setUserConceptState('user1', 'concept-a', stateA);
+
+      const stateB = graph.getUserConceptState('user1', 'concept-b');
+      stateB.mastery.mu = 2.0;
+      graph.setUserConceptState('user1', 'concept-b', stateB);
+
+      const frontier = graph.getZPDFrontier('user1');
+      expect(frontier).toEqual([]);
+    });
+  });
 });

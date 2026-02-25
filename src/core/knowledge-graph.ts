@@ -78,6 +78,42 @@ export class KnowledgeGraph {
     return 'novel';
   }
 
+  /**
+   * Compute the Zone of Proximal Development frontier for a user.
+   * Returns concept IDs where all prerequisites are mastered but the concept itself is not.
+   * Concepts with no prerequisites and low mastery are also included.
+   */
+  getZPDFrontier(userId: string, threshold: number = 0.7): string[] {
+    const frontier: string[] = [];
+
+    for (const concept of this.getAllConcepts()) {
+      const ucs = this.getUserConceptState(userId, concept.conceptId);
+      const pm = pMastery(ucs.mastery.mu);
+
+      // Already mastered — skip
+      if (pm >= threshold) continue;
+
+      // Check prerequisites
+      const prereqs = concept.relationships.filter(r => r.type === 'requires');
+      if (prereqs.length === 0) {
+        frontier.push(concept.conceptId);
+        continue;
+      }
+
+      // All prerequisites must be mastered
+      const allPrereqsMastered = prereqs.every(r => {
+        const prereqState = this.getUserConceptState(userId, r.target);
+        return pMastery(prereqState.mastery.mu) >= threshold;
+      });
+
+      if (allPrereqsMastered) {
+        frontier.push(concept.conceptId);
+      }
+    }
+
+    return frontier;
+  }
+
   toJSON(): string {
     return JSON.stringify(this.state, null, 2);
   }
