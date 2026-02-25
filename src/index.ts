@@ -36,4 +36,5 @@ export {
   type ASTExtractedConcept,
   type SupportedLanguage,
 } from './core/ast-extraction.js';
+export { SEED_CONCEPTS, buildSeedConceptNodes, seedTaxonomyStats } from './config/seed-taxonomy.js';
 export * from './schemas/types.js';

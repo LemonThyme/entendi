@@ -1,48 +1,23 @@
 /**
  * Seed Concept Taxonomy for Entendi Knowledge Graph
  *
- * Design rationale:
- * ─────────────────
- * This taxonomy draws structural inspiration from two authoritative sources:
+ * ~130 curated seed concepts covering 10 domains. These form the stable
+ * backbone of the knowledge graph. All seeds enter at lifecycle='stable'.
  *
- * 1. SWEBOK v4 (IEEE Software Engineering Body of Knowledge, 2024)
- *    18 Knowledge Areas including Software Requirements, Software Architecture,
- *    Software Design, Software Construction, Software Testing, Software Security,
- *    Software Engineering Operations, Computing Foundations, etc.
- *    We map development-relevant KAs to our domain structure.
+ * Structural inspiration:
+ *   - SWEBOK v4 (IEEE Software Engineering Body of Knowledge, 2024)
+ *   - ACM CCS 2012 (Computing Classification System)
  *
- * 2. ACM CCS 2012 (Computing Classification System)
- *    13 top-level categories including "Software and its engineering" (with 192
- *    descendant terms across Software creation/management, Software notations/tools,
- *    Software organization/properties), "Security and privacy", "Information systems",
- *    "Computing methodologies", "Theory of computation", "Networks", etc.
- *
- * Practical constraints:
- *   - ~120 seed concepts (lean start, discoverable concepts expand over time)
+ * Constraints:
  *   - Three specificity tiers: domain > topic > technique
- *   - Prerequisites form a DAG (directed acyclic graph)
- *   - Concepts should be things a developer actually encounters with AI coding tools
- *   - Domain names align with existing package-concepts.ts usage
- *
- * Taxonomy structure:
- *   Domain (specificity: 'domain')  ~10 domains
- *     └─ Topic (specificity: 'topic')  ~50 topics
- *         └─ Technique (specificity: 'technique')  ~60 techniques
+ *   - Parent chains form a DAG (no cycles)
+ *   - All relationship targets reference existing concept IDs
+ *   - Domain names align with package-concepts.ts where possible
  */
 
-import type { ConceptNode, ConceptEdge, ConceptSpecificity, EdgeType } from '../schemas/types.js';
-import { DEFAULT_GRM_PARAMS } from '../schemas/types.js';
+import { createConceptNode, type TaxonomySeedEntry, type ConceptNode, type ConceptEdge, type ConceptSpecificity, type EdgeType } from '../schemas/types.js';
 
-// ── Shorthand builder ──────────────────────────────────────────────────────
-
-interface SeedConcept {
-  conceptId: string;
-  aliases: string[];
-  domain: string;
-  specificity: ConceptSpecificity;
-  parentConcept: string | null;
-  relationships: ConceptEdge[];
-}
+// ── Shorthand helpers ─────────────────────────────────────────────────
 
 function edge(target: string, type: EdgeType): ConceptEdge {
   return { target, type };
@@ -55,176 +30,159 @@ function seed(
   parentConcept: string | null,
   aliases: string[],
   relationships: ConceptEdge[],
-): SeedConcept {
+): TaxonomySeedEntry {
   return { conceptId, aliases, domain, specificity, parentConcept, relationships };
 }
 
-// ── Domain definitions ─────────────────────────────────────────────────────
-// These map to SWEBOK v4 KAs and ACM CCS top-level categories:
-//
-//   programming-languages   → SWEBOK: Software Construction / Computing Foundations
-//                             ACM CCS: Software notations and tools
-//   data-structures-algos   → SWEBOK: Computing Foundations
-//                             ACM CCS: Theory of computation > Design and analysis of algorithms
-//   web-development         → SWEBOK: Software Construction / Software Architecture
-//                             ACM CCS: Information systems > World Wide Web
-//   frontend                → ACM CCS: Human-centered computing > Interaction design
-//   databases               → SWEBOK: Computing Foundations (databases)
-//                             ACM CCS: Information systems > Data management systems
-//   devops                  → SWEBOK: Software Engineering Operations (new in v4)
-//                             ACM CCS: Software creation and management
-//   security                → SWEBOK: Software Security (new in v4)
-//                             ACM CCS: Security and privacy
-//   testing                 → SWEBOK: Software Testing
-//                             ACM CCS: Software verification and validation
-//   system-design           → SWEBOK: Software Architecture (new in v4) / Software Design
-//                             ACM CCS: Software system structures
-//   ai-ml                   → SWEBOK: Computing Foundations (AI/ML, new in v4)
-//                             ACM CCS: Computing methodologies > AI / ML
+// ══════════════════════════════════════════════════════════════════════
+// SEED CONCEPTS (~130)
+// ══════════════════════════════════════════════════════════════════════
 
-export const SEED_CONCEPTS: SeedConcept[] = [
+export const SEED_CONCEPTS: TaxonomySeedEntry[] = [
 
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: programming-languages
-  // SWEBOK v4: Software Construction (Ch 4), Computing Foundations (Ch 16)
-  // ACM CCS: Software notations and tools > General programming languages
-  // ════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 1: programming-languages (18 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('programming-languages', 'programming-languages', 'domain', null,
     ['Programming Languages', 'PLs', 'Languages'],
     []),
 
   // ── Topics ──
+  seed('variables-and-scope', 'programming-languages', 'topic', 'programming-languages',
+    ['Variables', 'Scope', 'Variable Scope', 'Lexical Scope'],
+    [edge('programming-languages', 'part_of')]),
+
+  seed('control-flow', 'programming-languages', 'topic', 'programming-languages',
+    ['Control Flow', 'Conditionals', 'Loops', 'Branching'],
+    [edge('programming-languages', 'part_of'), edge('variables-and-scope', 'requires')]),
+
+  seed('functions', 'programming-languages', 'topic', 'programming-languages',
+    ['Functions', 'Procedures', 'Subroutines', 'Methods'],
+    [edge('programming-languages', 'part_of'), edge('variables-and-scope', 'requires')]),
+
   seed('type-systems', 'programming-languages', 'topic', 'programming-languages',
     ['Type Systems', 'Typing', 'Type Theory'],
     [edge('programming-languages', 'part_of')]),
 
   seed('object-oriented-programming', 'programming-languages', 'topic', 'programming-languages',
     ['OOP', 'Object-Oriented', 'Object Oriented Programming'],
-    [edge('programming-languages', 'part_of')]),
+    [edge('programming-languages', 'part_of'), edge('functions', 'requires')]),
 
   seed('functional-programming', 'programming-languages', 'topic', 'programming-languages',
     ['FP', 'Functional', 'Functional Programming'],
-    [edge('programming-languages', 'part_of')]),
+    [edge('programming-languages', 'part_of'), edge('functions', 'requires')]),
 
   seed('async-programming', 'programming-languages', 'topic', 'programming-languages',
-    ['Asynchronous Programming', 'Async/Await', 'Concurrency'],
-    [edge('programming-languages', 'part_of')]),
+    ['Asynchronous Programming', 'Async/Await', 'Async Programming'],
+    [edge('programming-languages', 'part_of'), edge('functions', 'requires')]),
 
   seed('error-handling', 'programming-languages', 'topic', 'programming-languages',
     ['Error Handling', 'Exception Handling', 'Errors'],
-    [edge('programming-languages', 'part_of')]),
+    [edge('programming-languages', 'part_of'), edge('control-flow', 'requires')]),
 
   seed('memory-management', 'programming-languages', 'topic', 'programming-languages',
     ['Memory Management', 'Garbage Collection', 'Memory'],
     [edge('programming-languages', 'part_of')]),
 
+  seed('modules-and-imports', 'programming-languages', 'topic', 'programming-languages',
+    ['Modules', 'Imports', 'Module System', 'Package Management'],
+    [edge('programming-languages', 'part_of')]),
+
   // ── Techniques ──
-  seed('generics', 'programming-languages', 'technique', 'type-systems',
-    ['Generics', 'Generic Types', 'Parametric Polymorphism', 'Type Parameters'],
-    [edge('type-systems', 'part_of'), edge('type-systems', 'requires')]),
-
-  seed('type-narrowing', 'programming-languages', 'technique', 'type-systems',
-    ['Type Narrowing', 'Type Guards', 'Discriminated Unions'],
-    [edge('type-systems', 'part_of'), edge('type-systems', 'requires')]),
-
-  seed('interfaces-and-protocols', 'programming-languages', 'technique', 'type-systems',
-    ['Interfaces', 'Protocols', 'Abstract Types', 'Traits'],
-    [edge('type-systems', 'part_of'), edge('object-oriented-programming', 'related_to')]),
-
-  seed('inheritance', 'programming-languages', 'technique', 'object-oriented-programming',
-    ['Inheritance', 'Class Inheritance', 'Subclassing'],
-    [edge('object-oriented-programming', 'part_of'), edge('object-oriented-programming', 'requires')]),
-
-  seed('composition-over-inheritance', 'programming-languages', 'technique', 'object-oriented-programming',
-    ['Composition', 'Composition Over Inheritance', 'Has-A vs Is-A'],
-    [edge('object-oriented-programming', 'requires'), edge('inheritance', 'alternative_to')]),
-
   seed('closures', 'programming-languages', 'technique', 'functional-programming',
     ['Closures', 'Lexical Closures', 'Closure'],
-    [edge('functional-programming', 'part_of'), edge('functional-programming', 'requires')]),
+    [edge('functional-programming', 'part_of'), edge('variables-and-scope', 'requires')]),
 
   seed('higher-order-functions', 'programming-languages', 'technique', 'functional-programming',
     ['Higher-Order Functions', 'HOF', 'Map/Filter/Reduce'],
     [edge('functional-programming', 'part_of'), edge('closures', 'related_to')]),
 
-  seed('immutability', 'programming-languages', 'technique', 'functional-programming',
-    ['Immutability', 'Immutable Data', 'Readonly'],
-    [edge('functional-programming', 'part_of')]),
-
-  seed('promises-and-futures', 'programming-languages', 'technique', 'async-programming',
-    ['Promises', 'Futures', 'Promise', 'Async/Await'],
-    [edge('async-programming', 'part_of'), edge('async-programming', 'requires')]),
-
-  seed('event-loop', 'programming-languages', 'technique', 'async-programming',
-    ['Event Loop', 'Event-Driven', 'Non-Blocking I/O'],
-    [edge('async-programming', 'part_of')]),
-
-  seed('iterators-generators', 'programming-languages', 'technique', 'programming-languages',
-    ['Iterators', 'Generators', 'Yield', 'Iterator Protocol'],
-    [edge('programming-languages', 'part_of'), edge('closures', 'related_to')]),
+  seed('generics', 'programming-languages', 'technique', 'type-systems',
+    ['Generics', 'Generic Types', 'Parametric Polymorphism', 'Type Parameters'],
+    [edge('type-systems', 'part_of'), edge('type-systems', 'requires')]),
 
   seed('decorators-metaprogramming', 'programming-languages', 'technique', 'programming-languages',
     ['Decorators', 'Metaprogramming', 'Annotations', 'Reflection'],
     [edge('programming-languages', 'part_of'), edge('higher-order-functions', 'related_to')]),
 
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: data-structures-algos
-  // SWEBOK v4: Computing Foundations (Ch 16)
-  // ACM CCS: Theory of computation > Design and analysis of algorithms
-  // ════════════════════════════════════════════════════════════════════════
+  seed('iterators-generators', 'programming-languages', 'technique', 'programming-languages',
+    ['Iterators', 'Generators', 'Yield', 'Iterator Protocol'],
+    [edge('programming-languages', 'part_of'), edge('closures', 'related_to')]),
 
-  seed('data-structures-algorithms', 'data-structures-algos', 'domain', null,
+  seed('pattern-matching', 'programming-languages', 'technique', 'control-flow',
+    ['Pattern Matching', 'Destructuring', 'Switch Expressions'],
+    [edge('control-flow', 'part_of'), edge('type-systems', 'related_to')]),
+
+  seed('concurrency-primitives', 'programming-languages', 'technique', 'async-programming',
+    ['Concurrency', 'Threads', 'Locks', 'Mutexes', 'Semaphores'],
+    [edge('async-programming', 'part_of')]),
+
+  seed('event-loop', 'programming-languages', 'technique', 'async-programming',
+    ['Event Loop', 'Event-Driven', 'Non-Blocking I/O'],
+    [edge('async-programming', 'part_of')]),
+
+  seed('regular-expressions', 'programming-languages', 'technique', 'programming-languages',
+    ['Regular Expressions', 'Regex', 'RegExp', 'Pattern Matching with Regex'],
+    [edge('programming-languages', 'part_of')]),
+
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 2: data-structures-algorithms (11 concepts)
+  // ════════════════════════════════════════════════════════════════════
+
+  seed('data-structures-algorithms', 'data-structures-algorithms', 'domain', null,
     ['Data Structures & Algorithms', 'DSA', 'Algorithms'],
     []),
 
   // ── Topics ──
-  seed('complexity-analysis', 'data-structures-algos', 'topic', 'data-structures-algorithms',
-    ['Big O', 'Complexity Analysis', 'Time Complexity', 'Space Complexity', 'Asymptotic Analysis'],
+  seed('arrays-and-lists', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
+    ['Arrays', 'Lists', 'Linked Lists', 'Array Operations'],
     [edge('data-structures-algorithms', 'part_of')]),
 
-  seed('linear-data-structures', 'data-structures-algos', 'topic', 'data-structures-algorithms',
-    ['Linear Data Structures', 'Arrays', 'Linked Lists', 'Stacks', 'Queues'],
+  seed('hash-maps', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
+    ['Hash Maps', 'Hash Tables', 'Dictionaries', 'Sets'],
     [edge('data-structures-algorithms', 'part_of')]),
 
-  seed('tree-data-structures', 'data-structures-algos', 'topic', 'data-structures-algorithms',
+  seed('trees', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
     ['Trees', 'Binary Trees', 'BST', 'Tree Data Structures'],
-    [edge('data-structures-algorithms', 'part_of'), edge('linear-data-structures', 'requires')]),
+    [edge('data-structures-algorithms', 'part_of'), edge('arrays-and-lists', 'requires')]),
 
-  seed('hash-based-structures', 'data-structures-algos', 'topic', 'data-structures-algorithms',
-    ['Hash Tables', 'Hash Maps', 'Sets', 'Hash-Based Structures'],
+  seed('graphs', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
+    ['Graphs', 'Graph Data Structures', 'Adjacency List', 'Adjacency Matrix'],
+    [edge('data-structures-algorithms', 'part_of'), edge('trees', 'requires')]),
+
+  seed('stacks-and-queues', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
+    ['Stacks', 'Queues', 'LIFO', 'FIFO', 'Deque'],
+    [edge('data-structures-algorithms', 'part_of'), edge('arrays-and-lists', 'related_to')]),
+
+  seed('sorting-algorithms', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
+    ['Sorting', 'Sort Algorithms', 'Quicksort', 'Mergesort'],
     [edge('data-structures-algorithms', 'part_of')]),
 
-  seed('graph-data-structures', 'data-structures-algos', 'topic', 'data-structures-algorithms',
-    ['Graphs', 'Graph Data Structures', 'Adjacency List', 'Adjacency Matrix'],
-    [edge('data-structures-algorithms', 'part_of'), edge('tree-data-structures', 'requires')]),
-
-  seed('sorting-algorithms', 'data-structures-algos', 'topic', 'data-structures-algorithms',
-    ['Sorting', 'Sort Algorithms', 'Sorting Algorithms'],
-    [edge('data-structures-algorithms', 'part_of'), edge('complexity-analysis', 'requires')]),
+  seed('big-o-complexity', 'data-structures-algorithms', 'topic', 'data-structures-algorithms',
+    ['Big O', 'Complexity Analysis', 'Time Complexity', 'Space Complexity'],
+    [edge('data-structures-algorithms', 'part_of')]),
 
   // ── Techniques ──
-  seed('recursion', 'data-structures-algos', 'technique', 'data-structures-algorithms',
+  seed('searching-algorithms', 'data-structures-algorithms', 'technique', 'data-structures-algorithms',
+    ['Searching', 'Binary Search', 'Linear Search', 'Search Algorithms'],
+    [edge('data-structures-algorithms', 'part_of'), edge('big-o-complexity', 'related_to')]),
+
+  seed('recursion', 'data-structures-algorithms', 'technique', 'data-structures-algorithms',
     ['Recursion', 'Recursive Algorithms', 'Base Case'],
-    [edge('data-structures-algorithms', 'part_of')]),
+    [edge('data-structures-algorithms', 'part_of'), edge('functions', 'requires')]),
 
-  seed('dynamic-programming', 'data-structures-algos', 'technique', 'data-structures-algorithms',
+  seed('dynamic-programming', 'data-structures-algorithms', 'technique', 'data-structures-algorithms',
     ['Dynamic Programming', 'DP', 'Memoization'],
-    [edge('recursion', 'requires'), edge('complexity-analysis', 'requires')]),
+    [edge('recursion', 'requires'), edge('big-o-complexity', 'requires')]),
 
-  seed('graph-traversal', 'data-structures-algos', 'technique', 'graph-data-structures',
-    ['BFS', 'DFS', 'Graph Traversal', 'Breadth-First Search', 'Depth-First Search'],
-    [edge('graph-data-structures', 'requires'), edge('recursion', 'related_to')]),
+  seed('graph-algorithms', 'data-structures-algorithms', 'technique', 'graphs',
+    ['Graph Algorithms', 'BFS', 'DFS', 'Dijkstra', 'Graph Traversal'],
+    [edge('graphs', 'requires'), edge('recursion', 'related_to')]),
 
-  seed('binary-search', 'data-structures-algos', 'technique', 'data-structures-algorithms',
-    ['Binary Search', 'Divide and Conquer'],
-    [edge('sorting-algorithms', 'related_to'), edge('complexity-analysis', 'requires')]),
-
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: web-development (backend-focused)
-  // SWEBOK v4: Software Construction (Ch 4), Software Architecture (Ch 2)
-  // ACM CCS: Information systems > World Wide Web; Software > Context specific languages
-  // ════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 3: web-development (14 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('web-development', 'web-development', 'domain', null,
     ['Web Development', 'Web Dev', 'Backend Development'],
@@ -244,6 +202,10 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     [edge('web-development', 'part_of'), edge('http-protocol', 'requires'),
      edge('rest-api-design', 'alternative_to')]),
 
+  seed('websockets', 'web-development', 'topic', 'web-development',
+    ['WebSockets', 'Real-Time Communication', 'Socket.IO', 'WS'],
+    [edge('web-development', 'part_of'), edge('http-protocol', 'requires')]),
+
   seed('authentication-authorization', 'web-development', 'topic', 'web-development',
     ['Auth', 'Authentication', 'Authorization', 'AuthN/AuthZ'],
     [edge('web-development', 'part_of'), edge('http-protocol', 'requires')]),
@@ -252,13 +214,16 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     ['Middleware', 'Middleware Pattern', 'Request Pipeline'],
     [edge('web-development', 'part_of'), edge('http-protocol', 'requires')]),
 
-  seed('websockets', 'web-development', 'topic', 'web-development',
-    ['WebSockets', 'Real-Time Communication', 'Socket.IO', 'WS'],
-    [edge('web-development', 'part_of'), edge('http-protocol', 'requires'),
-     edge('event-loop', 'related_to')]),
+  seed('routing', 'web-development', 'topic', 'web-development',
+    ['Routing', 'URL Routing', 'Route Handlers', 'Express Routes'],
+    [edge('web-development', 'part_of'), edge('http-protocol', 'requires')]),
 
   seed('server-side-rendering', 'web-development', 'topic', 'web-development',
     ['SSR', 'Server-Side Rendering', 'Server Rendering'],
+    [edge('web-development', 'part_of'), edge('http-protocol', 'requires')]),
+
+  seed('web-security', 'web-development', 'topic', 'web-development',
+    ['Web Security', 'OWASP', 'Web Vulnerabilities'],
     [edge('web-development', 'part_of'), edge('http-protocol', 'requires')]),
 
   // ── Techniques ──
@@ -270,30 +235,21 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     ['OAuth', 'OAuth 2.0', 'OpenID Connect', 'OIDC'],
     [edge('authentication-authorization', 'part_of'), edge('jwt-tokens', 'related_to')]),
 
-  seed('rate-limiting', 'web-development', 'technique', 'web-development',
-    ['Rate Limiting', 'Throttling', 'API Rate Limits'],
-    [edge('middleware-pattern', 'related_to'), edge('http-protocol', 'requires')]),
+  seed('session-management', 'web-development', 'technique', 'authentication-authorization',
+    ['Sessions', 'Session Management', 'Cookies', 'Session Store'],
+    [edge('authentication-authorization', 'part_of'), edge('http-protocol', 'requires')]),
 
   seed('cors', 'web-development', 'technique', 'web-development',
     ['CORS', 'Cross-Origin Resource Sharing', 'Same-Origin Policy'],
     [edge('http-protocol', 'requires'), edge('middleware-pattern', 'related_to')]),
 
-  seed('request-validation', 'web-development', 'technique', 'web-development',
-    ['Request Validation', 'Input Validation', 'Schema Validation'],
-    [edge('rest-api-design', 'related_to'), edge('middleware-pattern', 'related_to')]),
+  seed('rate-limiting', 'web-development', 'technique', 'web-development',
+    ['Rate Limiting', 'Throttling', 'API Rate Limits'],
+    [edge('middleware-pattern', 'related_to'), edge('http-protocol', 'requires')]),
 
-  seed('caching-strategies', 'web-development', 'technique', 'web-development',
-    ['Caching', 'HTTP Caching', 'Cache Invalidation', 'CDN Caching'],
-    [edge('http-protocol', 'requires')]),
-
-  seed('pagination', 'web-development', 'technique', 'rest-api-design',
-    ['Pagination', 'Cursor Pagination', 'Offset Pagination'],
-    [edge('rest-api-design', 'part_of')]),
-
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: frontend
-  // ACM CCS: Human-centered computing > Interaction design
-  // ════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 4: frontend (12 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('frontend-development', 'frontend', 'domain', null,
     ['Frontend Development', 'Frontend', 'Client-Side Development', 'UI Development'],
@@ -305,20 +261,28 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     [edge('frontend-development', 'part_of')]),
 
   seed('component-architecture', 'frontend', 'topic', 'frontend-development',
-    ['Component Architecture', 'Component-Based UI', 'UI Components'],
+    ['Component Architecture', 'Component-Based UI', 'UI Components', 'React'],
     [edge('frontend-development', 'part_of'), edge('dom-manipulation', 'requires')]),
 
   seed('state-management', 'frontend', 'topic', 'frontend-development',
-    ['State Management', 'Application State', 'Global State'],
+    ['State Management', 'Application State', 'Redux', 'Global State'],
     [edge('frontend-development', 'part_of'), edge('component-architecture', 'requires')]),
 
   seed('css-layout', 'frontend', 'topic', 'frontend-development',
-    ['CSS Layout', 'Flexbox', 'CSS Grid', 'Responsive Design'],
+    ['CSS Layout', 'Flexbox', 'CSS Grid', 'Box Model'],
     [edge('frontend-development', 'part_of')]),
+
+  seed('responsive-design', 'frontend', 'topic', 'frontend-development',
+    ['Responsive Design', 'Media Queries', 'Mobile-First', 'Adaptive Layout'],
+    [edge('frontend-development', 'part_of'), edge('css-layout', 'requires')]),
 
   seed('client-side-routing', 'frontend', 'topic', 'frontend-development',
     ['Client-Side Routing', 'SPA Routing', 'Router'],
     [edge('frontend-development', 'part_of'), edge('component-architecture', 'requires')]),
+
+  seed('browser-apis', 'frontend', 'topic', 'frontend-development',
+    ['Browser APIs', 'Fetch API', 'Storage API', 'Web Workers'],
+    [edge('frontend-development', 'part_of'), edge('dom-manipulation', 'related_to')]),
 
   seed('build-tools', 'frontend', 'topic', 'frontend-development',
     ['Build Tools', 'Bundlers', 'Module Bundling', 'Webpack', 'Vite', 'esbuild'],
@@ -334,192 +298,205 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     [edge('component-architecture', 'part_of'), edge('closures', 'requires'),
      edge('state-management', 'related_to')]),
 
-  seed('reactive-data-binding', 'frontend', 'technique', 'component-architecture',
-    ['Reactive Binding', 'Two-Way Binding', 'Reactivity', 'Signals'],
-    [edge('component-architecture', 'part_of'), edge('state-management', 'related_to')]),
+  seed('accessibility', 'frontend', 'technique', 'frontend-development',
+    ['Accessibility', 'a11y', 'ARIA', 'Screen Readers', 'WCAG'],
+    [edge('frontend-development', 'part_of'), edge('dom-manipulation', 'related_to')]),
 
   seed('css-in-js', 'frontend', 'technique', 'css-layout',
     ['CSS-in-JS', 'Styled Components', 'Tailwind', 'CSS Modules'],
     [edge('css-layout', 'part_of')]),
 
-  seed('accessibility', 'frontend', 'technique', 'frontend-development',
-    ['Accessibility', 'a11y', 'ARIA', 'Screen Readers', 'WCAG'],
-    [edge('frontend-development', 'part_of'), edge('dom-manipulation', 'related_to')]),
-
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: databases
-  // SWEBOK v4: Computing Foundations (databases topic)
-  // ACM CCS: Information systems > Data management systems
-  // ════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 5: databases (12 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('databases', 'databases', 'domain', null,
     ['Databases', 'Data Storage', 'Data Persistence'],
     []),
 
   // ── Topics ──
-  seed('relational-databases', 'databases', 'topic', 'databases',
-    ['Relational Databases', 'RDBMS', 'SQL Databases'],
-    [edge('databases', 'part_of')]),
-
   seed('sql', 'databases', 'topic', 'databases',
     ['SQL', 'Structured Query Language', 'SQL Queries'],
-    [edge('databases', 'part_of'), edge('relational-databases', 'related_to')]),
+    [edge('databases', 'part_of')]),
 
-  seed('nosql-databases', 'databases', 'topic', 'databases',
-    ['NoSQL', 'NoSQL Databases', 'Document Databases', 'MongoDB'],
-    [edge('databases', 'part_of'), edge('relational-databases', 'alternative_to')]),
-
-  seed('data-modeling', 'databases', 'topic', 'databases',
-    ['Data Modeling', 'Schema Design', 'Entity Relationships', 'ER Diagrams'],
+  seed('database-design', 'databases', 'topic', 'databases',
+    ['Database Design', 'Schema Design', 'Entity Relationships', 'ER Diagrams'],
     [edge('databases', 'part_of')]),
 
   seed('database-indexing', 'databases', 'topic', 'databases',
-    ['Database Indexes', 'Indexing', 'B-Tree Index', 'Query Optimization'],
+    ['Database Indexes', 'Indexing', 'B-Tree Index'],
     [edge('databases', 'part_of'), edge('sql', 'requires')]),
 
   seed('transactions-acid', 'databases', 'topic', 'databases',
     ['Transactions', 'ACID', 'Atomicity', 'Isolation Levels'],
-    [edge('databases', 'part_of'), edge('relational-databases', 'requires')]),
+    [edge('databases', 'part_of'), edge('sql', 'requires')]),
+
+  seed('nosql-databases', 'databases', 'topic', 'databases',
+    ['NoSQL', 'NoSQL Databases', 'Document Databases', 'MongoDB'],
+    [edge('databases', 'part_of'), edge('sql', 'alternative_to')]),
+
+  seed('data-modeling', 'databases', 'topic', 'databases',
+    ['Data Modeling', 'Data Models', 'Schema Modeling'],
+    [edge('databases', 'part_of'), edge('database-design', 'related_to')]),
 
   // ── Techniques ──
   seed('orm-usage', 'databases', 'technique', 'databases',
-    ['ORM', 'Object-Relational Mapping', 'Prisma', 'Drizzle', 'SQLAlchemy', 'TypeORM'],
-    [edge('sql', 'requires'), edge('data-modeling', 'related_to')]),
-
-  seed('database-migrations', 'databases', 'technique', 'databases',
-    ['Database Migrations', 'Schema Migrations', 'Migration Scripts'],
-    [edge('data-modeling', 'requires'), edge('orm-usage', 'related_to')]),
+    ['ORM', 'Object-Relational Mapping', 'Prisma', 'Drizzle', 'TypeORM'],
+    [edge('sql', 'requires'), edge('database-design', 'related_to')]),
 
   seed('query-optimization', 'databases', 'technique', 'database-indexing',
     ['Query Optimization', 'EXPLAIN', 'Query Plans', 'Slow Query Analysis'],
     [edge('database-indexing', 'part_of'), edge('sql', 'requires')]),
 
+  seed('database-migrations', 'databases', 'technique', 'databases',
+    ['Database Migrations', 'Schema Migrations', 'Migration Scripts'],
+    [edge('database-design', 'requires'), edge('orm-usage', 'related_to')]),
+
   seed('connection-pooling', 'databases', 'technique', 'databases',
     ['Connection Pooling', 'Database Connections', 'Pool Management'],
     [edge('databases', 'part_of')]),
 
-  seed('database-normalization', 'databases', 'technique', 'data-modeling',
-    ['Normalization', 'Database Normalization', '1NF', '2NF', '3NF', 'Denormalization'],
-    [edge('data-modeling', 'part_of'), edge('relational-databases', 'requires')]),
+  seed('database-replication', 'databases', 'technique', 'databases',
+    ['Replication', 'Database Replication', 'Read Replicas', 'Primary/Replica'],
+    [edge('databases', 'part_of'), edge('transactions-acid', 'related_to')]),
 
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: devops
-  // SWEBOK v4: Software Engineering Operations (Ch 6 — new in v4),
-  //            Software Configuration Management (Ch 8)
-  // ACM CCS: Software creation and management > Software development process management
-  // ════════════════════════════════════════════════════════════════════════
+  seed('database-caching', 'databases', 'technique', 'databases',
+    ['Database Caching', 'Redis Cache', 'Cache Aside', 'Write-Through Cache'],
+    [edge('databases', 'part_of'), edge('query-optimization', 'related_to')]),
+
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 6: system-design (14 concepts)
+  // ════════════════════════════════════════════════════════════════════
+
+  seed('system-design', 'system-design', 'domain', null,
+    ['System Design', 'Software Architecture', 'Architecture'],
+    []),
+
+  // ── Topics ──
+  seed('distributed-systems', 'system-design', 'topic', 'system-design',
+    ['Distributed Systems', 'Distributed Computing'],
+    [edge('system-design', 'part_of')]),
+
+  seed('design-patterns', 'system-design', 'topic', 'system-design',
+    ['Design Patterns', 'GoF Patterns', 'Software Patterns'],
+    [edge('system-design', 'part_of'), edge('object-oriented-programming', 'requires')]),
+
+  seed('architectural-patterns', 'system-design', 'topic', 'system-design',
+    ['Architectural Patterns', 'Architecture Styles', 'System Architecture'],
+    [edge('system-design', 'part_of')]),
+
+  seed('api-design-principles', 'system-design', 'topic', 'system-design',
+    ['API Design', 'API Contracts', 'Interface Design'],
+    [edge('system-design', 'part_of')]),
+
+  seed('cap-theorem', 'system-design', 'topic', 'distributed-systems',
+    ['CAP Theorem', 'Consistency', 'Availability', 'Partition Tolerance'],
+    [edge('distributed-systems', 'part_of')]),
+
+  // ── Techniques ──
+  seed('microservices', 'system-design', 'technique', 'architectural-patterns',
+    ['Microservices', 'Service-Oriented Architecture', 'SOA'],
+    [edge('architectural-patterns', 'part_of'), edge('distributed-systems', 'requires'),
+     edge('rest-api-design', 'requires')]),
+
+  seed('message-queues', 'system-design', 'technique', 'distributed-systems',
+    ['Message Queues', 'Message Broker', 'RabbitMQ', 'Kafka', 'BullMQ'],
+    [edge('distributed-systems', 'part_of'), edge('async-programming', 'requires')]),
+
+  seed('load-balancing', 'system-design', 'technique', 'distributed-systems',
+    ['Load Balancing', 'Load Balancer', 'Round Robin', 'Health Checks'],
+    [edge('distributed-systems', 'part_of')]),
+
+  seed('caching-strategy', 'system-design', 'technique', 'system-design',
+    ['Caching Strategy', 'Cache Invalidation', 'CDN', 'In-Memory Cache'],
+    [edge('system-design', 'part_of')]),
+
+  seed('api-gateway', 'system-design', 'technique', 'architectural-patterns',
+    ['API Gateway', 'Gateway Pattern', 'Reverse Proxy'],
+    [edge('architectural-patterns', 'part_of'), edge('microservices', 'related_to')]),
+
+  seed('event-driven-architecture', 'system-design', 'technique', 'architectural-patterns',
+    ['Event-Driven Architecture', 'EDA', 'Event Sourcing'],
+    [edge('architectural-patterns', 'part_of'), edge('message-queues', 'related_to'),
+     edge('async-programming', 'requires')]),
+
+  seed('circuit-breaker', 'system-design', 'technique', 'distributed-systems',
+    ['Circuit Breaker', 'Bulkhead', 'Resilience Patterns'],
+    [edge('distributed-systems', 'part_of'), edge('error-handling', 'related_to')]),
+
+  seed('service-discovery', 'system-design', 'technique', 'distributed-systems',
+    ['Service Discovery', 'Service Registry', 'DNS-Based Discovery'],
+    [edge('distributed-systems', 'part_of'), edge('microservices', 'related_to')]),
+
+  seed('cqrs', 'system-design', 'technique', 'architectural-patterns',
+    ['CQRS', 'Command Query Responsibility Segregation'],
+    [edge('architectural-patterns', 'part_of'), edge('event-driven-architecture', 'related_to')]),
+
+  seed('eventual-consistency', 'system-design', 'technique', 'distributed-systems',
+    ['Eventual Consistency', 'BASE', 'Conflict Resolution'],
+    [edge('distributed-systems', 'part_of'), edge('cap-theorem', 'requires')]),
+
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 7: devops (13 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('devops-infrastructure', 'devops', 'domain', null,
     ['DevOps', 'Infrastructure', 'DevOps & Infrastructure', 'Platform Engineering'],
     []),
 
   // ── Topics ──
-  seed('version-control', 'devops', 'topic', 'devops-infrastructure',
-    ['Version Control', 'Git', 'Source Control', 'VCS'],
+  seed('containerization', 'devops', 'topic', 'devops-infrastructure',
+    ['Docker', 'Containerization', 'Containers', 'OCI'],
     [edge('devops-infrastructure', 'part_of')]),
 
-  seed('containerization', 'devops', 'topic', 'devops-infrastructure',
-    ['Containerization', 'Docker', 'Containers', 'OCI'],
-    [edge('devops-infrastructure', 'part_of')]),
+  seed('container-orchestration', 'devops', 'topic', 'devops-infrastructure',
+    ['Container Orchestration', 'Kubernetes', 'K8s', 'Pods'],
+    [edge('devops-infrastructure', 'part_of'), edge('containerization', 'requires')]),
 
   seed('ci-cd', 'devops', 'topic', 'devops-infrastructure',
     ['CI/CD', 'Continuous Integration', 'Continuous Deployment', 'Pipeline'],
-    [edge('devops-infrastructure', 'part_of'), edge('version-control', 'requires')]),
+    [edge('devops-infrastructure', 'part_of')]),
 
-  seed('cloud-services', 'devops', 'topic', 'devops-infrastructure',
-    ['Cloud Services', 'AWS', 'GCP', 'Azure', 'Cloud Computing'],
+  seed('infrastructure-as-code', 'devops', 'topic', 'devops-infrastructure',
+    ['IaC', 'Infrastructure as Code', 'Terraform', 'Pulumi', 'CloudFormation'],
     [edge('devops-infrastructure', 'part_of')]),
 
   seed('monitoring-observability', 'devops', 'topic', 'devops-infrastructure',
-    ['Monitoring', 'Observability', 'Logging', 'Metrics', 'Alerting'],
+    ['Monitoring', 'Observability', 'Metrics', 'Alerting'],
+    [edge('devops-infrastructure', 'part_of')]),
+
+  seed('logging', 'devops', 'topic', 'devops-infrastructure',
+    ['Logging', 'Structured Logging', 'Log Aggregation', 'Log Management'],
+    [edge('devops-infrastructure', 'part_of'), edge('monitoring-observability', 'related_to')]),
+
+  seed('linux-fundamentals', 'devops', 'topic', 'devops-infrastructure',
+    ['Linux', 'Linux Administration', 'Shell Scripting', 'Unix'],
     [edge('devops-infrastructure', 'part_of')]),
 
   seed('networking-fundamentals', 'devops', 'topic', 'devops-infrastructure',
-    ['Networking', 'DNS', 'TCP/IP', 'Load Balancing', 'Networking Fundamentals'],
+    ['Networking', 'TCP/IP', 'Networking Fundamentals'],
     [edge('devops-infrastructure', 'part_of')]),
 
+  seed('dns', 'devops', 'topic', 'networking-fundamentals',
+    ['DNS', 'Domain Name System', 'DNS Resolution', 'DNS Records'],
+    [edge('networking-fundamentals', 'part_of')]),
+
   // ── Techniques ──
-  seed('git-branching-strategies', 'devops', 'technique', 'version-control',
-    ['Git Branching', 'Git Flow', 'Trunk-Based Development', 'Feature Branches'],
-    [edge('version-control', 'part_of'), edge('version-control', 'requires')]),
+  seed('tls-ssl', 'devops', 'technique', 'networking-fundamentals',
+    ['TLS', 'SSL', 'HTTPS Certificates', 'Certificate Management'],
+    [edge('networking-fundamentals', 'part_of')]),
 
-  seed('docker-compose', 'devops', 'technique', 'containerization',
-    ['Docker Compose', 'Multi-Container', 'Container Orchestration Basics'],
-    [edge('containerization', 'part_of'), edge('containerization', 'requires')]),
-
-  seed('kubernetes-basics', 'devops', 'technique', 'containerization',
-    ['Kubernetes', 'K8s', 'Pods', 'Deployments', 'Services'],
-    [edge('containerization', 'requires'), edge('networking-fundamentals', 'requires')]),
-
-  seed('infrastructure-as-code', 'devops', 'technique', 'cloud-services',
-    ['IaC', 'Infrastructure as Code', 'Terraform', 'Pulumi', 'CloudFormation'],
-    [edge('cloud-services', 'requires')]),
-
-  seed('environment-variables', 'devops', 'technique', 'devops-infrastructure',
-    ['Environment Variables', 'Env Vars', 'dotenv', 'Config Management'],
+  seed('environment-management', 'devops', 'technique', 'devops-infrastructure',
+    ['Environment Variables', 'Env Management', 'dotenv', 'Config Management'],
     [edge('devops-infrastructure', 'part_of')]),
 
-  seed('structured-logging', 'devops', 'technique', 'monitoring-observability',
-    ['Structured Logging', 'JSON Logging', 'Log Aggregation'],
-    [edge('monitoring-observability', 'part_of')]),
+  seed('secrets-management-devops', 'devops', 'technique', 'devops-infrastructure',
+    ['Secrets Management', 'Vault', 'Secret Rotation', 'Key Management'],
+    [edge('devops-infrastructure', 'part_of'), edge('environment-management', 'related_to')]),
 
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: security
-  // SWEBOK v4: Software Security (Ch 13 — new in v4)
-  // ACM CCS: Security and privacy
-  // ════════════════════════════════════════════════════════════════════════
-
-  seed('security-fundamentals', 'security', 'domain', null,
-    ['Security', 'Software Security', 'Application Security', 'AppSec'],
-    []),
-
-  // ── Topics ──
-  seed('authentication-mechanisms', 'security', 'topic', 'security-fundamentals',
-    ['Authentication', 'AuthN', 'Identity Verification'],
-    [edge('security-fundamentals', 'part_of')]),
-
-  seed('authorization-access-control', 'security', 'topic', 'security-fundamentals',
-    ['Authorization', 'AuthZ', 'Access Control', 'RBAC', 'Permissions'],
-    [edge('security-fundamentals', 'part_of'), edge('authentication-mechanisms', 'requires')]),
-
-  seed('cryptography-basics', 'security', 'topic', 'security-fundamentals',
-    ['Cryptography', 'Encryption', 'Hashing', 'Crypto'],
-    [edge('security-fundamentals', 'part_of')]),
-
-  seed('web-security-vulnerabilities', 'security', 'topic', 'security-fundamentals',
-    ['Web Security', 'OWASP', 'Web Vulnerabilities', 'OWASP Top 10'],
-    [edge('security-fundamentals', 'part_of'), edge('http-protocol', 'requires')]),
-
-  seed('secrets-management', 'security', 'topic', 'security-fundamentals',
-    ['Secrets Management', 'Secret Rotation', 'Vault', 'Key Management'],
-    [edge('security-fundamentals', 'part_of'), edge('environment-variables', 'related_to')]),
-
-  // ── Techniques ──
-  seed('password-hashing', 'security', 'technique', 'cryptography-basics',
-    ['Password Hashing', 'bcrypt', 'scrypt', 'Argon2', 'Salt'],
-    [edge('cryptography-basics', 'part_of'), edge('authentication-mechanisms', 'related_to')]),
-
-  seed('xss-prevention', 'security', 'technique', 'web-security-vulnerabilities',
-    ['XSS Prevention', 'Cross-Site Scripting', 'Output Encoding', 'CSP'],
-    [edge('web-security-vulnerabilities', 'part_of'), edge('dom-manipulation', 'related_to')]),
-
-  seed('sql-injection-prevention', 'security', 'technique', 'web-security-vulnerabilities',
-    ['SQL Injection', 'SQLi Prevention', 'Parameterized Queries', 'Prepared Statements'],
-    [edge('web-security-vulnerabilities', 'part_of'), edge('sql', 'requires')]),
-
-  seed('csrf-protection', 'security', 'technique', 'web-security-vulnerabilities',
-    ['CSRF', 'Cross-Site Request Forgery', 'CSRF Tokens'],
-    [edge('web-security-vulnerabilities', 'part_of'), edge('http-protocol', 'requires')]),
-
-  seed('tls-https', 'security', 'technique', 'security-fundamentals',
-    ['TLS', 'HTTPS', 'SSL', 'Certificate Management'],
-    [edge('cryptography-basics', 'requires'), edge('networking-fundamentals', 'related_to')]),
-
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: testing
-  // SWEBOK v4: Software Testing (Ch 5)
-  // ACM CCS: Software and its engineering > Software verification and validation
-  // ════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 8: testing (10 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('testing-quality', 'testing', 'domain', null,
     ['Testing', 'Software Testing', 'Quality Assurance', 'QA'],
@@ -534,111 +511,93 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     ['Integration Testing', 'Integration Tests'],
     [edge('testing-quality', 'part_of'), edge('unit-testing', 'requires')]),
 
-  seed('end-to-end-testing', 'testing', 'topic', 'testing-quality',
-    ['E2E Testing', 'End-to-End Testing', 'Acceptance Testing', 'Cypress', 'Playwright'],
-    [edge('testing-quality', 'part_of'), edge('integration-testing', 'requires')]),
+  seed('test-driven-development', 'testing', 'topic', 'testing-quality',
+    ['TDD', 'Test-Driven Development', 'Red-Green-Refactor'],
+    [edge('testing-quality', 'part_of'), edge('unit-testing', 'requires')]),
 
-  seed('test-design', 'testing', 'topic', 'testing-quality',
-    ['Test Design', 'Test Strategy', 'Testing Pyramid', 'Test Coverage'],
-    [edge('testing-quality', 'part_of')]),
+  seed('test-coverage', 'testing', 'topic', 'testing-quality',
+    ['Test Coverage', 'Code Coverage', 'Coverage Reports', 'Branch Coverage'],
+    [edge('testing-quality', 'part_of'), edge('unit-testing', 'related_to')]),
 
   // ── Techniques ──
   seed('mocking-stubbing', 'testing', 'technique', 'unit-testing',
     ['Mocking', 'Stubbing', 'Test Doubles', 'Spies', 'Fakes'],
     [edge('unit-testing', 'part_of'), edge('unit-testing', 'requires')]),
 
-  seed('test-driven-development', 'testing', 'technique', 'testing-quality',
-    ['TDD', 'Test-Driven Development', 'Red-Green-Refactor'],
-    [edge('unit-testing', 'requires'), edge('test-design', 'related_to')]),
+  seed('e2e-testing', 'testing', 'technique', 'testing-quality',
+    ['E2E Testing', 'End-to-End Testing', 'Cypress', 'Playwright'],
+    [edge('testing-quality', 'part_of'), edge('integration-testing', 'requires')]),
+
+  seed('property-based-testing', 'testing', 'technique', 'testing-quality',
+    ['Property-Based Testing', 'Fuzzing', 'QuickCheck', 'Hypothesis'],
+    [edge('testing-quality', 'part_of'), edge('unit-testing', 'requires')]),
+
+  seed('regression-testing', 'testing', 'technique', 'testing-quality',
+    ['Regression Testing', 'Regression Tests', 'Non-Regression'],
+    [edge('testing-quality', 'part_of'), edge('test-coverage', 'related_to')]),
 
   seed('snapshot-testing', 'testing', 'technique', 'unit-testing',
     ['Snapshot Testing', 'Snapshot Tests', 'Visual Regression'],
     [edge('unit-testing', 'part_of'), edge('component-architecture', 'related_to')]),
 
-  seed('fixture-management', 'testing', 'technique', 'unit-testing',
-    ['Test Fixtures', 'Factories', 'Seed Data', 'Setup/Teardown'],
-    [edge('unit-testing', 'part_of')]),
+  seed('performance-testing', 'testing', 'technique', 'testing-quality',
+    ['Performance Testing', 'Load Testing', 'Benchmarking', 'Stress Testing'],
+    [edge('testing-quality', 'part_of')]),
 
-  seed('property-based-testing', 'testing', 'technique', 'test-design',
-    ['Property-Based Testing', 'Fuzzing', 'QuickCheck', 'Hypothesis'],
-    [edge('test-design', 'part_of'), edge('unit-testing', 'requires')]),
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 9: security (10 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: system-design
-  // SWEBOK v4: Software Architecture (Ch 2 — new in v4), Software Design (Ch 3)
-  // ACM CCS: Software organization and properties > Software system structures
-  // ════════════════════════════════════════════════════════════════════════
-
-  seed('system-design', 'system-design', 'domain', null,
-    ['System Design', 'Software Architecture', 'Architecture'],
+  seed('security-fundamentals', 'security', 'domain', null,
+    ['Security', 'Software Security', 'Application Security', 'AppSec'],
     []),
 
   // ── Topics ──
-  seed('design-patterns', 'system-design', 'topic', 'system-design',
-    ['Design Patterns', 'GoF Patterns', 'Software Patterns'],
-    [edge('system-design', 'part_of'), edge('object-oriented-programming', 'requires')]),
+  seed('input-validation', 'security', 'topic', 'security-fundamentals',
+    ['Input Validation', 'Data Validation', 'Sanitization'],
+    [edge('security-fundamentals', 'part_of')]),
 
-  seed('architectural-patterns', 'system-design', 'topic', 'system-design',
-    ['Architectural Patterns', 'Architecture Styles', 'System Architecture'],
-    [edge('system-design', 'part_of')]),
+  seed('encryption-fundamentals', 'security', 'topic', 'security-fundamentals',
+    ['Encryption', 'Symmetric Encryption', 'Asymmetric Encryption', 'AES', 'RSA'],
+    [edge('security-fundamentals', 'part_of')]),
 
-  seed('distributed-systems', 'system-design', 'topic', 'system-design',
-    ['Distributed Systems', 'Distributed Computing'],
-    [edge('system-design', 'part_of'), edge('networking-fundamentals', 'requires')]),
+  seed('hashing', 'security', 'topic', 'security-fundamentals',
+    ['Hashing', 'Cryptographic Hashing', 'SHA', 'MD5'],
+    [edge('security-fundamentals', 'part_of'), edge('encryption-fundamentals', 'related_to')]),
 
-  seed('api-design-principles', 'system-design', 'topic', 'system-design',
-    ['API Design', 'API Contracts', 'Interface Design'],
-    [edge('system-design', 'part_of')]),
-
-  seed('scalability', 'system-design', 'topic', 'system-design',
-    ['Scalability', 'Horizontal Scaling', 'Vertical Scaling', 'Load Balancing'],
-    [edge('system-design', 'part_of'), edge('distributed-systems', 'requires')]),
+  seed('owasp-top-ten', 'security', 'topic', 'security-fundamentals',
+    ['OWASP Top 10', 'OWASP', 'Common Vulnerabilities'],
+    [edge('security-fundamentals', 'part_of')]),
 
   // ── Techniques ──
-  seed('dependency-injection', 'system-design', 'technique', 'design-patterns',
-    ['Dependency Injection', 'DI', 'IoC', 'Inversion of Control'],
-    [edge('design-patterns', 'part_of'), edge('interfaces-and-protocols', 'requires')]),
+  seed('sql-injection-prevention', 'security', 'technique', 'owasp-top-ten',
+    ['SQL Injection', 'SQLi Prevention', 'Parameterized Queries', 'Prepared Statements'],
+    [edge('owasp-top-ten', 'part_of'), edge('sql', 'requires'), edge('input-validation', 'related_to')]),
 
-  seed('observer-pattern', 'system-design', 'technique', 'design-patterns',
-    ['Observer Pattern', 'Pub/Sub', 'Event Emitter', 'Publish-Subscribe'],
-    [edge('design-patterns', 'part_of')]),
+  seed('xss-prevention', 'security', 'technique', 'owasp-top-ten',
+    ['XSS Prevention', 'Cross-Site Scripting', 'Output Encoding', 'CSP'],
+    [edge('owasp-top-ten', 'part_of'), edge('dom-manipulation', 'related_to')]),
 
-  seed('strategy-pattern', 'system-design', 'technique', 'design-patterns',
-    ['Strategy Pattern', 'Policy Pattern'],
-    [edge('design-patterns', 'part_of'), edge('interfaces-and-protocols', 'requires')]),
+  seed('csrf-protection', 'security', 'technique', 'owasp-top-ten',
+    ['CSRF', 'Cross-Site Request Forgery', 'CSRF Tokens'],
+    [edge('owasp-top-ten', 'part_of'), edge('http-protocol', 'requires')]),
 
-  seed('microservices', 'system-design', 'technique', 'architectural-patterns',
-    ['Microservices', 'Service-Oriented Architecture', 'SOA'],
-    [edge('architectural-patterns', 'part_of'), edge('distributed-systems', 'requires'),
-     edge('rest-api-design', 'requires')]),
+  seed('secure-authentication', 'security', 'technique', 'security-fundamentals',
+    ['Secure Auth', 'Password Hashing', 'bcrypt', 'Argon2'],
+    [edge('security-fundamentals', 'part_of'), edge('hashing', 'requires'),
+     edge('authentication-authorization', 'related_to')]),
 
-  seed('event-driven-architecture', 'system-design', 'technique', 'architectural-patterns',
-    ['Event-Driven Architecture', 'EDA', 'Message Queues', 'Event Sourcing'],
-    [edge('architectural-patterns', 'part_of'), edge('observer-pattern', 'related_to'),
-     edge('async-programming', 'requires')]),
+  seed('rbac', 'security', 'technique', 'security-fundamentals',
+    ['RBAC', 'Role-Based Access Control', 'Permissions', 'Access Control'],
+    [edge('security-fundamentals', 'part_of'), edge('authentication-authorization', 'related_to')]),
 
-  seed('monorepo-structure', 'system-design', 'technique', 'system-design',
-    ['Monorepo', 'Mono Repository', 'Workspace', 'Turborepo', 'Nx'],
-    [edge('system-design', 'part_of'), edge('build-tools', 'related_to')]),
+  seed('dependency-scanning', 'security', 'technique', 'security-fundamentals',
+    ['Dependency Scanning', 'Vulnerability Scanning', 'npm audit', 'Snyk'],
+    [edge('security-fundamentals', 'part_of'), edge('modules-and-imports', 'related_to')]),
 
-  seed('clean-architecture', 'system-design', 'technique', 'architectural-patterns',
-    ['Clean Architecture', 'Hexagonal Architecture', 'Ports and Adapters', 'Onion Architecture'],
-    [edge('architectural-patterns', 'part_of'), edge('dependency-injection', 'requires'),
-     edge('interfaces-and-protocols', 'requires')]),
-
-  seed('cqrs', 'system-design', 'technique', 'architectural-patterns',
-    ['CQRS', 'Command Query Responsibility Segregation'],
-    [edge('architectural-patterns', 'part_of'), edge('event-driven-architecture', 'related_to')]),
-
-  seed('message-queues', 'system-design', 'technique', 'distributed-systems',
-    ['Message Queues', 'Message Broker', 'RabbitMQ', 'Kafka', 'BullMQ'],
-    [edge('distributed-systems', 'part_of'), edge('async-programming', 'requires')]),
-
-  // ════════════════════════════════════════════════════════════════════════
-  // DOMAIN: ai-ml
-  // SWEBOK v4: Computing Foundations (AI/ML topics, new in v4)
-  // ACM CCS: Computing methodologies > Artificial intelligence / Machine learning
-  // ════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN 10: ai-ml (12 concepts)
+  // ════════════════════════════════════════════════════════════════════
 
   seed('ai-machine-learning', 'ai-ml', 'domain', null,
     ['AI/ML', 'Artificial Intelligence', 'Machine Learning'],
@@ -665,31 +624,34 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     ['Neural Networks', 'Deep Learning', 'Layers', 'Backpropagation'],
     [edge('ai-machine-learning', 'part_of'), edge('supervised-learning', 'requires')]),
 
+  seed('nlp', 'ai-ml', 'topic', 'ai-machine-learning',
+    ['NLP', 'Natural Language Processing', 'Text Processing', 'Tokenization'],
+    [edge('ai-machine-learning', 'part_of')]),
+
   // ── Techniques ──
   seed('rag-pattern', 'ai-ml', 'technique', 'llm-fundamentals',
     ['RAG', 'Retrieval-Augmented Generation'],
     [edge('llm-fundamentals', 'requires'), edge('embeddings-vectors', 'requires')]),
 
-  seed('llm-function-calling', 'ai-ml', 'technique', 'llm-fundamentals',
-    ['Function Calling', 'Tool Use', 'LLM Tool Use', 'Agent Tools'],
-    [edge('llm-fundamentals', 'requires'), edge('rest-api-design', 'related_to')]),
-
   seed('fine-tuning', 'ai-ml', 'technique', 'neural-networks',
     ['Fine-Tuning', 'Transfer Learning', 'LoRA', 'Model Fine-Tuning'],
     [edge('neural-networks', 'requires'), edge('supervised-learning', 'requires')]),
+
+  seed('token-management', 'ai-ml', 'technique', 'llm-fundamentals',
+    ['Token Management', 'Context Window', 'Token Counting', 'Tokenization'],
+    [edge('llm-fundamentals', 'part_of')]),
 
   seed('model-evaluation', 'ai-ml', 'technique', 'supervised-learning',
     ['Model Evaluation', 'Precision/Recall', 'F1 Score', 'Confusion Matrix'],
     [edge('supervised-learning', 'part_of')]),
 
-  seed('streaming-responses', 'ai-ml', 'technique', 'llm-fundamentals',
-    ['Streaming', 'SSE', 'Streaming Responses', 'Server-Sent Events'],
-    [edge('llm-fundamentals', 'related_to'), edge('async-programming', 'requires')]),
+  seed('ai-agents', 'ai-ml', 'technique', 'llm-fundamentals',
+    ['AI Agents', 'Agent Patterns', 'ReAct', 'Agentic Workflows'],
+    [edge('llm-fundamentals', 'requires'), edge('prompt-engineering', 'requires')]),
 
-  seed('ai-agent-patterns', 'ai-ml', 'technique', 'llm-fundamentals',
-    ['AI Agents', 'Agent Patterns', 'ReAct', 'Chain of Thought', 'Agentic Workflows'],
-    [edge('llm-fundamentals', 'requires'), edge('llm-function-calling', 'requires'),
-     edge('prompt-engineering', 'requires')]),
+  seed('ai-ethics', 'ai-ml', 'technique', 'ai-machine-learning',
+    ['AI Ethics', 'Responsible AI', 'Bias Detection', 'Fairness'],
+    [edge('ai-machine-learning', 'part_of')]),
 ];
 
 // ── Build ConceptNode records from seeds ───────────────────────────────
@@ -702,23 +664,14 @@ export const SEED_CONCEPTS: SeedConcept[] = [
  * human-curated reference concepts, not dynamically discovered.
  */
 export function buildSeedConceptNodes(): Record<string, ConceptNode> {
-  const nodes: Record<string, ConceptNode> = {};
-
+  const result: Record<string, ConceptNode> = {};
   for (const s of SEED_CONCEPTS) {
-    nodes[s.conceptId] = {
-      conceptId: s.conceptId,
-      aliases: s.aliases,
-      domain: s.domain,
-      specificity: s.specificity,
-      parentConcept: s.parentConcept,
-      itemParams: { ...DEFAULT_GRM_PARAMS },
-      relationships: s.relationships,
+    result[s.conceptId] = createConceptNode({
+      ...s,
       lifecycle: 'stable',
-      populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
-    };
+    });
   }
-
-  return nodes;
+  return result;
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────
@@ -731,17 +684,15 @@ export function seedTaxonomyStats(): {
   domains: number;
   topics: number;
   techniques: number;
-  domainNames: string[];
 } {
-  const domains = SEED_CONCEPTS.filter(c => c.specificity === 'domain');
-  const topics = SEED_CONCEPTS.filter(c => c.specificity === 'topic');
-  const techniques = SEED_CONCEPTS.filter(c => c.specificity === 'technique');
+  const domainSet = new Set(SEED_CONCEPTS.map(c => c.domain));
+  const topics = SEED_CONCEPTS.filter(c => c.specificity === 'topic').length;
+  const techniques = SEED_CONCEPTS.filter(c => c.specificity === 'technique').length;
 
   return {
     total: SEED_CONCEPTS.length,
-    domains: domains.length,
-    topics: topics.length,
-    techniques: techniques.length,
-    domainNames: domains.map(d => d.conceptId),
+    domains: domainSet.size,
+    topics,
+    techniques,
   };
 }
