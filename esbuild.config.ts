@@ -24,3 +24,15 @@ if (hookFiles.length > 0) {
     external: ['@anthropic-ai/sdk'],
   });
 }
+
+// Build MCP server entry point
+await esbuild.build({
+  entryPoints: [join('src', 'mcp', 'server.ts')],
+  bundle: true,
+  platform: 'node',
+  target: 'node22',
+  outdir: 'dist/mcp',
+  format: 'esm',
+  banner: { js: '#!/usr/bin/env node' },
+  external: ['@anthropic-ai/sdk'],
+});

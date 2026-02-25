@@ -14,11 +14,13 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@hono/node-server": "^1.19.9",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "hono": "^4.12.2",
     "tree-sitter-javascript": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
     "tree-sitter-typescript": "^0.23.2",
-    "web-tree-sitter": "^0.26.5"
+    "web-tree-sitter": "^0.26.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
