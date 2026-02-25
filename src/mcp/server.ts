@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { StateManager } from '../core/state-manager.js';
+import { handleGetStatus, handleGetZPDFrontier } from './tools/query.js';
 
 export interface EntendiServerOptions {
   dataDir: string;
@@ -107,7 +108,12 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     {
       conceptId: z.string().optional(),
     },
-    async (_args) => stubResult('entendi_get_status'),
+    async (args) => {
+      const result = handleGetStatus({ conceptId: args.conceptId }, sm, userId);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_get_status' });
 
@@ -116,7 +122,12 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     'entendi_get_zpd_frontier',
     'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
     {},
-    async () => stubResult('entendi_get_zpd_frontier'),
+    async () => {
+      const result = handleGetZPDFrontier(sm, userId);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_get_zpd_frontier' });
 
