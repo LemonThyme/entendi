@@ -1,0 +1,14 @@
+{
+  "name": "entendi",
+  "description": "Comprehension accountability layer for AI-assisted work",
+  "owner": { "name": "TK" },
+  "plugins": [
+    {
+      "name": "entendi",
+      "description": "Comprehension accountability layer for AI-assisted work",
+      "version": "0.1.0",
+      "source": "./dist/plugin",
+      "category": "learning"
+    }
+  ]
+}
