@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { KnowledgeGraph } from './knowledge-graph.js';
-import type { PendingProbe, ProbeSessionState } from '../schemas/types.js';
+import type { PendingProbe, ProbeSessionState, TutorSession } from '../schemas/types.js';
 
 /**
  * Manages persistent state for Entendi (knowledge graph + probe session).
@@ -16,6 +16,7 @@ export class StateManager {
   private userId: string;
   private kg: KnowledgeGraph;
   private probeSession: ProbeSessionState;
+  private tutorSession: TutorSession | null;
 
   constructor(dataDir: string, userId: string) {
     this.dataDir = dataDir;
@@ -23,6 +24,7 @@ export class StateManager {
     mkdirSync(dataDir, { recursive: true });
     this.kg = this.loadKnowledgeGraph();
     this.probeSession = this.loadProbeSession();
+    this.tutorSession = this.loadTutorSession();
   }
 
   getKnowledgeGraph(): KnowledgeGraph { return this.kg; }
@@ -39,9 +41,20 @@ export class StateManager {
     this.probeSession.pendingProbe = null;
   }
 
+  getTutorSession(): TutorSession | null { return this.tutorSession; }
+
+  setTutorSession(session: TutorSession): void {
+    this.tutorSession = session;
+  }
+
+  clearTutorSession(): void {
+    this.tutorSession = null;
+  }
+
   save(): void {
     writeFileSync(join(this.dataDir, 'knowledge-graph.json'), this.kg.toJSON());
     writeFileSync(join(this.dataDir, 'probe-session.json'), JSON.stringify(this.probeSession, null, 2));
+    writeFileSync(join(this.dataDir, 'tutor-session.json'), JSON.stringify(this.tutorSession, null, 2));
   }
 
   private loadKnowledgeGraph(): KnowledgeGraph {
@@ -62,5 +75,18 @@ export class StateManager {
       // Corrupted state file; reset to defaults
     }
     return { pendingProbe: null, lastProbeTime: null, probesThisSession: 0 };
+  }
+
+  private loadTutorSession(): TutorSession | null {
+    const path = join(this.dataDir, 'tutor-session.json');
+    try {
+      if (existsSync(path)) {
+        const data = JSON.parse(readFileSync(path, 'utf-8'));
+        if (data && typeof data === 'object' && data.sessionId) return data;
+      }
+    } catch {
+      // Corrupted file — reset
+    }
+    return null;
   }
 }

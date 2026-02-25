@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { StateManager } from '../../src/core/state-manager.js';
+import { createTutorSession } from '../../src/schemas/types.js';
+import type { RubricScore } from '../../src/schemas/types.js';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -108,5 +110,38 @@ describe('StateManager', () => {
       previousResponses: [],
     });
     expect(sm.getProbeSession().probesThisSession).toBe(2);
+  });
+
+  describe('tutor session persistence', () => {
+    it('returns null tutor session by default', () => {
+      expect(sm.getTutorSession()).toBeNull();
+    });
+
+    it('stores and retrieves tutor session', () => {
+      const session = createTutorSession('redis', 1 as RubricScore);
+      sm.setTutorSession(session);
+      sm.save();
+
+      const sm2 = new StateManager(dataDir, 'test-user');
+      const loaded = sm2.getTutorSession();
+      expect(loaded).not.toBeNull();
+      expect(loaded!.conceptId).toBe('redis');
+      expect(loaded!.phase).toBe('offered');
+    });
+
+    it('clears tutor session', () => {
+      const session = createTutorSession('express', 0 as RubricScore);
+      sm.setTutorSession(session);
+      sm.save();
+
+      const sm2 = new StateManager(dataDir, 'test-user');
+      expect(sm2.getTutorSession()).not.toBeNull();
+
+      sm2.clearTutorSession();
+      sm2.save();
+
+      const sm3 = new StateManager(dataDir, 'test-user');
+      expect(sm3.getTutorSession()).toBeNull();
+    });
   });
 });
