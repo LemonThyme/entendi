@@ -1,17 +1,10 @@
-import { readStdin, getDataDir, getUserId, type HookInput } from './shared.js';
+import { readStdin, getDataDir, type HookInput } from './shared.js';
 import {
   detectPackageInstall,
   parsePackageFromCommand,
   extractConceptsFromPackage,
 } from '../core/concept-extraction.js';
 import { initParser, extractConceptsFromSource, type SupportedLanguage } from '../core/ast-extraction.js';
-import { KnowledgeGraph } from '../core/knowledge-graph.js';
-import { StateManager } from '../core/state-manager.js';
-import { shouldProbe, selectConceptToProbe } from '../core/probe-scheduler.js';
-import type { ProbeCandidateInfo } from '../core/probe-scheduler.js';
-import { generateProbe } from '../core/probe-engine.js';
-import type { ConceptNode } from '../schemas/types.js';
-import { DEFAULT_GRM_PARAMS } from '../schemas/types.js';
 
 export interface PostToolUseOutput {
   hookSpecificOutput?: {
@@ -29,37 +22,34 @@ export async function handlePostToolUse(
   input: HookInput,
   options: PostToolUseOptions = {},
 ): Promise<PostToolUseOutput | null> {
-  const { skipLLM = false } = options;
-
-  // 1. Check if tool_name is 'Bash'
+  // 1. Only handle Bash tool
   if (input.tool_name !== 'Bash') return null;
 
-  // 2. Extract the command from tool_input
+  // 2. Extract command
   const toolInput = input.tool_input as { command?: string } | undefined;
   const command = toolInput?.command;
   if (!command) return null;
 
-  // 3. Check if the command is a package install
+  // 3. Must be a package install command
   if (!detectPackageInstall(command)) return null;
 
   // 4. Extract package names
   const packages = parsePackageFromCommand(command);
   if (packages.length === 0) return null;
 
-  // 5. Map to concepts from packages
+  // 5. Map packages to concepts via lookup table
   const packageConcepts = packages.flatMap((pkg) => extractConceptsFromPackage(pkg));
 
-  // 5b. AST extraction from tool output (best-effort)
-  let astConcepts: Array<{ name: string; specificity: import('../schemas/types.js').ConceptSpecificity; confidence: number; extractionSignal: 'ast'; domain: string }> = [];
+  // 6. AST extraction from tool output (best-effort)
+  let astConcepts: Array<{ name: string; domain: string }> = [];
   try {
     const toolOutput = getToolOutput(input);
     if (toolOutput && looksLikeSourceCode(toolOutput)) {
       await initParser();
       const language = detectLanguage(toolOutput);
       const rawAstConcepts = await extractConceptsFromSource(toolOutput, language);
-      // Add domain field for AST-detected concepts (all are programming language features)
       astConcepts = rawAstConcepts.map((c) => ({
-        ...c,
+        name: c.name,
         domain: 'programming-languages',
       }));
     }
@@ -67,122 +57,32 @@ export async function handlePostToolUse(
     // AST extraction is best-effort; don't fail the hook
   }
 
-  // 5c. Combine and deduplicate concepts from both signals
-  const allConcepts = [...packageConcepts, ...astConcepts];
-  if (allConcepts.length === 0) return null;
-
-  // 6. Load state and ensure concepts exist in knowledge graph
-  const dataDir = options.dataDir ?? getDataDir(input.cwd);
-  const userId = options.userId ?? getUserId();
-  const sm = new StateManager(dataDir, userId);
-  const kg = sm.getKnowledgeGraph();
-
-  // Deduplicate concepts by name
-  const seenConcepts = new Set<string>();
-  const uniqueConcepts = allConcepts.filter((c) => {
-    if (seenConcepts.has(c.name)) return false;
-    seenConcepts.add(c.name);
-    return true;
-  });
-
-  // Ensure each concept exists in the knowledge graph
-  for (const concept of uniqueConcepts) {
-    if (!kg.getConcept(concept.name)) {
-      const node: ConceptNode = {
-        conceptId: concept.name,
-        aliases: [],
-        domain: concept.domain,
-        specificity: concept.specificity,
-        parentConcept: null,
-        itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
-        relationships: [],
-        lifecycle: 'discovered',
-        populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
-      };
-      kg.addConcept(node);
+  // 7. Combine and deduplicate
+  const allNames = new Set<string>();
+  const conceptList: string[] = [];
+  for (const c of [...packageConcepts, ...astConcepts]) {
+    if (!allNames.has(c.name)) {
+      allNames.add(c.name);
+      conceptList.push(c.name);
     }
   }
+  if (conceptList.length === 0) return null;
 
-  // Build probe candidates from ALL unique concepts
-  const now = Date.now();
-  const candidates: ProbeCandidateInfo[] = uniqueConcepts.map((concept) => {
-    const ucs = kg.getUserConceptState(userId, concept.name);
-    const conceptNode = kg.getConcept(concept.name);
-    const daysSinceAssessment = ucs.lastAssessed
-      ? (now - new Date(ucs.lastAssessed).getTime()) / (1000 * 60 * 60 * 24)
-      : 365; // Never assessed = treat as very stale
-    return {
-      conceptId: concept.name,
-      mu: ucs.mastery.mu,
-      sigma: ucs.mastery.sigma,
-      stability: ucs.memory.stability,
-      daysSinceAssessment,
-      itemParams: conceptNode?.itemParams ?? DEFAULT_GRM_PARAMS,
-    };
-  });
-
-  // Use selectConceptToProbe to pick the best concept
-  const selectedConceptId = selectConceptToProbe(candidates);
-  if (!selectedConceptId) {
-    sm.save();
-    return null;
-  }
-
-  // Classify novelty for the selected concept
-  const novelty = kg.classifyNovelty(userId, selectedConceptId);
-
-  // 7. Decide whether to probe — when skipLLM is true, force the probe
-  const probeDecision = skipLLM ? true : shouldProbe(novelty);
-  if (!probeDecision) {
-    sm.save();
-    return null;
-  }
-
-  // 8. Generate a probe question
-  let question: string;
-  let probeType: 'why' | 'transfer' | 'failure' | 'counterfactual' | 'dependency' | 'context_bound' = 'why';
-
-  if (skipLLM) {
-    // Fallback: use a default probe question
-    question = `I noticed you're using ${selectedConceptId}. Can you explain why you chose it for this project?`;
-  } else {
-    const probe = await generateProbe({
-      conceptName: selectedConceptId,
-      triggerContext: command,
-      targetDepth: 0,
-      previousResponses: [],
-    });
-    question = probe.question;
-    probeType = probe.probeType;
-  }
-
-  // 9. Store as pending probe
-  const probeId = `probe_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-  sm.setPendingProbe({
-    probe: {
-      probeId,
-      conceptId: selectedConceptId,
-      question,
-      depth: 0,
-      probeType,
-    },
-    triggeredAt: new Date().toISOString(),
-    triggerContext: command,
-    previousResponses: [],
-  });
-  sm.save();
-
-  // 10. Return additionalContext telling Claude to ask the probe question
+  // 8. Return additionalContext instructing Claude to call entendi_observe
+  const conceptListStr = conceptList.join(', ');
   return {
     hookSpecificOutput: {
-      additionalContext: `[Entendi] Before continuing, please ask the user this comprehension check question naturally in conversation: "${question}"`,
+      additionalContext:
+        `[Entendi] Concepts detected from tool use: ${conceptListStr}. Trigger: ${command}. ` +
+        `Use the entendi_observe tool to check if a comprehension probe is appropriate. ` +
+        `Complete the user's request fully first. If a probe is warranted, weave it ` +
+        `naturally into your response — be conversational, not examiner-like.`,
     },
   };
 }
 
 /**
  * Extract tool output as a string from the hook input.
- * Handles both string tool_output and object tool_response with stdout.
  */
 function getToolOutput(input: HookInput): string | null {
   if (typeof input.tool_output === 'string') return input.tool_output;
@@ -193,7 +93,6 @@ function getToolOutput(input: HookInput): string | null {
 
 /**
  * Heuristic check: does the output look like source code?
- * Checks for common code keywords or sufficient length (>5 lines).
  */
 function looksLikeSourceCode(output: string): boolean {
   const lines = output.split('\n');
@@ -204,18 +103,14 @@ function looksLikeSourceCode(output: string): boolean {
 
 /**
  * Detect language from source code content.
- * Falls back to 'typescript' as the default for JS/TS-like code.
  */
 function detectLanguage(source: string): SupportedLanguage {
-  // Python indicators
   if (/\bdef\s+\w+\s*\(/.test(source) || (/\bimport\s+\w+/.test(source) && /:\s*$/m.test(source))) {
     return 'python';
   }
-  // TypeScript indicators (type annotations, interfaces, etc.)
   if (/\b(interface|type)\s+\w+/.test(source) || /:\s*(string|number|boolean|void)\b/.test(source)) {
     return 'typescript';
   }
-  // Default to typescript (superset of javascript)
   return 'typescript';
 }
 

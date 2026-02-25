@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
+import { handleRecordEvaluation } from '../../src/mcp/tools/record-evaluation.js';
+import { handleAdvanceTutor } from '../../src/mcp/tools/tutor.js';
 import { StateManager } from '../../src/core/state-manager.js';
 import { createTutorSession, createTutorExchange } from '../../src/schemas/types.js';
 import type { RubricScore } from '../../src/schemas/types.js';
@@ -27,20 +28,16 @@ describe('counterfactual tracking', () => {
     });
   }
 
-  it('untutored probe updates both mu and muUntutored', async () => {
+  it('untutored probe updates both mu and muUntutored', () => {
     const sm = new StateManager(dataDir, 'default');
     setupConcept(sm);
-    sm.setPendingProbe({
-      probe: { probeId: 'p1', conceptId: 'Redis', question: 'Why?', depth: 0, probeType: 'why' },
-      triggeredAt: new Date().toISOString(),
-      triggerContext: 'npm install redis',
-      previousResponses: [],
-    });
     sm.save();
 
-    await handleUserPromptSubmit(
-      { session_id: 'test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'For caching' },
-      { dataDir, skipLLM: true, userId: 'default' },
+    // Use MCP record-evaluation tool for probe scoring
+    handleRecordEvaluation(
+      { conceptId: 'Redis', score: 1, confidence: 0.5, reasoning: 'Surface level', eventType: 'probe' },
+      sm,
+      'default',
     );
 
     const sm2 = new StateManager(dataDir, 'default');
@@ -53,18 +50,22 @@ describe('counterfactual tracking', () => {
     expect(ucs.tutoredAssessmentCount).toBe(0);
   });
 
-  it('tutor phase1 updates BOTH mu and muUntutored (pre-teaching evidence)', async () => {
+  it('tutor phase1 updates BOTH mu and muUntutored (pre-teaching evidence)', () => {
     const sm = new StateManager(dataDir, 'default');
     setupConcept(sm);
+
+    // Create a tutor session at phase1
     const session = createTutorSession('Redis', 1 as RubricScore);
     session.phase = 'phase1';
     session.exchanges = [createTutorExchange('phase1', 'What do you know about Redis?')];
     sm.setTutorSession(session);
     sm.save();
 
-    await handleUserPromptSubmit(
-      { session_id: 'test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'It is a cache' },
-      { dataDir, skipLLM: true, userId: 'default' },
+    // Use MCP advance-tutor tool with a scored phase1
+    handleAdvanceTutor(
+      { sessionId: session.sessionId, userResponse: 'It is a cache', score: 1, confidence: 0.5, reasoning: 'Surface' },
+      sm,
+      'default',
     );
 
     const sm2 = new StateManager(dataDir, 'default');
@@ -75,9 +76,10 @@ describe('counterfactual tracking', () => {
     expect(ucs.untutoredAssessmentCount).toBe(1);
   });
 
-  it('tutored phase4 updates mu but NOT muUntutored', async () => {
+  it('tutored phase4 updates mu but NOT muUntutored', () => {
     const sm = new StateManager(dataDir, 'default');
     setupConcept(sm);
+
     const session = createTutorSession('Redis', 1 as RubricScore);
     session.phase = 'phase4';
     session.phase1Score = 1 as RubricScore;
@@ -90,9 +92,11 @@ describe('counterfactual tracking', () => {
     sm.setTutorSession(session);
     sm.save();
 
-    await handleUserPromptSubmit(
-      { session_id: 'test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is a KV store with RDB and AOF persistence' },
-      { dataDir, skipLLM: true, userId: 'default' },
+    // Use MCP advance-tutor tool with a scored phase4
+    handleAdvanceTutor(
+      { sessionId: session.sessionId, userResponse: 'Redis is a KV store with RDB and AOF persistence', score: 1, confidence: 0.5, reasoning: 'Basic' },
+      sm,
+      'default',
     );
 
     const sm2 = new StateManager(dataDir, 'default');
@@ -104,22 +108,16 @@ describe('counterfactual tracking', () => {
     expect(ucs.untutoredAssessmentCount).toBe(0);
   });
 
-  it('phase4 applies tutoredEvidenceWeight attenuation', async () => {
+  it('phase4 applies tutoredEvidenceWeight attenuation', () => {
     const sm = new StateManager(dataDir, 'default');
     setupConcept(sm);
-
-    // First do a regular probe to establish a baseline
-    sm.setPendingProbe({
-      probe: { probeId: 'p1', conceptId: 'Redis', question: 'Why?', depth: 0, probeType: 'why' },
-      triggeredAt: new Date().toISOString(),
-      triggerContext: 'npm install redis',
-      previousResponses: [],
-    });
     sm.save();
 
-    await handleUserPromptSubmit(
-      { session_id: 'test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'For caching' },
-      { dataDir, skipLLM: true, userId: 'default' },
+    // First do a regular probe to establish a baseline
+    handleRecordEvaluation(
+      { conceptId: 'Redis', score: 1, confidence: 0.5, reasoning: 'Surface', eventType: 'probe' },
+      sm,
+      'default',
     );
 
     // Record the post-probe mastery
@@ -140,13 +138,18 @@ describe('counterfactual tracking', () => {
     sm2.setTutorSession(session);
     sm2.save();
 
-    await handleUserPromptSubmit(
-      { session_id: 'test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is a KV store' },
-      { dataDir, skipLLM: true, userId: 'default' },
+    // Use MCP advance-tutor with scored phase4
+    const sm3 = new StateManager(dataDir, 'default');
+    // Need to re-load since sm2 saved and we need fresh state
+    const tutorSession = sm3.getTutorSession()!;
+    handleAdvanceTutor(
+      { sessionId: tutorSession.sessionId, userResponse: 'Redis is a KV store', score: 1, confidence: 0.5, reasoning: 'Basic' },
+      sm3,
+      'default',
     );
 
-    const sm3 = new StateManager(dataDir, 'default');
-    const afterTutor = sm3.getKnowledgeGraph().getUserConceptState('default', 'Redis');
+    const sm4 = new StateManager(dataDir, 'default');
+    const afterTutor = sm4.getKnowledgeGraph().getUserConceptState('default', 'Redis');
     // The phase4 update should be attenuated (not as large as a full update)
     // mu should have changed from the post-probe value
     expect(afterTutor.mastery.mu).not.toBe(muAfterProbe);

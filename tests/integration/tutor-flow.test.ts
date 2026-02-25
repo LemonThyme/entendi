@@ -4,34 +4,10 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { handlePostToolUse } from '../../src/hooks/post-tool-use.js';
 import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
-import { StateManager } from '../../src/core/state-manager.js';
+import { writePendingAction } from '../../src/mcp/pending-action.js';
+import type { PendingAction } from '../../src/schemas/types.js';
 
-const USER_ID = 'test-user';
-
-function makeHookInput(prompt: string) {
-  return {
-    session_id: 'tutor-flow-test',
-    cwd: '/tmp',
-    hook_event_name: 'UserPromptSubmit' as const,
-    prompt,
-  };
-}
-
-function addRedisConcept(sm: StateManager): void {
-  sm.getKnowledgeGraph().addConcept({
-    conceptId: 'Redis',
-    aliases: ['redis'],
-    domain: 'databases',
-    specificity: 'topic',
-    parentConcept: null,
-    itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
-    relationships: [],
-    lifecycle: 'validated',
-    populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
-  });
-}
-
-describe('tutor-flow integration', () => {
+describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
   let dataDir: string;
   let projectDir: string;
 
@@ -44,8 +20,8 @@ describe('tutor-flow integration', () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it('complete reactive tutor flow: install -> probe -> offer -> 4 phases -> complete', async () => {
-    // Step 1: PostToolUse with npm install redis -> creates pending probe
+  it('reactive tutor flow: install -> probe instructions -> tutor offered -> phase instructions', async () => {
+    // Step 1: PostToolUse detects concepts
     const postToolResult = await handlePostToolUse(
       {
         session_id: 'tutor-flow-test',
@@ -54,191 +30,120 @@ describe('tutor-flow integration', () => {
         tool_name: 'Bash',
         tool_input: { command: 'npm install redis' },
       },
-      { skipLLM: true, dataDir, userId: USER_ID },
+      { skipLLM: true, dataDir, userId: 'test-user' },
     );
 
     expect(postToolResult).toBeDefined();
-    expect(postToolResult!.hookSpecificOutput?.additionalContext).toBeTruthy();
+    expect(postToolResult!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
 
-    // Verify pending probe was created
-    const sm1 = new StateManager(dataDir, USER_ID);
-    const pendingProbe = sm1.getProbeSession().pendingProbe;
-    expect(pendingProbe).not.toBeNull();
-    const conceptId = pendingProbe!.probe.conceptId;
+    // Step 2: MCP server writes awaiting_probe_response (simulating entendi_observe)
+    writePendingAction(dataDir, {
+      type: 'awaiting_probe_response',
+      conceptId: 'Redis',
+      depth: 1,
+      timestamp: new Date().toISOString(),
+    });
 
-    // Step 2: UserPromptSubmit with a poor answer -> evaluates probe, offers tutor
-    // skipLLM gives rubricScore=1, default tutorTriggerThreshold=1, tutorMode='both'
-    // shouldOfferTutor(1, 1, 'both') => 1 <= 1 => true
+    // Step 3: User responds to probe -> hook returns evaluation instructions
     const probeResponse = await handleUserPromptSubmit(
-      makeHookInput('I dunno, it stores stuff I think?'),
-      { dataDir, skipLLM: true, userId: USER_ID },
+      { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'I dunno, it stores stuff I think?' },
+      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(probeResponse).toBeDefined();
-    expect(probeResponse!.hookSpecificOutput?.additionalContext).toContain('Would you like me to help');
+    expect(probeResponse!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
 
-    // Verify tutor is offered
-    const sm2 = new StateManager(dataDir, USER_ID);
-    expect(sm2.getTutorSession()).not.toBeNull();
-    expect(sm2.getTutorSession()!.phase).toBe('offered');
-    expect(sm2.getTutorSession()!.conceptId).toBe(conceptId);
+    // Step 4: MCP server writes tutor_offered (simulating entendi_record_evaluation)
+    writePendingAction(dataDir, {
+      type: 'tutor_offered',
+      conceptId: 'Redis',
+      triggerScore: 1,
+      timestamp: new Date().toISOString(),
+    });
 
-    // Step 3: UserPromptSubmit with "yes" -> accepts, enters phase1
+    // Step 5: User accepts tutor -> hook returns accept/decline instructions
     const acceptResult = await handleUserPromptSubmit(
-      makeHookInput('yes'),
-      { dataDir, skipLLM: true, userId: USER_ID },
+      { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'yes' },
+      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(acceptResult).toBeDefined();
-    expect(acceptResult!.hookSpecificOutput?.additionalContext).toContain('Entendi Tutor');
+    expect(acceptResult!.hookSpecificOutput?.additionalContext).toContain('entendi_start_tutor');
 
-    const sm3 = new StateManager(dataDir, USER_ID);
-    expect(sm3.getTutorSession()!.phase).toBe('phase1');
-    expect(sm3.getTutorSession()!.exchanges.length).toBe(1);
-    expect(sm3.getTutorSession()!.exchanges[0].response).toBeNull();
+    // Step 6: MCP server writes tutor_active (simulating entendi_start_tutor)
+    writePendingAction(dataDir, {
+      type: 'tutor_active',
+      sessionId: 'sess-1',
+      conceptId: 'Redis',
+      phase: 'phase1',
+      timestamp: new Date().toISOString(),
+    });
 
-    // Step 4: UserPromptSubmit with phase1 answer -> scores, advances to phase2
+    // Step 7: User responds to phase1 -> hook returns phase1 instructions
     const phase1Result = await handleUserPromptSubmit(
-      makeHookInput('Redis is a key-value store used for caching'),
-      { dataDir, skipLLM: true, userId: USER_ID },
+      { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is a key-value store used for caching' },
+      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(phase1Result).toBeDefined();
-    expect(phase1Result!.hookSpecificOutput?.additionalContext).toContain('Entendi Tutor');
+    const p1Ctx = phase1Result!.hookSpecificOutput?.additionalContext!;
+    expect(p1Ctx).toContain('phase1');
+    expect(p1Ctx).toContain('entendi_advance_tutor');
+    expect(p1Ctx).toContain('0-3 rubric');
 
-    const sm4 = new StateManager(dataDir, USER_ID);
-    expect(sm4.getTutorSession()!.phase).toBe('phase2');
-    expect(sm4.getTutorSession()!.phase1Score).not.toBeNull();
+    // Step 8: MCP server advances to phase2
+    writePendingAction(dataDir, {
+      type: 'tutor_active',
+      sessionId: 'sess-1',
+      conceptId: 'Redis',
+      phase: 'phase2',
+      timestamp: new Date().toISOString(),
+    });
 
-    // Step 5: UserPromptSubmit with phase2 answer -> advances to phase3 (no score)
+    // Step 9: User responds to phase2
     const phase2Result = await handleUserPromptSubmit(
-      makeHookInput('It uses memory instead of disk for speed'),
-      { dataDir, skipLLM: true, userId: USER_ID },
+      { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'It uses memory instead of disk for speed' },
+      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(phase2Result).toBeDefined();
-    expect(phase2Result!.hookSpecificOutput?.additionalContext).toContain('Entendi Tutor');
+    const p2Ctx = phase2Result!.hookSpecificOutput?.additionalContext!;
+    expect(p2Ctx).toContain('phase2');
+    expect(p2Ctx).toContain('misconception');
 
-    const sm5 = new StateManager(dataDir, USER_ID);
-    expect(sm5.getTutorSession()!.phase).toBe('phase3');
+    // Steps 10-11: phase3 and phase4 follow the same pattern
+    writePendingAction(dataDir, {
+      type: 'tutor_active',
+      sessionId: 'sess-1',
+      conceptId: 'Redis',
+      phase: 'phase4',
+      timestamp: new Date().toISOString(),
+    });
 
-    // Step 6: UserPromptSubmit with phase3 answer -> advances to phase4
-    const phase3Result = await handleUserPromptSubmit(
-      makeHookInput('You lose data if it crashes without persistence configured'),
-      { dataDir, skipLLM: true, userId: USER_ID },
-    );
-
-    expect(phase3Result).toBeDefined();
-    expect(phase3Result!.hookSpecificOutput?.additionalContext).toContain('Entendi Tutor');
-
-    const sm6 = new StateManager(dataDir, USER_ID);
-    expect(sm6.getTutorSession()!.phase).toBe('phase4');
-
-    // Step 7: UserPromptSubmit with phase4 answer -> scores (tutored), completes session
     const phase4Result = await handleUserPromptSubmit(
-      makeHookInput('Redis is an in-memory data store that trades durability for speed. It supports persistence via AOF and RDB. Great for caching, sessions, and pub/sub.'),
-      { dataDir, skipLLM: true, userId: USER_ID },
+      { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory store that trades durability for speed' },
+      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(phase4Result).toBeDefined();
-    expect(phase4Result!.hookSpecificOutput?.additionalContext).toContain('complete');
-
-    // Verify final state
-    const smFinal = new StateManager(dataDir, USER_ID);
-
-    // Tutor session is null (cleared)
-    expect(smFinal.getTutorSession()).toBeNull();
-
-    // Knowledge graph has assessments for the concept
-    const ucs = smFinal.getKnowledgeGraph().getUserConceptState(USER_ID, conceptId);
-    expect(ucs.assessmentCount).toBeGreaterThanOrEqual(2); // probe + phase1 + phase4 = 3 minimum
-    expect(ucs.history.length).toBeGreaterThanOrEqual(2);
-
-    // At least one tutored assessment (phase4)
-    expect(ucs.tutoredAssessmentCount).toBeGreaterThanOrEqual(1);
-
-    // Verify event types: should have probe, tutor_phase1, tutor_phase4
-    const eventTypes = ucs.history.map((h) => h.eventType);
-    expect(eventTypes).toContain('probe');
-    expect(eventTypes).toContain('tutor_phase1');
-    expect(eventTypes).toContain('tutor_phase4');
+    const p4Ctx = phase4Result!.hookSpecificOutput?.additionalContext!;
+    expect(p4Ctx).toContain('phase4');
+    expect(p4Ctx).toContain('0-3 rubric');
+    expect(p4Ctx).toContain('entendi_advance_tutor');
   });
 
-  it('proactive tutor flow: teach me -> 4 phases -> complete', async () => {
-    // Pre-seed a concept (Redis with alias 'redis') via StateManager
-    const sm = new StateManager(dataDir, USER_ID);
-    addRedisConcept(sm);
-    sm.save();
-
-    // Step 1: UserPromptSubmit with "teach me about Redis" -> creates tutor at phase1
+  it('proactive tutor flow: "teach me" -> start_tutor instructions', async () => {
+    // No pending action needed — teach-me pattern is detected directly
     const teachResult = await handleUserPromptSubmit(
-      makeHookInput('teach me about Redis'),
-      { dataDir, skipLLM: true, userId: USER_ID },
+      { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'teach me about Redis' },
+      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(teachResult).toBeDefined();
-    expect(teachResult!.hookSpecificOutput?.additionalContext).toContain('Entendi Tutor');
-
-    const sm1 = new StateManager(dataDir, USER_ID);
-    expect(sm1.getTutorSession()).not.toBeNull();
-    expect(sm1.getTutorSession()!.phase).toBe('phase1');
-    expect(sm1.getTutorSession()!.conceptId).toBe('Redis');
-    expect(sm1.getTutorSession()!.triggerProbeScore).toBeNull();
-
-    // Step 2: Phase1 response
-    const phase1Result = await handleUserPromptSubmit(
-      makeHookInput('Redis is a key-value store'),
-      { dataDir, skipLLM: true, userId: USER_ID },
-    );
-
-    expect(phase1Result).toBeDefined();
-    const sm2 = new StateManager(dataDir, USER_ID);
-    expect(sm2.getTutorSession()!.phase).toBe('phase2');
-
-    // Step 3: Phase2 response
-    const phase2Result = await handleUserPromptSubmit(
-      makeHookInput('It is fast because it uses RAM'),
-      { dataDir, skipLLM: true, userId: USER_ID },
-    );
-
-    expect(phase2Result).toBeDefined();
-    const sm3 = new StateManager(dataDir, USER_ID);
-    expect(sm3.getTutorSession()!.phase).toBe('phase3');
-
-    // Step 4: Phase3 response
-    const phase3Result = await handleUserPromptSubmit(
-      makeHookInput('The trade-off is data volatility without persistence'),
-      { dataDir, skipLLM: true, userId: USER_ID },
-    );
-
-    expect(phase3Result).toBeDefined();
-    const sm4 = new StateManager(dataDir, USER_ID);
-    expect(sm4.getTutorSession()!.phase).toBe('phase4');
-
-    // Step 5: Phase4 response -> completes session
-    const phase4Result = await handleUserPromptSubmit(
-      makeHookInput('Redis is an in-memory data structure store used as a database, cache, and message broker. It supports various data structures and offers persistence through RDB snapshots and AOF logging.'),
-      { dataDir, skipLLM: true, userId: USER_ID },
-    );
-
-    expect(phase4Result).toBeDefined();
-    expect(phase4Result!.hookSpecificOutput?.additionalContext).toContain('complete');
-
-    // Verify session is cleared
-    const smFinal = new StateManager(dataDir, USER_ID);
-    expect(smFinal.getTutorSession()).toBeNull();
-
-    // Verify concept has assessments
-    const ucs = smFinal.getKnowledgeGraph().getUserConceptState(USER_ID, 'Redis');
-    expect(ucs.assessmentCount).toBeGreaterThanOrEqual(2); // phase1 + phase4
-    expect(ucs.history.length).toBeGreaterThanOrEqual(2);
-
-    // Verify event types
-    const eventTypes = ucs.history.map((h) => h.eventType);
-    expect(eventTypes).toContain('tutor_phase1');
-    expect(eventTypes).toContain('tutor_phase4');
-
-    // Verify tutored assessment count
-    expect(ucs.tutoredAssessmentCount).toBeGreaterThanOrEqual(1);
+    const ctx = teachResult!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('Entendi');
+    expect(ctx).toContain('Redis');
+    expect(ctx).toContain('entendi_start_tutor');
+    expect(ctx).toContain('triggerScore null');
   });
 });

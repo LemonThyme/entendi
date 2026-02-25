@@ -1,16 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { StateManager } from '../../src/core/state-manager.js';
 import { handlePostToolUse } from '../../src/hooks/post-tool-use.js';
 import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
+import { writePendingAction } from '../../src/mcp/pending-action.js';
 import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
 import { buildSeedConceptNodes } from '../../src/config/seed-taxonomy.js';
 import { grmFisherInformation, grmBayesianUpdate } from '../../src/core/probabilistic-model.js';
 import { createDashboardApp } from '../../src/dashboard/server.js';
+import { StateManager } from '../../src/core/state-manager.js';
+import type { PendingAction } from '../../src/schemas/types.js';
 
-describe('end-to-end flow', () => {
+describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
   let projectDir: string;
 
   beforeEach(() => {
@@ -21,8 +23,7 @@ describe('end-to-end flow', () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it('full cycle: install -> probe -> respond -> update', async () => {
-    // 1. PostToolUse: simulate npm install redis
+  it('PostToolUse detects concepts and instructs Claude to call entendi_observe', async () => {
     const postToolResult = await handlePostToolUse(
       {
         session_id: 's1',
@@ -34,87 +35,35 @@ describe('end-to-end flow', () => {
       { skipLLM: true },
     );
 
-    // Should detect concepts and queue a probe
     expect(postToolResult).toBeDefined();
-    expect(postToolResult!.hookSpecificOutput?.additionalContext).toBeTruthy();
+    const ctx = postToolResult!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('entendi_observe');
+    expect(ctx).toContain('redis');
+  });
 
-    // 2. Verify probe was queued in state
+  it('UserPromptSubmit reads pending action and returns evaluation instructions', async () => {
     const dataDir = join(projectDir, '.entendi');
-    const sm = new StateManager(dataDir, 'default');
-    expect(sm.getProbeSession().pendingProbe).toBeDefined();
-    expect(sm.getProbeSession().pendingProbe!.probe.conceptId).toBeTruthy();
+    const action: PendingAction = {
+      type: 'awaiting_probe_response',
+      conceptId: 'Redis',
+      depth: 1,
+      timestamp: new Date().toISOString(),
+    };
+    writePendingAction(dataDir, action);
 
-    // 3. UserPromptSubmit: simulate user answering the probe
     const submitResult = await handleUserPromptSubmit(
       {
         session_id: 's1',
         cwd: projectDir,
         hook_event_name: 'UserPromptSubmit',
-        prompt: 'I need Redis for caching API responses to reduce database load and improve response times',
+        prompt: 'I need Redis for caching API responses',
       },
       { dataDir, skipLLM: true, userId: 'default' },
     );
 
     expect(submitResult).toBeDefined();
+    expect(submitResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
     expect(submitResult!.hookSpecificOutput?.additionalContext).toContain('Entendi');
-
-    // 4. Verify knowledge graph was updated
-    const sm2 = new StateManager(dataDir, 'default');
-    // Find the concept that was probed (get it from the first assessment)
-    const conceptId = sm.getProbeSession().pendingProbe!.probe.conceptId;
-    const state = sm2.getKnowledgeGraph().getUserConceptState('default', conceptId);
-    expect(state.assessmentCount).toBe(1);
-    expect(state.history.length).toBe(1);
-    expect(state.history[0].eventType).toBe('probe');
-
-    // 5. Verify probe was cleared
-    expect(sm2.getProbeSession().pendingProbe).toBeNull();
-  });
-
-  it('no probe when concept is routine', async () => {
-    // Pre-populate knowledge graph with a mastered concept
-    const dataDir = join(projectDir, '.entendi');
-    const sm = new StateManager(dataDir, 'default');
-    const kg = sm.getKnowledgeGraph();
-
-    // Add redis concept and mark as mastered
-    kg.addConcept({
-      conceptId: 'Redis',
-      aliases: [],
-      domain: 'databases',
-      specificity: 'topic',
-      parentConcept: null,
-      itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
-      relationships: [],
-      lifecycle: 'validated',
-      populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
-    });
-    const ucs = kg.getUserConceptState('default', 'Redis');
-    ucs.mastery.mu = 3.0;
-    ucs.mastery.sigma = 0.3;
-    ucs.assessmentCount = 10;
-    ucs.lastAssessed = new Date().toISOString();
-    ucs.memory.stability = 30;
-    kg.setUserConceptState('default', 'Redis', ucs);
-    sm.save();
-
-    // Now install redis again - should be classified as routine
-    // Note: with skipLLM=true the probe is forced, so this test verifies
-    // that the concept IS recognized (not that probing is skipped)
-    // For a proper routine-skip test, we'd need skipLLM=false with mocking
-    const result = await handlePostToolUse(
-      {
-        session_id: 's1',
-        cwd: projectDir,
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'npm install redis' },
-      },
-      { skipLLM: true },
-    );
-
-    // With skipLLM=true it still probes, but we verify the concept was recognized
-    expect(result).toBeDefined();
   });
 
   it('handles multiple packages in one install', async () => {
@@ -130,8 +79,54 @@ describe('end-to-end flow', () => {
     );
 
     expect(postToolResult).toBeDefined();
-    // Should have detected concepts from at least one of the packages
     expect(postToolResult!.hookSpecificOutput?.additionalContext).toBeTruthy();
+  });
+
+  it('tutor active flow: hook returns phase-specific instructions', async () => {
+    const dataDir = join(projectDir, '.entendi');
+    const action: PendingAction = {
+      type: 'tutor_active',
+      sessionId: 'sess-1',
+      conceptId: 'Redis',
+      phase: 'phase2',
+      timestamp: new Date().toISOString(),
+    };
+    writePendingAction(dataDir, action);
+
+    const result = await handleUserPromptSubmit(
+      {
+        session_id: 's1',
+        cwd: projectDir,
+        hook_event_name: 'UserPromptSubmit',
+        prompt: 'It uses memory instead of disk',
+      },
+      { dataDir, skipLLM: true, userId: 'default' },
+    );
+
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('phase2');
+    expect(ctx).toContain('entendi_advance_tutor');
+    expect(ctx).toContain('misconception');
+  });
+
+  it('no probe when concept is routine (hook still detects concepts)', async () => {
+    // PostToolUse is now a thin observer; it always returns concepts if found.
+    // Probe/skip logic is in the MCP entendi_observe tool.
+    const result = await handlePostToolUse(
+      {
+        session_id: 's1',
+        cwd: projectDir,
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'npm install redis' },
+      },
+      { skipLLM: true },
+    );
+
+    // Hook always returns concepts if it can map the package
+    expect(result).toBeDefined();
+    expect(result!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
   });
 });
 
@@ -146,37 +141,40 @@ describe('Phase 1a Integration', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('full cycle: install -> probe -> respond -> GRM update -> dashboard', async () => {
+  it('PostToolUse detects concepts, UserPromptSubmit reads pending action', async () => {
     const dataDir = join(tmpDir, '.entendi');
 
-    // 1. Package install triggers probe
+    // 1. Package install triggers concept detection
     const installResult = await handlePostToolUse(
       { session_id: 's1', cwd: tmpDir, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm install redis' }, tool_output: 'added redis@4' },
       { skipLLM: true, dataDir, userId: 'student1' },
     );
     expect(installResult).toBeDefined();
+    expect(installResult!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
 
-    // 2. Verify probe was created
-    const stateManager = new StateManager(dataDir, 'student1');
-    expect(stateManager.getProbeSession().pendingProbe).not.toBeNull();
+    // 2. Simulate MCP server having written a pending action (observe tool would do this)
+    const action: PendingAction = {
+      type: 'awaiting_probe_response',
+      conceptId: 'Redis',
+      depth: 1,
+      timestamp: new Date().toISOString(),
+    };
+    writePendingAction(dataDir, action);
 
-    // 3. User responds
+    // 3. User responds — hook reads pending action and returns instructions
     const respondResult = await handleUserPromptSubmit(
-      { session_id: 's1', cwd: tmpDir, hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory data store used for caching to reduce database load.' },
+      { session_id: 's1', cwd: tmpDir, hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory data store used for caching.' },
       { skipLLM: true, dataDir, userId: 'student1' },
     );
     expect(respondResult).toBeDefined();
+    expect(respondResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
 
-    // 4. Verify probe cleared and mastery updated
-    const sm2 = new StateManager(dataDir, 'student1');
-    expect(sm2.getProbeSession().pendingProbe).toBeNull();
-
-    // 5. Dashboard can serve the data
+    // 4. Dashboard can still serve existing graph data
+    const sm = new StateManager(dataDir, 'student1');
+    sm.save(); // ensure files exist
     const app = createDashboardApp(tmpDir);
     const graphRes = await app.request('/api/graph');
     expect(graphRes.status).toBe(200);
-    const data = await graphRes.json() as any;
-    expect(Object.keys(data.concepts).length).toBeGreaterThan(0);
   });
 
   it('GRM update produces valid posteriors across rubric scores', () => {
