@@ -25,4 +25,9 @@ export {
   buildProbePrompt,
   buildEvaluationPrompt,
 } from './core/probe-engine.js';
+export {
+  buildConceptExtractionPrompt,
+  parseConceptExtractionResponse,
+  extractConceptsViaLLM,
+} from './core/llm-extraction.js';
 export * from './schemas/types.js';
