@@ -257,3 +257,9 @@ export interface KnowledgeGraphState {
 export function createEmptyGraphState(): KnowledgeGraphState {
   return { concepts: {}, userStates: {} };
 }
+
+// --- Pending Action (MCP-Hook IPC) ---
+export type PendingAction =
+  | { type: 'awaiting_probe_response'; conceptId: string; depth: number; timestamp: string }
+  | { type: 'tutor_offered'; conceptId: string; triggerScore: number; timestamp: string }
+  | { type: 'tutor_active'; sessionId: string; conceptId: string; phase: TutorPhase; timestamp: string };
