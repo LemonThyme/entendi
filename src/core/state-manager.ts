@@ -27,6 +27,8 @@ export class StateManager {
     this.tutorSession = this.loadTutorSession();
   }
 
+  getDataDir(): string { return this.dataDir; }
+
   getKnowledgeGraph(): KnowledgeGraph { return this.kg; }
 
   getProbeSession(): ProbeSessionState { return this.probeSession; }

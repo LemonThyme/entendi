@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { StateManager } from '../core/state-manager.js';
+import { handleObserve } from './tools/observe.js';
 import { handleGetStatus, handleGetZPDFrontier } from './tools/query.js';
 
 export interface EntendiServerOptions {
@@ -47,7 +48,16 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       })),
       triggerContext: z.string(),
     },
-    async (_args) => stubResult('entendi_observe'),
+    async (args) => {
+      const result = handleObserve(
+        { concepts: args.concepts, triggerContext: args.triggerContext },
+        sm,
+        userId,
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_observe' });
 
