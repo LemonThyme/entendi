@@ -1,15 +1,23 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import type { PendingProbe, ProbeSessionState, TutorSession } from '../schemas/types.js';
 
 /**
+ * Atomically write data to a file using write-to-temp + rename.
+ * Writes to a `.tmp` sibling file then renames, ensuring readers
+ * never see a partially-written file.
+ */
+export function atomicWriteFileSync(filePath: string, data: string): void {
+  const tmpPath = filePath + '.tmp';
+  writeFileSync(tmpPath, data, 'utf-8');
+  renameSync(tmpPath, filePath);
+}
+
+/**
  * Manages persistent state for Entendi (knowledge graph + probe session).
  *
- * IMPORTANT: This implementation assumes hooks execute sequentially within
- * Claude Code (PostToolUse completes before the next UserPromptSubmit fires).
- * Concurrent access from multiple hook instances could corrupt state.
- * Phase 1 should use file locking or atomic writes (write-to-temp + rename).
+ * Uses atomic writes (write-to-temp + rename) to prevent partial-write corruption.
  */
 export class StateManager {
   private dataDir: string;
@@ -54,9 +62,9 @@ export class StateManager {
   }
 
   save(): void {
-    writeFileSync(join(this.dataDir, 'knowledge-graph.json'), this.kg.toJSON());
-    writeFileSync(join(this.dataDir, 'probe-session.json'), JSON.stringify(this.probeSession, null, 2));
-    writeFileSync(join(this.dataDir, 'tutor-session.json'), JSON.stringify(this.tutorSession, null, 2));
+    atomicWriteFileSync(join(this.dataDir, 'knowledge-graph.json'), this.kg.toJSON());
+    atomicWriteFileSync(join(this.dataDir, 'probe-session.json'), JSON.stringify(this.probeSession, null, 2));
+    atomicWriteFileSync(join(this.dataDir, 'tutor-session.json'), JSON.stringify(this.tutorSession, null, 2));
   }
 
   private loadKnowledgeGraph(): KnowledgeGraph {

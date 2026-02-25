@@ -46,14 +46,21 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       triggerContext: z.string(),
     },
     async (args) => {
-      const result = handleObserve(
-        { concepts: args.concepts, triggerContext: args.triggerContext },
-        sm,
-        userId,
-      );
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleObserve(
+          { concepts: args.concepts, triggerContext: args.triggerContext },
+          sm,
+          userId,
+        );
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_observe' });
@@ -71,21 +78,28 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
     },
     async (args) => {
-      const result = handleRecordEvaluation(
-        {
-          conceptId: args.conceptId,
-          score: args.score as 0 | 1 | 2 | 3,
-          confidence: args.confidence,
-          reasoning: args.reasoning,
-          eventType: args.eventType,
-        },
-        sm,
-        userId,
-        resolvedConfig,
-      );
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleRecordEvaluation(
+          {
+            conceptId: args.conceptId,
+            score: args.score as 0 | 1 | 2 | 3,
+            confidence: args.confidence,
+            reasoning: args.reasoning,
+            eventType: args.eventType,
+          },
+          sm,
+          userId,
+          resolvedConfig,
+        );
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_record_evaluation' });
@@ -99,18 +113,25 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       triggerScore: z.union([z.literal(0), z.literal(1), z.null()]).optional(),
     },
     async (args) => {
-      const result = handleStartTutor(
-        {
-          conceptId: args.conceptId,
-          triggerScore: args.triggerScore as 0 | 1 | null | undefined,
-        },
-        sm,
-        userId,
-        resolvedConfig,
-      );
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleStartTutor(
+          {
+            conceptId: args.conceptId,
+            triggerScore: args.triggerScore as 0 | 1 | null | undefined,
+          },
+          sm,
+          userId,
+          resolvedConfig,
+        );
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_start_tutor' });
@@ -128,22 +149,29 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       misconception: z.string().optional(),
     },
     async (args) => {
-      const result = handleAdvanceTutor(
-        {
-          sessionId: args.sessionId,
-          userResponse: args.userResponse,
-          score: args.score as 0 | 1 | 2 | 3 | undefined,
-          confidence: args.confidence,
-          reasoning: args.reasoning,
-          misconception: args.misconception,
-        },
-        sm,
-        userId,
-        resolvedConfig,
-      );
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleAdvanceTutor(
+          {
+            sessionId: args.sessionId,
+            userResponse: args.userResponse,
+            score: args.score as 0 | 1 | 2 | 3 | undefined,
+            confidence: args.confidence,
+            reasoning: args.reasoning,
+            misconception: args.misconception,
+          },
+          sm,
+          userId,
+          resolvedConfig,
+        );
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_advance_tutor' });
@@ -156,14 +184,21 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       reason: z.enum(['user_declined', 'topic_changed', 'timeout']).optional(),
     },
     async (args) => {
-      const result = handleDismiss(
-        { reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined },
-        sm,
-        userId,
-      );
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleDismiss(
+          { reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined },
+          sm,
+          userId,
+        );
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_dismiss' });
@@ -176,10 +211,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       conceptId: z.string().optional(),
     },
     async (args) => {
-      const result = handleGetStatus({ conceptId: args.conceptId }, sm, userId);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleGetStatus({ conceptId: args.conceptId }, sm, userId);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_get_status' });
@@ -190,10 +232,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
     {},
     async () => {
-      const result = handleGetZPDFrontier(sm, userId);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
+      try {
+        const result = handleGetZPDFrontier(sm, userId);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        };
+      }
     },
   );
   registeredTools.push({ name: 'entendi_get_zpd_frontier' });
