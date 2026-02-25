@@ -1,5 +1,6 @@
 {
-  "_comment_hooks": "Add this to your project's .claude/settings.local.json to enable Entendi observation hooks. Replace <ENTENDI_PATH> with the absolute path to your Entendi installation.",
+  "_comment_preferred": "PREFERRED: Install as a Claude Code plugin instead. See .claude-plugin/marketplace.json.",
+  "_comment_hooks": "LEGACY (local dev only): Add this to .claude/settings.local.json. Replace <ENTENDI_PATH> with your Entendi path.",
   "_comment_mcp": "The MCP server is registered separately via: claude mcp add entendi -- node <ENTENDI_PATH>/dist/mcp/server.js",
   "hooks": {
     "PostToolUse": [
