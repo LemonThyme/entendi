@@ -125,6 +125,10 @@ export interface UserConceptState {
   lastAssessed: string | null;
   assessmentCount: number;
   history: AssessmentEvent[];
+  tutoredAssessmentCount: number;
+  untutoredAssessmentCount: number;
+  muUntutored: number;
+  sigmaUntutored: number;
 }
 
 export function createUserConceptState(conceptId: string, userId: string): UserConceptState {
@@ -136,6 +140,10 @@ export function createUserConceptState(conceptId: string, userId: string): UserC
     lastAssessed: null,
     assessmentCount: 0,
     history: [],
+    tutoredAssessmentCount: 0,
+    untutoredAssessmentCount: 0,
+    muUntutored: 0.0,
+    sigmaUntutored: 1.5,
   };
 }
 
@@ -196,6 +204,43 @@ export interface ProbeSessionState {
   pendingProbe: PendingProbe | null;
   lastProbeTime: string | null;
   probesThisSession: number;
+}
+
+// --- Tutor Session ---
+export type TutorPhase = 'offered' | 'phase1' | 'phase2' | 'phase3' | 'phase4' | 'complete';
+
+export interface TutorExchange {
+  phase: TutorPhase;
+  question: string;
+  response: string | null;
+}
+
+export interface TutorSession {
+  sessionId: string;
+  conceptId: string;
+  phase: TutorPhase;
+  startedAt: string;
+  triggerProbeScore: RubricScore | null;
+  exchanges: TutorExchange[];
+  phase1Score: RubricScore | null;
+  phase4Score: RubricScore | null;
+}
+
+export function createTutorSession(conceptId: string, triggerProbeScore: RubricScore | null): TutorSession {
+  return {
+    sessionId: `tutor_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    conceptId,
+    phase: 'offered',
+    startedAt: new Date().toISOString(),
+    triggerProbeScore,
+    exchanges: [],
+    phase1Score: null,
+    phase4Score: null,
+  };
+}
+
+export function createTutorExchange(phase: TutorPhase, question: string): TutorExchange {
+  return { phase, question, response: null };
 }
 
 // --- Knowledge Graph State (JSON persistence) ---
