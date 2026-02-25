@@ -3,7 +3,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { StateManager } from '../core/state-manager.js';
 import { handleObserve } from './tools/observe.js';
+import { handleRecordEvaluation } from './tools/record-evaluation.js';
 import { handleGetStatus, handleGetZPDFrontier } from './tools/query.js';
+import { loadConfig } from '../config/config-loader.js';
 
 export interface EntendiServerOptions {
   dataDir: string;
@@ -62,6 +64,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   registeredTools.push({ name: 'entendi_observe' });
 
   // --- Tool 2: entendi_record_evaluation ---
+  const resolvedConfig = loadConfig(dataDir);
   mcpServer.tool(
     'entendi_record_evaluation',
     'Record the evaluation of a probe or tutor response. Updates the knowledge graph with Bayesian scoring.',
@@ -69,9 +72,26 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       conceptId: z.string(),
       score: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
       confidence: z.number().min(0).max(1),
-      responseQuality: z.string().optional(),
+      reasoning: z.string(),
+      eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
     },
-    async (_args) => stubResult('entendi_record_evaluation'),
+    async (args) => {
+      const result = handleRecordEvaluation(
+        {
+          conceptId: args.conceptId,
+          score: args.score as 0 | 1 | 2 | 3,
+          confidence: args.confidence,
+          reasoning: args.reasoning,
+          eventType: args.eventType,
+        },
+        sm,
+        userId,
+        resolvedConfig,
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_record_evaluation' });
 
