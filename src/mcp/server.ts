@@ -5,6 +5,7 @@ import { StateManager } from '../core/state-manager.js';
 import { handleObserve } from './tools/observe.js';
 import { handleRecordEvaluation } from './tools/record-evaluation.js';
 import { handleGetStatus, handleGetZPDFrontier } from './tools/query.js';
+import { handleStartTutor, handleAdvanceTutor, handleDismiss } from './tools/tutor.js';
 import { loadConfig } from '../config/config-loader.js';
 
 export interface EntendiServerOptions {
@@ -18,12 +19,6 @@ export interface EntendiServer {
   getStateManager(): StateManager;
   /** The underlying McpServer instance, for transport connection */
   getMcpServer(): McpServer;
-}
-
-function stubResult(toolName: string) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify({ error: `${toolName} not yet implemented` }) }],
-  };
 }
 
 export function createEntendiServer(options: EntendiServerOptions): EntendiServer {
@@ -103,7 +98,20 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       conceptId: z.string(),
       triggerScore: z.union([z.literal(0), z.literal(1), z.null()]).optional(),
     },
-    async (_args) => stubResult('entendi_start_tutor'),
+    async (args) => {
+      const result = handleStartTutor(
+        {
+          conceptId: args.conceptId,
+          triggerScore: args.triggerScore as 0 | 1 | null | undefined,
+        },
+        sm,
+        userId,
+        resolvedConfig,
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_start_tutor' });
 
@@ -115,8 +123,28 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       sessionId: z.string(),
       userResponse: z.string(),
       score: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]).optional(),
+      confidence: z.number().min(0).max(1).optional(),
+      reasoning: z.string().optional(),
+      misconception: z.string().optional(),
     },
-    async (_args) => stubResult('entendi_advance_tutor'),
+    async (args) => {
+      const result = handleAdvanceTutor(
+        {
+          sessionId: args.sessionId,
+          userResponse: args.userResponse,
+          score: args.score as 0 | 1 | 2 | 3 | undefined,
+          confidence: args.confidence,
+          reasoning: args.reasoning,
+          misconception: args.misconception,
+        },
+        sm,
+        userId,
+        resolvedConfig,
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_advance_tutor' });
 
@@ -127,7 +155,16 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     {
       reason: z.enum(['user_declined', 'topic_changed', 'timeout']).optional(),
     },
-    async (_args) => stubResult('entendi_dismiss'),
+    async (args) => {
+      const result = handleDismiss(
+        { reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined },
+        sm,
+        userId,
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
   );
   registeredTools.push({ name: 'entendi_dismiss' });
 
