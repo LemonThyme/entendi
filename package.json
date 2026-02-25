@@ -8,10 +8,13 @@
     "build": "tsc && node --import tsx esbuild.config.ts",
     "build:hooks": "node --import tsx esbuild.config.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dashboard": "tsx src/dashboard/serve.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@hono/node-server": "^1.19.9",
+    "hono": "^4.12.2",
     "tree-sitter-javascript": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
     "tree-sitter-typescript": "^0.23.2",
