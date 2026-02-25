@@ -87,6 +87,46 @@ describe('handleUserPromptSubmit', () => {
     expect(state.history.length).toBe(1);
   });
 
+  it('uses GRM update for scoring (verifiable by mastery change)', async () => {
+    const sm = new StateManager(dataDir, 'default');
+    sm.getKnowledgeGraph().addConcept({
+      conceptId: 'Redis',
+      aliases: [],
+      domain: 'databases',
+      specificity: 'topic',
+      parentConcept: null,
+      itemParams: { discrimination: 1.0, thresholds: [-1, 0, 1] },
+      relationships: [],
+      lifecycle: 'validated',
+      populationStats: { meanMastery: 0, assessmentCount: 0, failureRate: 0 },
+    });
+    sm.setPendingProbe({
+      probe: {
+        probeId: 'p1',
+        conceptId: 'Redis',
+        question: 'Why Redis?',
+        depth: 0,
+        probeType: 'why',
+      },
+      triggeredAt: new Date().toISOString(),
+      triggerContext: 'npm install redis',
+      previousResponses: [],
+    });
+    sm.save();
+
+    await handleUserPromptSubmit(
+      { session_id: 'test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory cache' },
+      { dataDir, skipLLM: true, userId: 'default' },
+    );
+
+    const sm2 = new StateManager(dataDir, 'default');
+    const state = sm2.getKnowledgeGraph().getUserConceptState('default', 'Redis');
+    // GRM update should have modified mastery from default (mu=0, sigma=1.5)
+    // skipLLM gives rubricScore=1, which should shift mu
+    expect(state.mastery.mu).not.toBe(0);
+    expect(state.mastery.sigma).toBeLessThan(1.5); // gained information
+  });
+
   it('clears pending probe after evaluation', async () => {
     const sm = new StateManager(dataDir, 'default');
     sm.setPendingProbe({

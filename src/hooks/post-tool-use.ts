@@ -4,6 +4,7 @@ import {
   parsePackageFromCommand,
   extractConceptsFromPackage,
 } from '../core/concept-extraction.js';
+import { initParser, extractConceptsFromSource, type SupportedLanguage } from '../core/ast-extraction.js';
 import { KnowledgeGraph } from '../core/knowledge-graph.js';
 import { StateManager } from '../core/state-manager.js';
 import { shouldProbe, selectConceptToProbe } from '../core/probe-scheduler.js';
@@ -45,8 +46,29 @@ export async function handlePostToolUse(
   const packages = parsePackageFromCommand(command);
   if (packages.length === 0) return null;
 
-  // 5. Map to concepts
-  const allConcepts = packages.flatMap((pkg) => extractConceptsFromPackage(pkg));
+  // 5. Map to concepts from packages
+  const packageConcepts = packages.flatMap((pkg) => extractConceptsFromPackage(pkg));
+
+  // 5b. AST extraction from tool output (best-effort)
+  let astConcepts: Array<{ name: string; specificity: import('../schemas/types.js').ConceptSpecificity; confidence: number; extractionSignal: 'ast'; domain: string }> = [];
+  try {
+    const toolOutput = getToolOutput(input);
+    if (toolOutput && looksLikeSourceCode(toolOutput)) {
+      await initParser();
+      const language = detectLanguage(toolOutput);
+      const rawAstConcepts = await extractConceptsFromSource(toolOutput, language);
+      // Add domain field for AST-detected concepts (all are programming language features)
+      astConcepts = rawAstConcepts.map((c) => ({
+        ...c,
+        domain: 'programming-languages',
+      }));
+    }
+  } catch {
+    // AST extraction is best-effort; don't fail the hook
+  }
+
+  // 5c. Combine and deduplicate concepts from both signals
+  const allConcepts = [...packageConcepts, ...astConcepts];
   if (allConcepts.length === 0) return null;
 
   // 6. Load state and ensure concepts exist in knowledge graph
@@ -156,6 +178,45 @@ export async function handlePostToolUse(
       additionalContext: `[Entendi] Before continuing, please ask the user this comprehension check question naturally in conversation: "${question}"`,
     },
   };
+}
+
+/**
+ * Extract tool output as a string from the hook input.
+ * Handles both string tool_output and object tool_response with stdout.
+ */
+function getToolOutput(input: HookInput): string | null {
+  if (typeof input.tool_output === 'string') return input.tool_output;
+  const response = input.tool_response as { stdout?: string } | undefined;
+  if (response && typeof response.stdout === 'string') return response.stdout;
+  return null;
+}
+
+/**
+ * Heuristic check: does the output look like source code?
+ * Checks for common code keywords or sufficient length (>5 lines).
+ */
+function looksLikeSourceCode(output: string): boolean {
+  const lines = output.split('\n');
+  if (lines.length > 5) return true;
+  const codePatterns = /\b(function|class|import|export|async|await|def|const|let|var|interface|type)\b/;
+  return codePatterns.test(output);
+}
+
+/**
+ * Detect language from source code content.
+ * Falls back to 'typescript' as the default for JS/TS-like code.
+ */
+function detectLanguage(source: string): SupportedLanguage {
+  // Python indicators
+  if (/\bdef\s+\w+\s*\(/.test(source) || (/\bimport\s+\w+/.test(source) && /:\s*$/m.test(source))) {
+    return 'python';
+  }
+  // TypeScript indicators (type annotations, interfaces, etc.)
+  if (/\b(interface|type)\s+\w+/.test(source) || /:\s*(string|number|boolean|void)\b/.test(source)) {
+    return 'typescript';
+  }
+  // Default to typescript (superset of javascript)
+  return 'typescript';
 }
 
 async function main() {

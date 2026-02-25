@@ -2,7 +2,7 @@ import { readStdin, getDataDir, getUserId, type HookInput } from './shared.js';
 import { StateManager } from '../core/state-manager.js';
 import { evaluateResponse } from '../core/probe-engine.js';
 import {
-  bayesianUpdate,
+  grmUpdate,
   mapRubricToFsrsGrade,
   fsrsStabilityAfterSuccess,
   fsrsDifficultyUpdate,
@@ -75,9 +75,11 @@ export async function handleUserPromptSubmit(
     currentMastery = decayPrior(currentMastery.mu, currentMastery.sigma, R);
   }
 
-  // 6. Bayesian update with the rubric score
+  // 6. GRM Bayesian update with the rubric score
   const muBefore = currentMastery.mu;
-  const updatedMastery = bayesianUpdate(currentMastery, evaluation.rubricScore);
+  const concept = kg.getConcept(probe.conceptId);
+  const conceptItemParams = concept?.itemParams; // undefined = uses default GRM params
+  const updatedMastery = grmUpdate(currentMastery, evaluation.rubricScore, conceptItemParams);
 
   // 7. Update FSRS stability and difficulty
   const fsrsGrade = mapRubricToFsrsGrade(evaluation.rubricScore);
