@@ -1,0 +1,28 @@
+{
+  "_comment": "Add this to your project's .claude/settings.json to enable Entendi observation and probing. Replace <ENTENDI_PATH> with the absolute path to your Entendi installation.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <ENTENDI_PATH>/dist/hooks/post-tool-use.js",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <ENTENDI_PATH>/dist/hooks/user-prompt-submit.js",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
