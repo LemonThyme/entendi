@@ -6,5 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
+[ai]
+binding = "AI"
+
 [triggers]
 crons = ["0 8 * * 1"]
