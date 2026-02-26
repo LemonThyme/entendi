@@ -6,3 +6,4 @@ dist/
 .entendi/
 .claude/worktrees/
 /.mcp.json
+public/assets/

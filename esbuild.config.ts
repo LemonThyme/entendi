@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync } from 'fs';
+import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 const hookDir = join('src', 'hooks');
@@ -101,3 +101,31 @@ if (existsSync(mcpSrc)) {
   copyFileSync(mcpSrc, join(pluginDir, 'mcp', 'server.js'));
   chmodSync(join(pluginDir, 'mcp', 'server.js'), 0o755);
 }
+
+// --- Dashboard asset build ---
+mkdirSync('public/assets', { recursive: true });
+
+const dashboardBuild = await esbuild.build({
+  entryPoints: [
+    join('src', 'dashboard', 'dashboard.js'),
+    join('src', 'dashboard', 'dashboard.css'),
+    join('src', 'dashboard', 'link.js'),
+  ],
+  bundle: false,
+  minify: true,
+  outdir: join('public', 'assets'),
+  entryNames: '[name]-[hash]',
+  metafile: true,
+});
+
+// Generate asset manifest from metafile
+const manifest: Record<string, string> = {};
+for (const [outPath, meta] of Object.entries(dashboardBuild.metafile!.outputs)) {
+  if (meta.entryPoint) {
+    const name = meta.entryPoint.replace('src/dashboard/', '');
+    const hashed = outPath.replace('public/', '/');
+    manifest[name] = hashed;
+  }
+}
+writeFileSync(join('public', 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
+console.log('Dashboard asset manifest:', manifest);
