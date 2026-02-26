@@ -14,6 +14,10 @@ import {
 } from '../../core/probabilistic-model.js';
 import { probeUrgency } from '../../core/probe-urgency.js';
 import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
+import { selectProbeCandidate } from '../../core/probe-selection.js';
+import { resolveConcept } from '../lib/concept-pipeline.js';
+import { resolveConceptId } from '../lib/concept-normalize.js';
+import { conceptSimilarity } from '../lib/embeddings.js';
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
 import type { Context } from 'hono';
@@ -35,6 +39,7 @@ const observeSchema = z.object({
     source: z.enum(['package', 'ast', 'llm']),
   })).min(1).max(50),
   triggerContext: z.string().max(1000).default(''),
+  primaryConceptId: z.string().max(200).optional(),
 });
 
 const recordEvaluationSchema = z.object({
@@ -87,21 +92,18 @@ mcpRoutes.post('/observe', async (c) => {
   if (parsed instanceof Response) return parsed;
   const body = parsed;
 
-  // Ensure all concepts exist
-  for (const concept of body.concepts) {
-    const existing = await db.select({ id: concepts.id }).from(concepts)
-      .where(eq(concepts.id, concept.id)).limit(1);
-    if (existing.length === 0) {
-      await db.insert(concepts).values({
-        id: concept.id,
-        domain: 'general',
-        specificity: 'topic',
-      });
-    }
-  }
+  // Resolve concepts through three-tier normalization pipeline
+  // Workers AI binding is available in Cloudflare Workers but not in local dev
+  const ai = (c.env as any)?.AI ?? null;
+  const resolvedConcepts = await Promise.all(
+    body.concepts.map(async (concept) => {
+      const resolved = await resolveConcept(db, concept.id, ai);
+      return { ...concept, id: resolved.canonicalId, isNew: resolved.isNew };
+    })
+  );
 
   // Build probe candidates with Fisher information
-  const candidates = await Promise.all(body.concepts.map(async (concept) => {
+  const candidates = await Promise.all(resolvedConcepts.map(async (concept) => {
     const [ucs] = await db.select().from(userConceptStates)
       .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, concept.id)));
     const [conceptRow] = await db.select().from(concepts).where(eq(concepts.id, concept.id));
@@ -192,12 +194,25 @@ mcpRoutes.post('/observe', async (c) => {
     }
   }
 
-  // Select best candidate by probe urgency (combines mastery gap, uncertainty, and decay)
-  const sorted = candidates.sort((a, b) => b.urgency - a.urgency);
-  const selected = sorted[0];
-  if (!selected) {
+  // Select best candidate using information-theoretic selection with conversational relevance
+  const trunkId = body.primaryConceptId
+    ? await resolveConceptId(db, body.primaryConceptId)
+    : null;
+
+  const similarities = new Map<string, number>();
+  if (trunkId) {
+    for (const c of candidates) {
+      const sim = await conceptSimilarity(db, c.conceptId, trunkId);
+      similarities.set(c.conceptId, sim);
+    }
+  }
+
+  const selection = selectProbeCandidate(candidates, similarities, !!trunkId);
+  if (!selection) {
     return c.json({ shouldProbe: false, intrusiveness: 'skip', userProfile: 'unknown' });
   }
+  // Recover the full candidate (with assessmentCount, daysSince, etc.) from the candidates array
+  const selected = candidates.find(c => c.conceptId === selection.selected.conceptId)!;
 
   // Rate limiting: check probe session
   const [probeSession] = await db.select().from(probeSessions)

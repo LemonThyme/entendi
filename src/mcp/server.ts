@@ -70,6 +70,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         })),
       ),
       triggerContext: z.string(),
+      primaryConceptId: z.preprocess(
+        (v) => (v === '' || v === null ? undefined : v),
+        z.string().optional(),
+      ),
     },
     async (args) => {
       mcpLog('tool:entendi_observe called', args);
@@ -77,6 +81,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         const result = await api.observe({
           concepts: args.concepts,
           triggerContext: args.triggerContext,
+          primaryConceptId: args.primaryConceptId,
         });
         mcpLog('tool:entendi_observe result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };

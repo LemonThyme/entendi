@@ -71,6 +71,7 @@ export class EntendiApiClient {
   async observe(input: {
     concepts: Array<{ id: string; source: 'package' | 'ast' | 'llm' }>;
     triggerContext: string;
+    primaryConceptId?: string;
   }) {
     return this.request('POST', '/api/mcp/observe', input);
   }
