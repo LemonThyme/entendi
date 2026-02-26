@@ -71,7 +71,7 @@ Entendi activates automatically on every session after that. You'll see concept 
 View your knowledge profile at:
 
 ```
-https://entendi-api.tomaskorenblit.workers.dev/dashboard
+https://entendi-api.tomaskorenblit.workers.dev
 ```
 
 Sign in with the same account you used during `entendi login`.

@@ -150,7 +150,7 @@ export async function runMasterySummaryJob(db: Database): Promise<MasterySummary
           improved: improved.join(', ') || '',
           decayed: decayed.join(', ') || '',
           totalConcepts: String(states.length),
-          dashboardLink: `${process.env.BETTER_AUTH_URL || 'https://entendi.dev'}/dashboard`,
+          dashboardLink: process.env.BETTER_AUTH_URL || 'https://entendi.dev',
         },
       });
 

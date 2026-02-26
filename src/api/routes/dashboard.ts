@@ -26,6 +26,9 @@ function getDashboardHTML(): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Entendi</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a2e'/%3E%3Cpath d='M 19.5 7 C 19.5 3.5 15.5 3.5 15.5 7 L 15.5 22' stroke='white' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='15.5' cy='27' r='2' fill='white'/%3E%3C/svg%3E"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300&display=swap" rel="stylesheet"/>
   <style>
     :root {
       --bg: #fafafa;
@@ -57,8 +60,8 @@ function getDashboardHTML(): string {
     /* Layout */
     .container { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.5rem; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-    .header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.1em; }
-    .header h1 .logo-mark { display: inline-block; width: 0.6em; height: auto; vertical-align: baseline; margin-bottom: -0.05em; }
+    .header h1 { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 300; letter-spacing: -0.03em; color: #1a1a2e; display: flex; align-items: baseline; gap: 0; }
+    .header h1 .logo-mark { display: inline-block; width: 0.55em; height: auto; vertical-align: baseline; margin-bottom: -0.15em; }
     .header-meta { font-size: 0.8rem; color: var(--text-tertiary); }
 
     /* Auth */
@@ -266,6 +269,29 @@ function getDashboardHTML(): string {
     .btn-sm.primary { background: var(--accent); color: white; border-color: var(--accent); }
     .btn-sm.primary:hover { background: #1d4ed8; }
 
+    /* Three-dot dropdown menu */
+    .dot-menu { position: relative; display: inline-block; }
+    .dot-menu-trigger {
+      background: none; border: 1px solid transparent; border-radius: 6px;
+      cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.2rem 0.5rem;
+      color: var(--text-secondary); transition: all 0.15s;
+    }
+    .dot-menu-trigger:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+    .dot-menu-dropdown {
+      display: none; position: absolute; right: 0; top: 100%; margin-top: 4px;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08); min-width: 160px; z-index: 100;
+      padding: 4px 0; overflow: hidden;
+    }
+    .dot-menu-dropdown.open { display: block; }
+    .dot-menu-item {
+      display: block; width: 100%; padding: 0.5rem 0.75rem; border: none; background: none;
+      text-align: left; font-size: 0.8rem; color: var(--text); cursor: pointer; transition: background 0.1s;
+    }
+    .dot-menu-item:hover { background: var(--bg); }
+    .dot-menu-item.danger { color: var(--red); }
+    .dot-menu-item.danger:hover { background: var(--red-bg); }
+
     /* Setup instructions */
     .setup-instructions {
       margin-top: 1.5rem; padding: 1rem; background: var(--bg);
@@ -423,13 +449,13 @@ function getDashboardHTML(): string {
 
   <!-- Social login button templates (static SVG, hidden, cloned by JS) -->
   <template id="tpl-github-btn">
-    <a class="btn-social" href="/api/auth/sign-in/social?provider=github&amp;callbackURL=/dashboard">
+    <a class="btn-social" href="/api/auth/sign-in/social?provider=github&amp;callbackURL=/">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
       Sign in with GitHub
     </a>
   </template>
   <template id="tpl-google-btn">
-    <a class="btn-social" href="/api/auth/sign-in/social?provider=google&amp;callbackURL=/dashboard">
+    <a class="btn-social" href="/api/auth/sign-in/social?provider=google&amp;callbackURL=/">
       <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
       Sign in with Google
     </a>
@@ -850,6 +876,28 @@ function getDashboardHTML(): string {
         ]);
         area.appendChild(prefsSection);
 
+        // Danger Zone
+        var dangerSection = h("div", { className: "section" });
+        dangerSection.style.borderColor = "var(--red)";
+        var dangerHeader = h("div", { className: "section-header" }, [
+          h("div", { className: "section-title" }, "Danger Zone")
+        ]);
+        dangerHeader.querySelector(".section-title").style.color = "var(--red)";
+        var deleteBtn = h("button", { className: "btn-sm", onclick: deleteAccount }, "Delete Account");
+        deleteBtn.style.color = "var(--red)";
+        deleteBtn.style.borderColor = "var(--red)";
+        deleteBtn.style.background = "white";
+        deleteBtn.style.border = "1px solid var(--red)";
+        deleteBtn.style.borderRadius = "6px";
+        deleteBtn.style.padding = "0.4rem 0.8rem";
+        deleteBtn.style.cursor = "pointer";
+        deleteBtn.style.fontSize = "0.8rem";
+        var dangerDesc = h("div", { className: "auth-subtitle" }, "Permanently delete your account and all associated data. This action cannot be undone.");
+        dangerSection.appendChild(dangerHeader);
+        dangerSection.appendChild(dangerDesc);
+        dangerSection.appendChild(deleteBtn);
+        area.appendChild(dangerSection);
+
         loadKeys();
         loadBilling();
         loadPreferences();
@@ -1140,10 +1188,50 @@ function getDashboardHTML(): string {
       function renderOrgDashboard(area, org) {
         area.textContent = "";
 
+        // Three-dot menu
+        var dotMenuDropdown = h("div", { className: "dot-menu-dropdown" });
+        var renameItem = h("button", { className: "dot-menu-item", onclick: function() {
+          dotMenuDropdown.classList.remove("open");
+          var newName = prompt("Rename organization:", org.name || "");
+          if (newName && newName.trim() && newName.trim() !== org.name) {
+            fetch("/api/auth/organization/update", {
+              method: "POST",
+              headers: getHeaders(),
+              body: JSON.stringify({ data: { name: newName.trim() }, organizationId: org.id })
+            })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.error || data.message) {
+                  var err = document.getElementById("org-action-error");
+                  if (err) err.textContent = data.error || data.message;
+                } else {
+                  renderOrganization();
+                }
+              });
+          }
+        }}, "Rename");
+        var deleteItem = h("button", { className: "dot-menu-item danger", onclick: function() {
+          dotMenuDropdown.classList.remove("open");
+          deleteOrg(org.id);
+        }}, "Delete Organization");
+        dotMenuDropdown.appendChild(renameItem);
+        dotMenuDropdown.appendChild(deleteItem);
+
+        var dotMenuTrigger = h("button", { className: "dot-menu-trigger", onclick: function(e) {
+          e.stopPropagation();
+          dotMenuDropdown.classList.toggle("open");
+        }}, "\u22EF");
+        var dotMenu = h("div", { className: "dot-menu" }, [dotMenuTrigger, dotMenuDropdown]);
+
+        // Close dropdown on outside click
+        document.addEventListener("click", function() { dotMenuDropdown.classList.remove("open"); });
+
         var orgHeader = h("div", { className: "section" }, [
           h("div", { className: "section-header" }, [
-            h("div", { className: "section-title" }, org.name || org.slug || "Organization")
-          ])
+            h("div", { className: "section-title" }, org.name || org.slug || "Organization"),
+            dotMenu
+          ]),
+          h("div", { className: "error-text", id: "org-action-error" })
         ]);
         area.appendChild(orgHeader);
 
@@ -1164,6 +1252,14 @@ function getDashboardHTML(): string {
         ]);
         area.appendChild(inviteSection);
 
+        var pendingSection = h("div", { className: "section" }, [
+          h("div", { className: "section-header" }, [
+            h("div", { className: "section-title" }, "Pending Invitations")
+          ]),
+          h("div", { id: "pending-list" })
+        ]);
+        area.appendChild(pendingSection);
+
         var membersSection = h("div", { className: "section" }, [
           h("div", { className: "section-header" }, [
             h("div", { className: "section-title" }, "Members")
@@ -1180,6 +1276,7 @@ function getDashboardHTML(): string {
         ]);
         area.appendChild(rankingsSection);
 
+        loadPendingInvites(org.id);
         loadMembers(org.id);
         loadRankings(org.id);
       }
@@ -1209,11 +1306,130 @@ function getDashboardHTML(): string {
               }
               if (errEl) errEl.textContent = "";
               document.getElementById("invite-email").value = "";
+              loadPendingInvites(orgId);
             }
           })
           .catch(function() {
             var errEl = document.getElementById("invite-error");
             if (errEl) errEl.textContent = "Failed to send invitation";
+          });
+      }
+
+      function loadPendingInvites(orgId) {
+        fetch("/api/auth/organization/list-invitations?organizationId=" + orgId, { headers: getHeaders() })
+          .then(function(r) { return r.json(); })
+          .then(function(invites) {
+            var list = document.getElementById("pending-list");
+            if (!list) return;
+            list.textContent = "";
+
+            var pending = (invites || []).filter(function(inv) { return inv.status === "pending"; });
+            if (pending.length === 0) {
+              list.appendChild(h("div", { className: "empty-state" }, "No pending invitations."));
+              return;
+            }
+
+            var inviteList = h("div", { className: "member-list" });
+            pending.forEach(function(inv) {
+              var revokeBtn = h("button", {
+                className: "btn-sm",
+                onclick: function() { cancelInvite(inv.id, orgId); }
+              }, "Revoke");
+              revokeBtn.style.fontSize = "0.7rem";
+              revokeBtn.style.padding = "0.2rem 0.5rem";
+              revokeBtn.style.color = "var(--red)";
+              revokeBtn.style.border = "1px solid var(--border)";
+              revokeBtn.style.background = "white";
+              revokeBtn.style.borderRadius = "4px";
+              revokeBtn.style.cursor = "pointer";
+
+              var row = h("div", { className: "member-row" }, [
+                h("div", null, [
+                  h("div", { className: "member-name" }, inv.email),
+                  h("div", { className: "member-email" }, "Invited " + new Date(inv.createdAt).toLocaleDateString())
+                ]),
+                h("div", { className: "member-role" }, inv.role),
+                revokeBtn
+              ]);
+              inviteList.appendChild(row);
+            });
+            list.appendChild(inviteList);
+          })
+          .catch(function() {
+            var list = document.getElementById("pending-list");
+            if (list) list.appendChild(h("div", { className: "empty-state" }, "Failed to load invitations."));
+          });
+      }
+
+      function cancelInvite(invitationId, orgId) {
+        fetch("/api/auth/organization/cancel-invitation", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ invitationId: invitationId })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function() {
+            loadPendingInvites(orgId);
+          })
+          .catch(function() {});
+      }
+
+      function deleteOrg(orgId) {
+        if (!confirm("Delete this organization? This cannot be undone.")) return;
+        fetch("/api/auth/organization/delete", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ organizationId: orgId })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function() {
+            renderOrganization();
+          })
+          .catch(function() {});
+      }
+
+      function removeMember(memberId, orgId) {
+        if (!confirm("Remove this member from the organization?")) return;
+        fetch("/api/auth/organization/remove-member", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ memberIdOrEmail: memberId, organizationId: orgId })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function() {
+            loadMembers(orgId);
+          })
+          .catch(function() {});
+      }
+
+      function updateMemberRole(memberId, newRole, orgId) {
+        fetch("/api/auth/organization/update-member-role", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ memberId: memberId, role: newRole, organizationId: orgId })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function() {
+            loadMembers(orgId);
+          })
+          .catch(function() {});
+      }
+
+      function deleteAccount() {
+        if (!confirm("Delete your account? All your data will be permanently removed. This cannot be undone.")) return;
+        if (!confirm("Are you really sure? This is irreversible.")) return;
+        fetch("/api/auth/delete-user", {
+          method: "POST",
+          headers: getHeaders(),
+          body: "{}"
+        })
+          .then(function() {
+            localStorage.removeItem("entendi_token");
+            token = null;
+            location.reload();
+          })
+          .catch(function() {
+            alert("Failed to delete account.");
           });
       }
 
@@ -1245,6 +1461,34 @@ function getDashboardHTML(): string {
               infoSpan.style.color = "var(--text-tertiary)";
               infoSpan.textContent = masteryInfo;
 
+              var actions = h("div", { style: "display:flex;gap:4px;align-items:center;" });
+              if (m.role !== "owner") {
+                var roleToggle = h("button", {
+                  className: "btn-sm",
+                  onclick: function() { updateMemberRole(m.userId, m.role === "admin" ? "member" : "admin", orgId); }
+                }, m.role === "admin" ? "Demote" : "Promote");
+                roleToggle.style.fontSize = "0.65rem";
+                roleToggle.style.padding = "0.15rem 0.4rem";
+                roleToggle.style.border = "1px solid var(--border)";
+                roleToggle.style.background = "white";
+                roleToggle.style.borderRadius = "4px";
+                roleToggle.style.cursor = "pointer";
+                actions.appendChild(roleToggle);
+
+                var removeBtn = h("button", {
+                  className: "btn-sm",
+                  onclick: function() { removeMember(m.userId, orgId); }
+                }, "Remove");
+                removeBtn.style.fontSize = "0.65rem";
+                removeBtn.style.padding = "0.15rem 0.4rem";
+                removeBtn.style.color = "var(--red)";
+                removeBtn.style.border = "1px solid var(--border)";
+                removeBtn.style.background = "white";
+                removeBtn.style.borderRadius = "4px";
+                removeBtn.style.cursor = "pointer";
+                actions.appendChild(removeBtn);
+              }
+
               var row = h("div", { className: "member-row" }, [
                 h("div", null, [
                   h("div", { className: "member-name" }, m.name || m.email),
@@ -1252,7 +1496,7 @@ function getDashboardHTML(): string {
                 ]),
                 h("div", { className: "member-role" }, m.role),
                 h("div", { className: "member-mastery" }, avgPct),
-                infoSpan
+                actions
               ]);
               memberList.appendChild(row);
             });
@@ -1308,7 +1552,7 @@ function getDashboardHTML(): string {
 
       // --- Init ---
 
-      // Handle OAuth callback: when redirected back to /dashboard after social login,
+      // Handle OAuth callback: when redirected back after social login,
       // try session-based auth (cookie) via /api/me with credentials
       function trySessionAuth() {
         return fetch("/api/me", { credentials: "include" })

@@ -24,8 +24,8 @@ billingRoutes.post('/checkout', async (c) => {
     userId: user.id,
     email: user.email,
     plan,
-    successUrl: `${baseUrl}/dashboard?billing=success`,
-    cancelUrl: `${baseUrl}/dashboard?billing=cancelled`,
+    successUrl: `${baseUrl}/?billing=success`,
+    cancelUrl: `${baseUrl}/?billing=cancelled`,
     organizationId,
     seatCount,
   });

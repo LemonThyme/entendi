@@ -113,7 +113,15 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/courses', courseRoutes);
   app.route('/api/billing', billingRoutes);
   app.route('/api/preferences', preferencesRoutes);
-  app.route('/dashboard', dashboardRoutes);
+  // Dashboard at root (must be after /api/* and /health routes)
+  app.route('/', dashboardRoutes);
+
+  // Redirect legacy /dashboard to /
+  app.get('/dashboard', (c) => c.redirect('/'));
+  app.get('/dashboard/*', (c) => {
+    const path = c.req.path.replace('/dashboard', '');
+    return c.redirect(path || '/');
+  });
 
   // 404 handler
   app.notFound((c) => c.json({ error: 'Not found' }, 404));

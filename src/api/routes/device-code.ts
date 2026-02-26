@@ -24,7 +24,7 @@ deviceCodeRoutes.post('/', async (c) => {
   const code = generateCode();
   const expiresAt = new Date(Date.now() + DEVICE_CODE_TTL_MS);
   const baseUrl = process.env.BETTER_AUTH_URL || 'http://localhost:3456';
-  const verifyUrl = `${baseUrl}/dashboard/link?code=${code}`;
+  const verifyUrl = `${baseUrl}/link?code=${code}`;
 
   await db.insert(deviceCodes).values({
     code,
