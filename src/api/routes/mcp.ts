@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   concepts, conceptEdges, userConceptStates, assessmentEvents,
   tutorSessions, tutorExchanges, probeSessions, pendingActions,
@@ -13,20 +14,61 @@ import { probeUrgency } from '../../core/probe-urgency.js';
 import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
+import type { Context } from 'hono';
 
 export const mcpRoutes = new Hono<Env>();
 
 // All MCP routes require authentication (API key or session)
 mcpRoutes.use('*', requireAuth);
 
+// --- Zod schemas for input validation ---
+
+const observeSchema = z.object({
+  concepts: z.array(z.object({
+    id: z.string().min(1).max(200),
+    source: z.enum(['package', 'ast', 'llm']),
+  })).min(1).max(50),
+  triggerContext: z.string().max(1000).default(''),
+});
+
+const recordEvaluationSchema = z.object({
+  conceptId: z.string().min(1).max(200),
+  score: z.number().int().min(0).max(3) as z.ZodType<0 | 1 | 2 | 3>,
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().max(2000),
+  eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
+});
+
+const tutorStartSchema = z.object({
+  conceptId: z.string().min(1).max(200),
+  triggerScore: z.union([z.literal(0), z.literal(1), z.null()]).optional(),
+});
+
+const tutorAdvanceSchema = z.object({
+  sessionId: z.string().uuid(),
+  userResponse: z.string().min(1).max(5000),
+  score: z.number().int().min(0).max(3).optional() as z.ZodType<0 | 1 | 2 | 3 | undefined>,
+  confidence: z.number().min(0).max(1).optional(),
+  reasoning: z.string().max(2000).optional(),
+  misconception: z.string().max(1000).optional(),
+});
+
+function parseBody<T>(schema: z.ZodType<T>, body: unknown, c: Context<Env>): T | Response {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    return c.json({ error: 'Validation error', details: result.error.issues }, 400);
+  }
+  return result.data;
+}
+
 // --- POST /observe ---
 mcpRoutes.post('/observe', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const body = await c.req.json<{
-    concepts: Array<{ id: string; source: 'package' | 'ast' | 'llm' }>;
-    triggerContext: string;
-  }>();
+  const raw = await c.req.json();
+  const parsed = parseBody(observeSchema, raw, c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed;
 
   // Ensure all concepts exist
   for (const concept of body.concepts) {
@@ -180,13 +222,10 @@ mcpRoutes.post('/observe', async (c) => {
 mcpRoutes.post('/record-evaluation', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const body = await c.req.json<{
-    conceptId: string;
-    score: 0 | 1 | 2 | 3;
-    confidence: number;
-    reasoning: string;
-    eventType: 'probe' | 'tutor_phase1' | 'tutor_phase4';
-  }>();
+  const raw = await c.req.json();
+  const parsed = parseBody(recordEvaluationSchema, raw, c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed;
 
   const result = await applyBayesianUpdateDb(db, user.id, body);
 
@@ -229,7 +268,10 @@ mcpRoutes.post('/record-evaluation', async (c) => {
 mcpRoutes.post('/tutor/start', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const body = await c.req.json<{ conceptId: string; triggerScore?: 0 | 1 | null }>();
+  const raw = await c.req.json();
+  const parsed = parseBody(tutorStartSchema, raw, c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed;
 
   const sessionId = crypto.randomUUID();
 
@@ -287,14 +329,10 @@ mcpRoutes.post('/tutor/start', async (c) => {
 mcpRoutes.post('/tutor/advance', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const body = await c.req.json<{
-    sessionId: string;
-    userResponse: string;
-    score?: 0 | 1 | 2 | 3;
-    confidence?: number;
-    reasoning?: string;
-    misconception?: string;
-  }>();
+  const raw = await c.req.json();
+  const parsed = parseBody(tutorAdvanceSchema, raw, c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed;
 
   // Load session
   const [session] = await db.select().from(tutorSessions)
