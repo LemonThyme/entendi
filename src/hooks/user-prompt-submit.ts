@@ -1,4 +1,5 @@
 import { readStdin, log, type HookInput } from './shared.js';
+import { loadConfig } from '../shared/config.js';
 
 export interface UserPromptSubmitOutput {
   hookSpecificOutput?: {
@@ -26,24 +27,12 @@ export function detectTeachMePattern(prompt: string): string | null {
 
 // --- API client for pending actions ---
 
-async function loadEnvFromProject(cwd: string): Promise<void> {
-  if (process.env.ENTENDI_API_URL) return;
-  try {
-    const { readFileSync } = await import('fs');
-    const { join } = await import('path');
-    const envFile = readFileSync(join(cwd, '.env'), 'utf-8');
-    for (const line of envFile.split('\n')) {
-      const match = line.match(/^(ENTENDI_\w+)=(.+)$/);
-      if (match) process.env[match[1]] = match[2].trim();
-    }
-  } catch {}
-}
-
 async function fetchPendingAction(): Promise<any | null> {
-  const apiUrl = process.env.ENTENDI_API_URL;
-  const apiKey = process.env.ENTENDI_API_KEY;
-  if (!apiUrl || !apiKey) {
-    log('hook:user-prompt-submit', 'fetchPendingAction: missing env vars', { hasUrl: !!apiUrl, hasKey: !!apiKey });
+  const config = loadConfig();
+  const apiUrl = config.apiUrl;
+  const apiKey = config.apiKey;
+  if (!apiKey) {
+    log('hook:user-prompt-submit', 'fetchPendingAction: no API key configured');
     return null;
   }
 
@@ -73,7 +62,6 @@ export async function handleUserPromptSubmit(
   const userPrompt = (input.prompt as string) ?? '';
 
   // 1. Check for pending action via API
-  await loadEnvFromProject(input.cwd);
   const pending = await fetchPendingAction();
 
   if (pending) {

@@ -159,8 +159,8 @@ export const userConceptStates = pgTable('user_concept_states', {
 
 export const assessmentEvents = pgTable('assessment_events', {
   id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  conceptId: text('concept_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
   eventType: text('event_type').notNull(),
   rubricScore: smallint('rubric_score').notNull(),
   evaluatorConfidence: real('evaluator_confidence').notNull(),
@@ -307,3 +307,44 @@ export const courseEnrollments = pgTable('course_enrollments', {
 }, (table) => [
   index('idx_course_enrollments_user').on(table.userId),
 ]);
+
+// --- Device Codes (CLI-first auth linking) ---
+
+export const deviceCodes = pgTable('device_codes', {
+  code: text('code').primaryKey(),
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+  apiKey: text('api_key'),
+  status: text('status').notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Subscriptions (Stripe billing) ---
+
+export const subscriptions = pgTable('subscriptions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+  organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
+  stripeCustomerId: text('stripe_customer_id').notNull(),
+  stripeSubscriptionId: text('stripe_subscription_id').notNull().unique(),
+  plan: text('plan').notNull(),
+  status: text('status').notNull(),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }).notNull(),
+  seatCount: integer('seat_count'),
+  earnedFreeUntil: timestamp('earned_free_until', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_subscriptions_user').on(table.userId),
+  index('idx_subscriptions_org').on(table.organizationId),
+  index('idx_subscriptions_stripe_customer').on(table.stripeCustomerId),
+]);
+
+// --- Email Preferences ---
+
+export const emailPreferences = pgTable('email_preferences', {
+  userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
+  summaryFrequency: text('summary_frequency').notNull().default('weekly'),
+  transactionalEnabled: boolean('transactional_enabled').notNull().default(true),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

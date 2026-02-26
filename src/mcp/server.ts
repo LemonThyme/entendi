@@ -7,6 +7,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { platform } from 'os';
 import { EntendiApiClient } from './api-client.js';
+import { loadConfig, saveConfig } from '../shared/config.js';
 
 const MCP_LOG_DIR = join(homedir(), '.entendi');
 const MCP_LOG_FILE = join(MCP_LOG_DIR, 'debug.log');
@@ -27,8 +28,8 @@ function mcpLog(message: string, data?: unknown): void {
 export interface EntendiServerOptions {
   /** API base URL (e.g. http://localhost:3456 or https://api.entendi.dev) */
   apiUrl: string;
-  /** API key for authentication */
-  apiKey: string;
+  /** API key for authentication. When omitted, only entendi_login is available. */
+  apiKey?: string;
 }
 
 export interface EntendiServer {
@@ -47,20 +48,27 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
 
   const api = new EntendiApiClient({
     apiUrl: options.apiUrl,
-    apiKey: options.apiKey,
+    apiKey: options.apiKey ?? '',
   });
 
+  const authenticated = !!options.apiKey;
   const registeredTools: Array<{ name: string }> = [];
+
+  // Tools 1-7 require authentication
+  if (authenticated) {
 
   // --- Tool 1: entendi_observe ---
   mcpServer.tool(
     'entendi_observe',
     'Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.',
     {
-      concepts: z.array(z.object({
-        id: z.string(),
-        source: z.enum(['package', 'ast', 'llm']),
-      })),
+      concepts: z.preprocess(
+        (v) => (typeof v === 'string' ? JSON.parse(v) : v),
+        z.array(z.object({
+          id: z.string(),
+          source: z.enum(['package', 'ast', 'llm']),
+        })),
+      ),
       triggerContext: z.string(),
     },
     async (args) => {
@@ -90,16 +98,19 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       confidence: z.coerce.number().min(0).max(1),
       reasoning: z.string(),
       eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
-      probeToken: z.object({
-        tokenId: z.string(),
-        userId: z.string(),
-        conceptId: z.string(),
-        depth: z.coerce.number(),
-        evaluationCriteria: z.string(),
-        issuedAt: z.string(),
-        expiresAt: z.string(),
-        signature: z.string(),
-      }).optional(),
+      probeToken: z.preprocess(
+        (v) => (typeof v === 'string' ? JSON.parse(v) : v),
+        z.object({
+          tokenId: z.string(),
+          userId: z.string(),
+          conceptId: z.string(),
+          depth: z.coerce.number(),
+          evaluationCriteria: z.string(),
+          issuedAt: z.string(),
+          expiresAt: z.string(),
+          signature: z.string(),
+        }).optional(),
+      ),
       responseText: z.string().optional(),
     },
     async (args) => {
@@ -245,51 +256,76 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   );
   registeredTools.push({ name: 'entendi_get_zpd_frontier' });
 
-  // --- Tool 8: entendi_login ---
+  } // end authenticated tools
+
+  // --- Tool 8: entendi_login (always available) ---
   mcpServer.tool(
     'entendi_login',
-    'Link this device to your Entendi account. Opens a browser for authentication and returns an API key.',
-    {},
-    async () => {
-      mcpLog('tool:entendi_login called');
+    'Link this device to your Entendi account. Call without a code to start (opens browser). Call with the code after confirming in the browser to retrieve your API key.',
+    {
+      code: z.string().optional().describe('Device code from a previous login attempt. Omit to start a new login flow.'),
+    },
+    async ({ code }: { code?: string }) => {
+      mcpLog('tool:entendi_login called', { code: code ?? 'new' });
       try {
-        // Step 1: Create device code
-        const { code, verifyUrl, expiresAt } = await api.createDeviceCode();
-        mcpLog('tool:entendi_login device code created', { code, verifyUrl });
+        if (!code) {
+          // Phase 1: Create device code and open browser
+          const { code: newCode, verifyUrl, expiresAt } = await api.createDeviceCode();
+          mcpLog('tool:entendi_login device code created', { code: newCode, verifyUrl });
 
-        // Step 2: Open browser
-        const os = platform();
-        const openCmd = os === 'darwin' ? 'open' : os === 'win32' ? 'cmd' : 'xdg-open';
-        const openArgs = os === 'win32' ? ['/c', 'start', verifyUrl] : [verifyUrl];
-        execFile(openCmd, openArgs, (err) => {
-          if (err) mcpLog('tool:entendi_login browser open failed', { error: String(err) });
-        });
+          const os = platform();
+          const openCmd = os === 'darwin' ? 'open' : os === 'win32' ? 'cmd' : 'xdg-open';
+          const openArgs = os === 'win32' ? ['/c', 'start', verifyUrl] : [verifyUrl];
+          execFile(openCmd, openArgs, (err) => {
+            if (err) mcpLog('tool:entendi_login browser open failed', { error: String(err) });
+          });
 
-        // Step 3: Poll until confirmed or expired
+          const instructions = [
+            `A browser window has been opened. Please sign in and click "Confirm Link".`,
+            '',
+            `Your device code is: ${newCode}`,
+            `It expires at: ${expiresAt}`,
+            '',
+            `After confirming in the browser, call entendi_login again with code "${newCode}" to retrieve your API key.`,
+          ].join('\n');
+          return { content: [{ type: 'text' as const, text: instructions }] };
+        }
+
+        // Phase 2: Poll for confirmation (short polling, ~30s max)
+        const maxPolls = 15;
         const pollInterval = 2000;
-        const deadline = new Date(expiresAt).getTime();
 
-        while (Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        for (let i = 0; i < maxPolls; i++) {
           const pollResult = await api.pollDeviceCode(code);
           mcpLog('tool:entendi_login poll result', pollResult);
 
           if (pollResult.status === 'confirmed' && pollResult.apiKey) {
-            const instructions = [
-              `Device linked successfully! Your API key: ${pollResult.apiKey}`,
+            try {
+              saveConfig({ apiKey: pollResult.apiKey, apiUrl: api.getApiUrl() });
+              mcpLog('tool:entendi_login config saved to ~/.entendi/config.json');
+            } catch (saveErr) {
+              mcpLog('tool:entendi_login config save failed', { error: String(saveErr) });
+            }
+
+            const lines = [
+              'Device linked successfully!',
               '',
-              'To configure the plugin, run:',
-              `  claude plugin configure entendi --env ENTENDI_API_KEY=${pollResult.apiKey}`,
-            ].join('\n');
-            return { content: [{ type: 'text' as const, text: instructions }] };
+              'API key saved to ~/.entendi/config.json',
+              'Restart Claude Code for the change to take effect.',
+            ];
+            return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
           }
 
           if (pollResult.status === 'expired') {
-            return { content: [{ type: 'text' as const, text: 'Device code expired. Please try again.' }], isError: true };
+            return { content: [{ type: 'text' as const, text: 'Device code expired. Please run entendi_login again to start over.' }], isError: true };
+          }
+
+          if (i < maxPolls - 1) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
           }
         }
 
-        return { content: [{ type: 'text' as const, text: 'Device code expired (timeout). Please try again.' }], isError: true };
+        return { content: [{ type: 'text' as const, text: `Code "${code}" is still pending. Make sure you confirmed in the browser, then call entendi_login with this code again.` }] };
       } catch (err) {
         mcpLog('tool:entendi_login error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
@@ -308,19 +344,19 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
 
 // --- Standalone entry point ---
 async function main() {
-  const apiUrl = process.env.ENTENDI_API_URL ?? 'http://localhost:3456';
-  const apiKey = process.env.ENTENDI_API_KEY;
+  const config = loadConfig();
+  const apiUrl = config.apiUrl;
+  const apiKey = config.apiKey;
 
   if (!apiKey) {
-    process.stderr.write('[Entendi MCP] Error: ENTENDI_API_KEY environment variable is required\n');
-    process.stderr.write('[Entendi MCP] Generate an API key at your Entendi dashboard\n');
-    process.exit(1);
+    process.stderr.write('[Entendi MCP] No API key found. Only entendi_login is available.\n');
+    process.stderr.write('[Entendi MCP] Run entendi_login to link your account.\n');
   }
 
   const server = createEntendiServer({ apiUrl, apiKey });
   const transport = new StdioServerTransport();
   await server.getMcpServer().connect(transport);
-  process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl})\n`);
+  process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl}, authenticated: ${!!apiKey})\n`);
 }
 
 const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));

@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handleUserPromptSubmit, detectTeachMePattern } from '../../src/hooks/user-prompt-submit.js';
 import type { PendingAction } from '../../src/schemas/types.js';
+import { loadConfig } from '../../src/shared/config.js';
+
+vi.mock('../../src/shared/config.js', () => ({
+  loadConfig: vi.fn(() => ({ apiUrl: 'http://localhost:3456', apiKey: 'test-key' })),
+  saveConfig: vi.fn(),
+}));
+
+const mockLoadConfig = vi.mocked(loadConfig);
 
 function makeInput(prompt: string) {
   return {
@@ -215,9 +223,8 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   });
 
   it('returns null gracefully when API is unavailable', async () => {
-    // No env vars = no API call
-    delete process.env.ENTENDI_API_URL;
-    delete process.env.ENTENDI_API_KEY;
+    // No API key configured
+    mockLoadConfig.mockReturnValueOnce({ apiUrl: 'http://localhost:3456', apiKey: undefined });
 
     const result = await handleUserPromptSubmit(makeInput('test'));
     // Falls through to teach-me pattern check, which also returns null for 'test'

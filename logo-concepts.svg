@@ -1,0 +1,43 @@
+<svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="300" fill="#f8f8f8"/>
+
+  <!-- Labels -->
+  <text x="100" y="30" text-anchor="middle" font-family="system-ui" font-size="14" fill="#666">A: Hybrid mark</text>
+  <text x="300" y="30" text-anchor="middle" font-family="system-ui" font-size="14" fill="#666">B: Unfurling</text>
+  <text x="500" y="30" text-anchor="middle" font-family="system-ui" font-size="14" fill="#666">C: Gradient shift</text>
+  <text x="700" y="30" text-anchor="middle" font-family="system-ui" font-size="14" fill="#666">D: Minimal bend</text>
+
+  <!-- A: Classic hybrid — ? curve top + elongated ! line bottom -->
+  <g transform="translate(70, 45)">
+    <path d="M 10 30 C 10 8, 50 8, 50 30 C 50 50, 30 55, 30 72 L 30 190"
+          stroke="#1a1a2e" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="30" cy="220" r="9" fill="#1a1a2e"/>
+  </g>
+
+  <!-- B: Partially unfurled — the curve is mid-straighten -->
+  <g transform="translate(265, 45)">
+    <path d="M 42 35 C 52 20, 55 30, 50 50 C 45 70, 38 75, 38 90 L 38 190"
+          stroke="#1a1a2e" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="38" cy="220" r="9" fill="#1a1a2e"/>
+  </g>
+
+  <!-- C: Gradient — uncertainty color fading to clarity color -->
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(470, 45)">
+    <path d="M 10 30 C 10 8, 50 8, 50 30 C 50 50, 30 55, 30 72 L 30 190"
+          stroke="url(#grad)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="30" cy="220" r="9" fill="#1a1a2e"/>
+  </g>
+
+  <!-- D: Minimal — just a gentle bend at top, almost ! but not quite -->
+  <g transform="translate(670, 45)">
+    <path d="M 42 40 C 46 35, 48 38, 42 50 L 38 190"
+          stroke="#1a1a2e" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="37" cy="220" r="9" fill="#1a1a2e"/>
+  </g>
+</svg>

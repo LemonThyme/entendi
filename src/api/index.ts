@@ -64,8 +64,11 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
       const session = await auth.api.getSession({ headers: c.req.raw.headers });
       c.set('user', session?.user ?? null);
       c.set('session', session?.session ?? null);
-    } catch {
-      // Session resolution failed (e.g., rate-limited API key) — continue unauthenticated
+    } catch (err) {
+      // Surface API key rate limit as 429 instead of silently falling through to 401
+      if (err instanceof Error && err.message?.includes('rate limit')) {
+        return c.json({ error: 'API key rate limit exceeded' }, 429);
+      }
       c.set('user', null);
       c.set('session', null);
     }
@@ -74,6 +77,9 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
 
   // Rate limit API routes (200 requests/minute per user/IP)
   app.use('/api/*', rateLimit({ windowMs: 60_000, max: 200 }));
+
+  // Device code routes (before Better Auth catch-all to prevent interception)
+  app.route('/api/auth/device-code', deviceCodeRoutes);
 
   // Better Auth route handler
   app.on(['POST', 'GET'], '/api/auth/*', (c) => {
@@ -105,7 +111,6 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/history', historyRoutes);
   app.route('/api/org', orgRoutes);
   app.route('/api/courses', courseRoutes);
-  app.route('/api/auth/device-code', deviceCodeRoutes);
   app.route('/api/billing', billingRoutes);
   app.route('/api/preferences', preferencesRoutes);
   app.route('/dashboard', dashboardRoutes);

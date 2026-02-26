@@ -20,6 +20,7 @@ interface WorkerEnv {
 let cachedApp: ReturnType<typeof createApp> | null = null;
 
 function propagateEnv(env: WorkerEnv): void {
+  process.env.BETTER_AUTH_URL = env.BETTER_AUTH_URL;
   if (env.GITHUB_CLIENT_ID) process.env.GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID;
   if (env.GITHUB_CLIENT_SECRET) process.env.GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET;
   if (env.GOOGLE_CLIENT_ID) process.env.GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID;
@@ -41,7 +42,7 @@ export default {
     return cachedApp.app.fetch(request);
   },
 
-  async scheduled(_event: ScheduledEvent, env: WorkerEnv, _ctx: ExecutionContext): Promise<void> {
+  async scheduled(_event: unknown, env: WorkerEnv, _ctx: unknown): Promise<void> {
     process.env.DATABASE_URL = env.DATABASE_URL;
     if (env.RESEND_API_KEY) process.env.RESEND_API_KEY = env.RESEND_API_KEY;
     const { createDb } = await import('./db/connection.js');

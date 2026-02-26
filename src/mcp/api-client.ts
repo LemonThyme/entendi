@@ -37,6 +37,10 @@ export class EntendiApiClient {
     apiLog('initialized', { apiUrl: this.apiUrl });
   }
 
+  getApiUrl(): string {
+    return this.apiUrl;
+  }
+
   private async request(method: string, path: string, body?: unknown): Promise<any> {
     const url = `${this.apiUrl}${path}`;
     const init: RequestInit = {
@@ -135,7 +139,7 @@ export class EntendiApiClient {
       const text = await res.text();
       throw new Error(`Device code creation failed (${res.status}): ${text}`);
     }
-    return res.json();
+    return res.json() as Promise<{ code: string; verifyUrl: string; expiresAt: string }>;
   }
 
   /** Poll device code status (no auth required). */
@@ -150,6 +154,6 @@ export class EntendiApiClient {
       const text = await res.text();
       throw new Error(`Device code poll failed (${res.status}): ${text}`);
     }
-    return res.json();
+    return res.json() as Promise<{ status: string; apiKey?: string }>;
   }
 }

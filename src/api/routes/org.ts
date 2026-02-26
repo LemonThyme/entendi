@@ -79,6 +79,49 @@ orgRoutes.get('/members/:userId', async (c) => {
   });
 });
 
+// GET /rankings — mastery leaderboard for org members
+orgRoutes.get('/rankings', async (c) => {
+  const db = c.get('db');
+  const session = c.get('session');
+  const orgId = session?.activeOrganizationId;
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const members = await db.select({
+    userId: member.userId,
+    role: member.role,
+    name: user.name,
+    email: user.email,
+  }).from(member)
+    .innerJoin(user, eq(member.userId, user.id))
+    .where(eq(member.organizationId, orgId));
+
+  const rankings = await Promise.all(members.map(async (m) => {
+    const states = await db.select().from(userConceptStates)
+      .where(eq(userConceptStates.userId, m.userId));
+
+    const assessed = states.filter(s => s.assessmentCount > 0);
+    const mastered = assessed.filter(s => pMastery(s.mu) >= 0.7).length;
+    const avgMastery = assessed.length > 0
+      ? assessed.reduce((sum, s) => sum + pMastery(s.mu), 0) / assessed.length
+      : 0;
+
+    return {
+      userId: m.userId,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      mastered,
+      totalAssessed: assessed.length,
+      avgMastery,
+    };
+  }));
+
+  // Sort by mastered count desc, then avgMastery desc
+  rankings.sort((a, b) => b.mastered - a.mastered || b.avgMastery - a.avgMastery);
+
+  return c.json(rankings);
+});
+
 // GET /analytics — aggregate org analytics
 orgRoutes.get('/analytics', async (c) => {
   const db = c.get('db');

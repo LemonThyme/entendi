@@ -86,7 +86,7 @@ deviceCodeRoutes.post('/:code/confirm', requireAuth, async (c) => {
     return c.json({ error: 'Device code expired' }, 400);
   }
 
-  // Generate API key for the user
+  // Generate API key for the user (rate limit disabled globally in auth config)
   const keyResult = await auth.api.createApiKey({
     body: {
       name: `device-${code}`,

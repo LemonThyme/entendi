@@ -102,6 +102,7 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
       apiKey({
         enableSessionForAPIKeys: true,
         apiKeyHeaders: ['x-api-key'],
+        rateLimit: { enabled: false },
       }),
       bearer(),
     ],
