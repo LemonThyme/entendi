@@ -168,6 +168,9 @@ export const assessmentEvents = pgTable('assessment_events', {
   muAfter: real('mu_after').notNull(),
   probeDepth: smallint('probe_depth').notNull(),
   tutored: boolean('tutored').notNull().default(false),
+  probeTokenId: text('probe_token_id'),
+  responseText: text('response_text'),
+  evaluationCriteria: text('evaluation_criteria'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_assessment_events_user_concept').on(table.userId, table.conceptId),
@@ -187,6 +190,8 @@ export const tutorSessions = pgTable('tutor_sessions', {
   phase1Score: smallint('phase1_score'),
   phase4Score: smallint('phase4_score'),
   lastMisconception: text('last_misconception'),
+  researchPerformed: boolean('research_performed').notNull().default(false),
+  sources: text('sources').array().notNull().default([]),
 });
 
 export const tutorExchanges = pgTable('tutor_exchanges', {
@@ -214,5 +219,91 @@ export const pendingActions = pgTable('pending_actions', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   actionType: text('action_type').notNull(),
   data: jsonb('data').notNull(),
+  probeTokenId: text('probe_token_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Probe Tokens ---
+
+export const probeTokens = pgTable('probe_tokens', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  depth: smallint('depth').notNull(),
+  evaluationCriteria: text('evaluation_criteria').notNull().default(''),
+  issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  signature: text('signature').notNull(),
+}, (table) => [
+  index('idx_probe_tokens_user').on(table.userId),
+]);
+
+// --- Dismissal Events ---
+
+export const dismissalEvents = pgTable('dismissal_events', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  probeTokenId: text('probe_token_id').references(() => probeTokens.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_dismissal_events_user_concept').on(table.userId, table.conceptId),
+]);
+
+// --- Anomaly Scores ---
+
+export const anomalyScores = pgTable('anomaly_scores', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  zSelf: real('z_self').notNull().default(0),
+  zPopulation: real('z_population').notNull().default(0),
+  dismissRatio: real('dismiss_ratio').notNull().default(0),
+  masteryVelocity: real('mastery_velocity').notNull().default(0),
+  compositeScore: real('composite_score').notNull().default(0),
+  signals: jsonb('signals').notNull().default({}),
+}, (table) => [
+  index('idx_anomaly_scores_user').on(table.userId),
+]);
+
+// --- Courses ---
+
+export const courses = pgTable('courses', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  ownerId: text('owner_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  orgId: text('org_id').references(() => organization.id, { onDelete: 'set null' }),
+  status: text('status').notNull().default('draft'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courseModules = pgTable('course_modules', {
+  id: text('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  orderIndex: integer('order_index').notNull().default(0),
+});
+
+export const courseConcepts = pgTable('course_concepts', {
+  id: serial('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  moduleId: text('module_id').references(() => courseModules.id, { onDelete: 'set null' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  learningObjective: text('learning_objective'),
+  requiredMasteryThreshold: real('required_mastery_threshold').notNull().default(0.7),
+}, (table) => [
+  index('idx_course_concepts_course').on(table.courseId),
+]);
+
+export const courseEnrollments = pgTable('course_enrollments', {
+  id: serial('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+  status: text('status').notNull().default('active'),
+}, (table) => [
+  index('idx_course_enrollments_user').on(table.userId),
+]);
