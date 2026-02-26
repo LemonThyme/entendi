@@ -2,8 +2,7 @@ import { readStdin, type HookInput } from './shared.js';
 
 async function main() {
   const raw = await readStdin();
-  const input: HookInput = JSON.parse(raw);
-  // Phase 0: no-op
+  try { JSON.parse(raw); } catch { /* invalid input — no-op */ }
   process.exit(0);
 }
 

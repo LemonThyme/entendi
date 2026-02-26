@@ -166,7 +166,13 @@ async function main() {
     process.exit(0);
   }
   log('hook:post-tool-use', 'stdin received', { length: raw.length });
-  const input: HookInput = JSON.parse(raw);
+  let input: HookInput;
+  try {
+    input = JSON.parse(raw);
+  } catch {
+    log('hook:post-tool-use', 'invalid JSON, exiting');
+    process.exit(0);
+  }
   log('hook:post-tool-use', 'parsed input', { tool: input.tool_name, event: input.hook_event_name });
   const result = await handlePostToolUse(input);
 

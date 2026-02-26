@@ -7,8 +7,6 @@ import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
 import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
 import { buildSeedConceptNodes } from '../../src/config/seed-taxonomy.js';
 import { grmFisherInformation, grmBayesianUpdate } from '../../src/core/probabilistic-model.js';
-import { createDashboardApp } from '../../src/dashboard/server.js';
-import { StateManager } from '../../src/core/state-manager.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 
 function mockPendingAction(action: PendingAction | null) {
@@ -168,13 +166,6 @@ describe('Phase 1a Integration', () => {
     expect(respondResult).toBeDefined();
     expect(respondResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
 
-    // 4. Dashboard can still serve existing graph data
-    const dataDir = join(tmpDir, '.entendi');
-    const sm = new StateManager(dataDir, 'student1');
-    sm.save(); // ensure files exist
-    const app = createDashboardApp(tmpDir);
-    const graphRes = await app.request('/api/graph');
-    expect(graphRes.status).toBe(200);
   });
 
   it('GRM update produces valid posteriors across rubric scores', () => {

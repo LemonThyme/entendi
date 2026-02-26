@@ -154,7 +154,14 @@ async function main() {
     return;
   }
   log('hook:user-prompt-submit', 'stdin received', { length: raw.length, preview: raw.slice(0, 200) });
-  const input: HookInput = JSON.parse(raw);
+  let input: HookInput;
+  try {
+    input = JSON.parse(raw);
+  } catch {
+    log('hook:user-prompt-submit', 'invalid JSON, exiting');
+    process.exitCode = 0;
+    return;
+  }
   const result = await handleUserPromptSubmit(input);
 
   if (result?.hookSpecificOutput?.additionalContext) {
