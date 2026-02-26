@@ -19,80 +19,194 @@ function getDashboardHTML(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Entendi Dashboard</title>
+  <title>Entendi</title>
   <style>
+    :root {
+      --bg: #fafafa;
+      --bg-card: #ffffff;
+      --border: #e5e7eb;
+      --border-hover: #d1d5db;
+      --text: #111827;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --green: #16a34a;
+      --green-bg: #f0fdf4;
+      --amber: #d97706;
+      --amber-bg: #fffbeb;
+      --red: #dc2626;
+      --red-bg: #fef2f2;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-      background: #0d1117;
-      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-      padding: 2rem;
+      -webkit-font-smoothing: antialiased;
     }
-    h1 { color: #58a6ff; font-size: 1.8rem; margin-bottom: 1.5rem; }
-    .stats-row { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+
+    /* Layout */
+    .container { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+    .header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2rem; }
+    .header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .header-meta { font-size: 0.8rem; color: var(--text-tertiary); }
+
+    /* Auth */
+    .auth-container {
+      max-width: 360px; margin: 6rem auto; padding: 2rem;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    }
+    .auth-container h2 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+    .auth-subtitle { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+    .form-group { margin-bottom: 0.75rem; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; font-weight: 500; }
+    .form-group input {
+      width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.9rem; background: var(--bg); color: var(--text); outline: none;
+    }
+    .form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .btn-primary {
+      width: 100%; padding: 0.55rem; border: none; border-radius: 6px;
+      background: var(--accent); color: white; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; margin-top: 0.5rem;
+    }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 0.8rem; margin-top: 0.75rem; }
+    .error-text { color: var(--red); font-size: 0.8rem; margin-top: 0.5rem; }
+
+    /* User bar */
+    .user-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.5rem 0; margin-bottom: 2rem; border-bottom: 1px solid var(--border);
+      font-size: 0.8rem; color: var(--text-secondary);
+    }
+    .user-bar button {
+      background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .user-bar button:hover { color: var(--text); }
+
+    /* Stats */
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem; }
     .stat-card {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-      padding: 1.25rem 1.5rem; min-width: 160px; flex: 1;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.25rem;
     }
-    .stat-value { font-size: 2rem; font-weight: 700; color: #58a6ff; }
-    .stat-label { font-size: 0.85rem; color: #8b949e; margin-top: 0.25rem; }
-    h2 { color: #c9d1d9; font-size: 1.3rem; margin-bottom: 1rem; }
-    .concepts-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;
-    }
-    .concept-card {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1rem 1.25rem;
-    }
-    .concept-name { font-size: 1.05rem; font-weight: 600; color: #c9d1d9; margin-bottom: 0.25rem; }
-    .concept-meta { font-size: 0.8rem; color: #8b949e; margin-bottom: 0.75rem; }
-    .mastery-bar-bg {
-      width: 100%; height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; margin-bottom: 0.35rem;
-    }
-    .mastery-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
-    .mastery-text { font-size: 0.8rem; color: #8b949e; }
-    .loading { color: #8b949e; font-style: italic; }
-    .auth-banner {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-      padding: 1.5rem; margin-bottom: 2rem; text-align: center;
-    }
-    .auth-banner input, .auth-banner button {
-      padding: 0.5rem 1rem; margin: 0.25rem; border-radius: 4px; border: 1px solid #30363d;
-      background: #21262d; color: #c9d1d9; font-size: 0.9rem;
-    }
-    .auth-banner button {
-      background: #238636; border-color: #238636; cursor: pointer; font-weight: 600;
-    }
-    .auth-banner button:hover { background: #2ea043; }
-    .auth-banner .secondary { background: #21262d; border-color: #30363d; }
-    .user-info {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-      padding: 0.75rem 1rem; margin-bottom: 1.5rem; display: flex;
-      justify-content: space-between; align-items: center;
-    }
-    .user-info button {
-      padding: 0.35rem 0.75rem; border-radius: 4px; border: 1px solid #30363d;
-      background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 0.8rem;
-    }
-    .filter-row { margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+    .stat-label { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat-value.green { color: var(--green); }
+    .stat-value.amber { color: var(--amber); }
+    .stat-value.accent { color: var(--accent); }
+
+    /* Sections */
+    .section { margin-bottom: 2.5rem; }
+    .section-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+    .section-title { font-size: 0.95rem; font-weight: 600; }
+    .section-subtitle { font-size: 0.75rem; color: var(--text-tertiary); }
+
+    /* Filters */
+    .filter-row { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 1rem; }
     .filter-btn {
-      padding: 0.35rem 0.75rem; border-radius: 12px; border: 1px solid #30363d;
-      background: #21262d; color: #8b949e; cursor: pointer; font-size: 0.8rem;
+      padding: 0.3rem 0.65rem; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text-secondary); cursor: pointer;
+      font-size: 0.75rem; font-weight: 500; transition: all 0.15s;
     }
-    .filter-btn.active { background: #388bfd26; color: #58a6ff; border-color: #388bfd; }
-    .section { margin-bottom: 2rem; }
-    .error-text { color: #f85149; margin-top: 0.5rem; font-size: 0.85rem; }
+    .filter-btn:hover { border-color: var(--border-hover); color: var(--text); }
+    .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+    /* Concept list */
+    .concept-list { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .concept-row {
+      display: grid; grid-template-columns: 1fr 120px 80px 60px;
+      align-items: center; padding: 0.6rem 1rem; background: var(--bg-card);
+      font-size: 0.85rem; gap: 1rem;
+    }
+    .concept-row:hover { background: #f9fafb; }
+    .concept-name { font-family: var(--mono); font-size: 0.8rem; font-weight: 500; color: var(--text); }
+    .concept-domain { font-size: 0.7rem; color: var(--text-tertiary); margin-top: 0.1rem; }
+    .mastery-cell { display: flex; align-items: center; gap: 0.5rem; }
+    .mastery-bar-bg { flex: 1; height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+    .mastery-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+    .mastery-pct { font-size: 0.75rem; font-weight: 600; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+    .confidence-cell { font-size: 0.7rem; color: var(--text-tertiary); text-align: center; }
+    .confidence-high { color: var(--green); }
+    .confidence-med { color: var(--amber); }
+    .confidence-low { color: var(--text-tertiary); }
+    .assessments-cell { font-size: 0.75rem; color: var(--text-tertiary); text-align: right; font-variant-numeric: tabular-nums; }
+    .concept-header {
+      display: grid; grid-template-columns: 1fr 120px 80px 60px;
+      padding: 0.45rem 1rem; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; gap: 1rem;
+    }
+
+    /* Activity table */
+    .activity-table { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; border-spacing: 0; }
+    .activity-table th {
+      text-align: left; padding: 0.5rem 1rem; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600;
+      background: #f9fafb; border-bottom: 1px solid var(--border);
+    }
+    .activity-table td { padding: 0.5rem 1rem; font-size: 0.8rem; border-bottom: 1px solid var(--border); }
+    .activity-table tr:last-child td { border-bottom: none; }
+    .activity-table tr:hover td { background: #f9fafb; }
+    .score-badge {
+      display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px;
+      font-size: 0.7rem; font-weight: 600;
+    }
+    .score-0 { background: var(--red-bg); color: var(--red); }
+    .score-1 { background: var(--amber-bg); color: var(--amber); }
+    .score-2 { background: var(--green-bg); color: var(--green); }
+    .score-3 { background: var(--green-bg); color: var(--green); }
+    .event-type { font-size: 0.7rem; color: var(--text-tertiary); }
+    .time-ago { font-size: 0.75rem; color: var(--text-tertiary); }
+
+    /* Empty states */
+    .empty-state { text-align: center; padding: 2rem; color: var(--text-tertiary); font-size: 0.85rem; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .concept-row { grid-template-columns: 1fr 80px; }
+      .concept-header { grid-template-columns: 1fr 80px; }
+      .confidence-cell, .assessments-cell, .concept-header > *:nth-child(3), .concept-header > *:nth-child(4) { display: none; }
+    }
   </style>
 </head>
 <body>
-  <h1>Entendi Dashboard</h1>
-  <div id="auth-area"></div>
-  <div id="content" style="display:none;">
-    <div class="stats-row" id="stats-row"></div>
-    <div class="section">
-      <h2>Knowledge Graph</h2>
-      <div class="filter-row" id="filter-row"></div>
-      <div class="concepts-grid" id="concepts-grid"></div>
+  <div class="container">
+    <div id="auth-area"></div>
+    <div id="content" style="display:none;">
+      <div class="header">
+        <h1>Entendi</h1>
+        <div class="header-meta" id="header-meta"></div>
+      </div>
+      <div id="user-bar"></div>
+      <div class="stats-row" id="stats-row"></div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Knowledge Map</div>
+          <div class="section-subtitle" id="concept-count"></div>
+        </div>
+        <div class="filter-row" id="filter-row"></div>
+        <div class="concept-header">
+          <div>Concept</div>
+          <div>Mastery</div>
+          <div style="text-align:center">Confidence</div>
+          <div style="text-align:right">Probes</div>
+        </div>
+        <div class="concept-list" id="concept-list"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Recent Activity</div>
+        </div>
+        <div id="activity-area"></div>
+      </div>
     </div>
   </div>
 
@@ -102,121 +216,75 @@ function getDashboardHTML(): string {
       var token = localStorage.getItem("entendi_token");
       var currentUser = null;
 
+      function h(tag, attrs, children) {
+        var el = document.createElement(tag);
+        if (attrs) Object.keys(attrs).forEach(function(k) {
+          if (k === "className") el.className = attrs[k];
+          else if (k === "onclick") el.onclick = attrs[k];
+          else if (k.indexOf("style") === 0) el.style[k.replace("style","").toLowerCase() || "cssText"] = attrs[k];
+          else el.setAttribute(k, attrs[k]);
+        });
+        if (children !== undefined) {
+          if (typeof children === "string") el.textContent = children;
+          else if (Array.isArray(children)) children.forEach(function(c) { if (c) el.appendChild(c); });
+          else el.appendChild(children);
+        }
+        return el;
+      }
+
       function getHeaders() {
-        var h = { "Content-Type": "application/json" };
-        if (token) h["Authorization"] = "Bearer " + token;
-        return h;
+        var headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = "Bearer " + token;
+        return headers;
       }
 
       function pMastery(mu) { return 1 / (1 + Math.exp(-mu)); }
 
       function masteryColor(pct) {
-        if (pct < 0) return "#484f58";
-        if (pct < 40) return "#f85149";
-        if (pct < 70) return "#d29922";
-        return "#3fb950";
+        if (pct < 0) return "#e5e7eb";
+        if (pct < 30) return "#dc2626";
+        if (pct < 60) return "#d97706";
+        return "#16a34a";
       }
 
-      function createStatCard(label, value) {
-        var card = document.createElement("div");
-        card.className = "stat-card";
-        var valEl = document.createElement("div");
-        valEl.className = "stat-value";
-        valEl.textContent = String(value);
-        var labelEl = document.createElement("div");
-        labelEl.className = "stat-label";
-        labelEl.textContent = label;
-        card.appendChild(valEl);
-        card.appendChild(labelEl);
-        return card;
+      function confidenceLabel(sigma, count) {
+        if (count === 0) return { text: "\u2014", cls: "confidence-low" };
+        if (sigma < 0.4) return { text: "High", cls: "confidence-high" };
+        if (sigma < 0.8) return { text: "Med", cls: "confidence-med" };
+        return { text: "Low", cls: "confidence-low" };
       }
 
-      function createConceptCard(concept, state) {
-        var card = document.createElement("div");
-        card.className = "concept-card";
-
-        var nameEl = document.createElement("div");
-        nameEl.className = "concept-name";
-        nameEl.textContent = concept.id;
-
-        var metaEl = document.createElement("div");
-        metaEl.className = "concept-meta";
-        metaEl.textContent = concept.domain + " / " + concept.specificity;
-
-        var barBg = document.createElement("div");
-        barBg.className = "mastery-bar-bg";
-        var barFill = document.createElement("div");
-        barFill.className = "mastery-bar-fill";
-
-        var masteryText = document.createElement("div");
-        masteryText.className = "mastery-text";
-
-        if (state) {
-          var pct = Math.round(pMastery(state.mu) * 100);
-          barFill.style.width = pct + "%";
-          barFill.style.background = masteryColor(pct);
-          masteryText.textContent = pct + "% mastery (" + state.assessmentCount + " assessments)";
-        } else {
-          barFill.style.width = "0%";
-          barFill.style.background = masteryColor(-1);
-          masteryText.textContent = "Unassessed";
-        }
-
-        barBg.appendChild(barFill);
-        card.appendChild(nameEl);
-        card.appendChild(metaEl);
-        card.appendChild(barBg);
-        card.appendChild(masteryText);
-        return card;
+      function timeAgo(dateStr) {
+        if (!dateStr) return "\u2014";
+        var diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+        if (diff < 60) return "just now";
+        if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+        if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+        return Math.floor(diff / 86400) + "d ago";
       }
 
-      // --- Auth UI ---
+      // --- Auth ---
 
       function showAuth() {
         var area = document.getElementById("auth-area");
         area.textContent = "";
 
-        var banner = document.createElement("div");
-        banner.className = "auth-banner";
-
-        var msg = document.createElement("div");
-        msg.style.marginBottom = "1rem";
-        msg.style.color = "#8b949e";
-        msg.textContent = "Sign in to view your knowledge graph";
-        banner.appendChild(msg);
-
-        var row = document.createElement("div");
-        var emailInput = document.createElement("input");
-        emailInput.type = "email";
-        emailInput.placeholder = "Email";
-        emailInput.id = "auth-email";
-
-        var passInput = document.createElement("input");
-        passInput.type = "password";
-        passInput.placeholder = "Password";
-        passInput.id = "auth-pass";
-
-        var signInBtn = document.createElement("button");
-        signInBtn.textContent = "Sign In";
-        signInBtn.onclick = function() { doAuth("/api/auth/sign-in/email"); };
-
-        var signUpBtn = document.createElement("button");
-        signUpBtn.className = "secondary";
-        signUpBtn.textContent = "Sign Up";
-        signUpBtn.onclick = function() { doAuth("/api/auth/sign-up/email"); };
-
-        row.appendChild(emailInput);
-        row.appendChild(passInput);
-        row.appendChild(signInBtn);
-        row.appendChild(signUpBtn);
-        banner.appendChild(row);
-
-        var errorEl = document.createElement("div");
-        errorEl.className = "error-text";
-        errorEl.id = "auth-error";
-        banner.appendChild(errorEl);
-
-        area.appendChild(banner);
+        var box = h("div", { className: "auth-container" }, [
+          h("h2", null, "Sign in to Entendi"),
+          h("div", { className: "auth-subtitle" }, "View your knowledge graph and mastery data"),
+          h("div", { className: "form-group" }, [
+            h("label", null, "Email"),
+            h("input", { type: "email", id: "auth-email", placeholder: "you@example.com" })
+          ]),
+          h("div", { className: "form-group" }, [
+            h("label", null, "Password"),
+            h("input", { type: "password", id: "auth-pass", placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" })
+          ]),
+          h("button", { className: "btn-primary", onclick: function() { doAuth("/api/auth/sign-in/email"); } }, "Sign In"),
+          h("button", { className: "btn-link", onclick: function() { doAuth("/api/auth/sign-up/email"); } }, "Create account"),
+          h("div", { className: "error-text", id: "auth-error" })
+        ]);
+        area.appendChild(box);
       }
 
       function doAuth(url) {
@@ -234,133 +302,240 @@ function getDashboardHTML(): string {
               currentUser = data.user;
               showDashboard();
             } else {
-              document.getElementById("auth-error").textContent = data.message || "Auth failed";
+              document.getElementById("auth-error").textContent = data.message || "Authentication failed";
             }
           })
           .catch(function() {
-            document.getElementById("auth-error").textContent = "Network error";
+            document.getElementById("auth-error").textContent = "Network error \u2014 is the API running?";
           });
       }
 
+      // --- Dashboard ---
+
       function showDashboard() {
-        var area = document.getElementById("auth-area");
-        area.textContent = "";
-
-        var info = document.createElement("div");
-        info.className = "user-info";
-
-        var span = document.createElement("span");
-        span.textContent = "Signed in as ";
-        var strong = document.createElement("strong");
-        strong.textContent = currentUser ? (currentUser.name || currentUser.email) : "User";
-        span.appendChild(strong);
-
-        var signOutBtn = document.createElement("button");
-        signOutBtn.textContent = "Sign Out";
-        signOutBtn.onclick = function() {
-          localStorage.removeItem("entendi_token");
-          token = null;
-          location.reload();
-        };
-
-        info.appendChild(span);
-        info.appendChild(signOutBtn);
-        area.appendChild(info);
-
+        document.getElementById("auth-area").textContent = "";
         document.getElementById("content").style.display = "block";
+
+        var bar = document.getElementById("user-bar");
+        bar.textContent = "";
+        var userBar = h("div", { className: "user-bar" }, [
+          h("span", null, currentUser ? (currentUser.name || currentUser.email) : "User"),
+          h("button", { onclick: function() { localStorage.removeItem("entendi_token"); token = null; location.reload(); } }, "Sign out")
+        ]);
+        bar.appendChild(userBar);
+
         loadData();
       }
 
-      // --- Data loading ---
-
       function loadData() {
-        fetch("/api/concepts", { headers: getHeaders() })
-          .then(function(r) { return r.json(); })
-          .then(function(concepts) {
-            fetch("/api/mastery", { headers: getHeaders() })
-              .then(function(r) { return r.json(); })
-              .then(function(mastery) {
-                renderDashboard(concepts, mastery);
-              });
-          });
-
-        fetch("/api/mcp/status", { headers: getHeaders() })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            var container = document.getElementById("stats-row");
-            container.textContent = "";
-            if (data.overview) {
-              container.appendChild(createStatCard("Total Concepts", data.overview.totalConcepts));
-              container.appendChild(createStatCard("Mastered", data.overview.mastered));
-              container.appendChild(createStatCard("In Progress", data.overview.inProgress));
-              container.appendChild(createStatCard("Unknown", data.overview.unknown));
-            }
-          });
+        Promise.all([
+          fetch("/api/concepts", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+          fetch("/api/mastery", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+          fetch("/api/mcp/status", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+        ]).then(function(results) {
+          renderStats(results[2]);
+          renderConcepts(results[0], results[1]);
+          loadActivity();
+        });
       }
 
-      function renderDashboard(concepts, mastery) {
-        var container = document.getElementById("concepts-grid");
+      function renderStats(statusData) {
+        var container = document.getElementById("stats-row");
         container.textContent = "";
+        if (!statusData.overview) return;
+        var o = statusData.overview;
 
-        var masteryMap = {};
-        for (var i = 0; i < mastery.length; i++) {
-          masteryMap[mastery[i].conceptId] = mastery[i];
+        function statCard(value, label, colorCls) {
+          var card = h("div", { className: "stat-card" }, [
+            h("div", { className: "stat-value" + (colorCls ? " " + colorCls : "") }, String(value)),
+            h("div", { className: "stat-label" }, label)
+          ]);
+          return card;
         }
 
+        container.appendChild(statCard(o.totalConcepts, "Total Concepts", ""));
+        container.appendChild(statCard(o.mastered, "Mastered", "green"));
+        container.appendChild(statCard(o.inProgress, "In Progress", "amber"));
+        container.appendChild(statCard(o.unknown, "Unassessed", "accent"));
+      }
+
+      var allConcepts = [], allMasteryMap = {};
+
+      function renderConcepts(concepts, mastery) {
+        allConcepts = concepts;
+        allMasteryMap = {};
+        for (var i = 0; i < mastery.length; i++) {
+          allMasteryMap[mastery[i].conceptId] = mastery[i];
+        }
+
+        // Build domain filters
         var domains = {};
         concepts.forEach(function(c) { domains[c.domain] = true; });
         var filterRow = document.getElementById("filter-row");
         filterRow.textContent = "";
 
-        var allBtn = document.createElement("button");
-        allBtn.className = "filter-btn active";
-        allBtn.textContent = "All";
-        allBtn.onclick = function() { renderConcepts(concepts, masteryMap, null); setActiveFilter(allBtn); };
+        var allBtn = h("button", { className: "filter-btn active", onclick: function() { renderConceptList(null); setActive(allBtn); } }, "All");
         filterRow.appendChild(allBtn);
 
         Object.keys(domains).sort().forEach(function(d) {
-          var btn = document.createElement("button");
-          btn.className = "filter-btn";
-          btn.textContent = d;
-          btn.onclick = function() { renderConcepts(concepts, masteryMap, d); setActiveFilter(btn); };
+          var btn = h("button", { className: "filter-btn", onclick: function() { renderConceptList(d); setActive(btn); } }, d);
           filterRow.appendChild(btn);
         });
 
-        renderConcepts(concepts, masteryMap, null);
+        renderConceptList(null);
       }
 
-      function setActiveFilter(activeBtn) {
+      function setActive(activeBtn) {
         var btns = document.querySelectorAll(".filter-btn");
         for (var i = 0; i < btns.length; i++) btns[i].classList.remove("active");
         activeBtn.classList.add("active");
       }
 
-      function renderConcepts(concepts, masteryMap, domainFilter) {
-        var container = document.getElementById("concepts-grid");
+      function renderConceptList(domainFilter) {
+        var container = document.getElementById("concept-list");
         container.textContent = "";
 
         var filtered = domainFilter
-          ? concepts.filter(function(c) { return c.domain === domainFilter; })
-          : concepts;
+          ? allConcepts.filter(function(c) { return c.domain === domainFilter; })
+          : allConcepts;
 
+        // Sort: assessed first (by mastery desc), then unassessed alphabetically
         filtered.sort(function(a, b) {
-          var ma = masteryMap[a.id], mb = masteryMap[b.id];
+          var ma = allMasteryMap[a.id], mb = allMasteryMap[b.id];
           if (ma && !mb) return -1;
           if (!ma && mb) return 1;
           if (ma && mb) return pMastery(mb.mu) - pMastery(ma.mu);
           return a.id.localeCompare(b.id);
         });
 
-        filtered.forEach(function(concept) {
-          container.appendChild(createConceptCard(concept, masteryMap[concept.id] || null));
-        });
+        document.getElementById("concept-count").textContent = filtered.length + " concepts";
 
         if (filtered.length === 0) {
-          var empty = document.createElement("div");
-          empty.className = "loading";
-          empty.textContent = "No concepts found.";
-          container.appendChild(empty);
+          container.appendChild(h("div", { className: "empty-state" }, "No concepts found."));
+          return;
         }
+
+        filtered.forEach(function(concept) {
+          var state = allMasteryMap[concept.id];
+          var pct = state ? Math.round(pMastery(state.mu) * 100) : -1;
+          var sigma = state ? state.sigma : 1.5;
+          var count = state ? state.assessmentCount : 0;
+          var conf = confidenceLabel(sigma, count);
+
+          var row = h("div", { className: "concept-row" }, [
+            h("div", null, [
+              h("div", { className: "concept-name" }, concept.id),
+              h("div", { className: "concept-domain" }, concept.domain)
+            ]),
+            h("div", { className: "mastery-cell" }, [
+              h("div", { className: "mastery-bar-bg" }, [
+                (function() {
+                  var fill = h("div", { className: "mastery-bar-fill" });
+                  fill.style.width = (pct >= 0 ? pct : 0) + "%";
+                  fill.style.background = masteryColor(pct);
+                  return fill;
+                })()
+              ]),
+              h("div", { className: "mastery-pct" }, pct >= 0 ? pct + "%" : "\u2014")
+            ]),
+            h("div", { className: "confidence-cell " + conf.cls }, conf.text),
+            h("div", { className: "assessments-cell" }, count > 0 ? String(count) : "\u2014")
+          ]);
+
+          container.appendChild(row);
+        });
+      }
+
+      function loadActivity() {
+        // Fetch recent assessment events via mastery history for assessed concepts
+        var assessed = Object.keys(allMasteryMap);
+        if (assessed.length === 0) {
+          document.getElementById("activity-area").appendChild(
+            h("div", { className: "empty-state" }, "No assessments yet. Start using AI tools with Entendi active.")
+          );
+          return;
+        }
+
+        // Fetch history for the most recently assessed concepts
+        var sorted = assessed
+          .filter(function(id) { return allMasteryMap[id].lastAssessed; })
+          .sort(function(a, b) {
+            return new Date(allMasteryMap[b].lastAssessed).getTime() - new Date(allMasteryMap[a].lastAssessed).getTime();
+          })
+          .slice(0, 5);
+
+        if (sorted.length === 0) {
+          document.getElementById("activity-area").appendChild(
+            h("div", { className: "empty-state" }, "No assessment history yet.")
+          );
+          return;
+        }
+
+        Promise.all(sorted.map(function(conceptId) {
+          return fetch("/api/mastery/" + encodeURIComponent(conceptId) + "/history", { headers: getHeaders() })
+            .then(function(r) { return r.json(); })
+            .then(function(events) { return events.map(function(e) { e._conceptId = conceptId; return e; }); });
+        })).then(function(results) {
+          var allEvents = [].concat.apply([], results);
+          allEvents.sort(function(a, b) { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); });
+          allEvents = allEvents.slice(0, 15);
+          renderActivity(allEvents);
+        });
+      }
+
+      function renderActivity(events) {
+        var area = document.getElementById("activity-area");
+        area.textContent = "";
+
+        if (events.length === 0) {
+          area.appendChild(h("div", { className: "empty-state" }, "No assessment history yet."));
+          return;
+        }
+
+        var table = h("table", { className: "activity-table" });
+        var thead = h("thead", null, [
+          h("tr", null, [
+            h("th", null, "Concept"),
+            h("th", null, "Type"),
+            h("th", null, "Score"),
+            h("th", null, "Mastery Change"),
+            h("th", null, "When")
+          ])
+        ]);
+        table.appendChild(thead);
+
+        var tbody = h("tbody");
+        events.forEach(function(ev) {
+          var conceptId = ev._conceptId || ev.conceptId;
+          var pBefore = Math.round(pMastery(ev.muBefore) * 100);
+          var pAfter = Math.round(pMastery(ev.muAfter) * 100);
+          var delta = pAfter - pBefore;
+          var deltaStr = (delta >= 0 ? "+" : "") + delta + "%";
+          var deltaColor = delta > 0 ? "var(--green)" : delta < 0 ? "var(--red)" : "var(--text-tertiary)";
+
+          var typeLabel = ev.eventType === "probe" ? "Probe"
+            : ev.eventType === "tutor_phase1" ? "Tutor P1"
+            : ev.eventType === "tutor_phase4" ? "Tutor P4"
+            : ev.eventType;
+
+          var row = h("tr", null, [
+            h("td", null, h("span", { className: "concept-name" }, conceptId)),
+            h("td", null, h("span", { className: "event-type" }, typeLabel)),
+            h("td", null, h("span", { className: "score-badge score-" + ev.rubricScore }, String(ev.rubricScore) + "/3")),
+            h("td", null, (function() {
+              var span = h("span", null, pBefore + "% \u2192 " + pAfter + "%  ");
+              var deltaSpan = h("span", null, deltaStr);
+              deltaSpan.style.color = deltaColor;
+              deltaSpan.style.fontWeight = "600";
+              span.appendChild(deltaSpan);
+              return span;
+            })()),
+            h("td", null, h("span", { className: "time-ago" }, timeAgo(ev.createdAt)))
+          ]);
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        area.appendChild(table);
       }
 
       // --- Init ---

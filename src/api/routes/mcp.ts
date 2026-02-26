@@ -10,6 +10,7 @@ import {
   mapRubricToFsrsGrade, fsrsStabilityAfterSuccess, fsrsDifficultyUpdate,
 } from '../../core/probabilistic-model.js';
 import { probeUrgency } from '../../core/probe-urgency.js';
+import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
 
@@ -699,5 +700,39 @@ async function applyBayesianUpdateDb(
   }
 
   const newMastery = pMastery(newMu);
+
+  // 7. Prerequisite propagation (Design Doc Section 5.5)
+  // When mastery of concept c improves, boost dependents that REQUIRE c
+  const dependentEdges = await db.select().from(conceptEdges)
+    .where(and(eq(conceptEdges.targetId, conceptId), eq(conceptEdges.edgeType, 'requires')));
+
+  if (dependentEdges.length > 0 && newMu > muBefore) {
+    const targets = await Promise.all(dependentEdges.map(async (edge: { sourceId: string; targetId: string; edgeType: string }) => {
+      const [depState] = await db.select().from(userConceptStates)
+        .where(and(eq(userConceptStates.userId, userId), eq(userConceptStates.conceptId, edge.sourceId)));
+      return {
+        conceptId: edge.sourceId,
+        mu: depState?.mu ?? 0.0,
+        sigma: depState?.sigma ?? 1.5,
+      };
+    }));
+
+    const boosts = propagatePrerequisiteBoost({ muBefore, muAfter: newMu, targets });
+    for (const boost of boosts) {
+      const [existing] = await db.select().from(userConceptStates)
+        .where(and(eq(userConceptStates.userId, userId), eq(userConceptStates.conceptId, boost.conceptId)));
+      if (existing) {
+        await db.update(userConceptStates).set({
+          mu: boost.newMu,
+          updatedAt: now,
+        }).where(and(
+          eq(userConceptStates.userId, userId),
+          eq(userConceptStates.conceptId, boost.conceptId),
+        ));
+      }
+      // Don't create new state rows — only boost existing ones
+    }
+  }
+
   return { previousMastery, newMastery, previousSigma, newSigma: newSigma };
 }
