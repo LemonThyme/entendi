@@ -7,3 +7,4 @@ dist/
 .claude/worktrees/
 /.mcp.json
 public/assets/
+src/dashboard/manifest.ts

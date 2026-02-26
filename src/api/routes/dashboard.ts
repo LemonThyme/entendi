@@ -1,19 +1,9 @@
 import { Hono } from 'hono';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import { createHash } from 'crypto';
+import { manifest } from '../../dashboard/manifest.js';
 import type { Env } from '../index.js';
 
 export const dashboardRoutes = new Hono<Env>();
-
-// Load asset manifest (built by esbuild.config.ts)
-let manifest: Record<string, string> = {};
-const manifestPath = join(process.cwd(), 'public', 'assets', 'manifest.json');
-try {
-  if (existsSync(manifestPath)) {
-    manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  }
-} catch { /* fallback to empty manifest in dev */ }
 
 const manifestHash = createHash('md5')
   .update(JSON.stringify(manifest))
