@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { eq, gt, sql } from 'drizzle-orm';
+import { eq, and, gt, sql, inArray } from 'drizzle-orm';
 import { assessmentEvents, member } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
@@ -39,8 +39,8 @@ eventRoutes.get('/', async (c) => {
       const newEvents = await db.select().from(assessmentEvents)
         .where(
           currentLastId > 0
-            ? sql`${assessmentEvents.id} > ${currentLastId} AND ${assessmentEvents.userId} = ANY(${orgMemberIds})`
-            : sql`${assessmentEvents.userId} = ANY(${orgMemberIds})`,
+            ? and(gt(assessmentEvents.id, currentLastId), inArray(assessmentEvents.userId, orgMemberIds))
+            : inArray(assessmentEvents.userId, orgMemberIds),
         )
         .orderBy(assessmentEvents.id)
         .limit(20);

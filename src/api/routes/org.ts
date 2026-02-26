@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { member, user, organization, userConceptStates, assessmentEvents, concepts } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
@@ -7,6 +7,12 @@ import { z } from 'zod';
 import type { Env } from '../index.js';
 import type { Context } from 'hono';
 import type { Database } from '../db/connection.js';
+
+/** Build a SQL fragment for `<col> IN (...)` that works with parameterized queries */
+function sqlInIds(col: string, ids: string[]) {
+  if (ids.length === 0) return sql`FALSE`;
+  return sql.join([sql.raw(`${col} IN (`), sql.join(ids.map(id => sql`${id}`), sql`, `), sql`)`], sql``);
+}
 
 export const orgRoutes = new Hono<Env>();
 
@@ -161,7 +167,7 @@ orgRoutes.get('/analytics', async (c) => {
   // Count total assessments
   const totalResult = await db.execute(sql`
     SELECT COUNT(*) as count FROM assessment_events
-    WHERE user_id = ANY(${memberIds})
+    WHERE ${sqlInIds('user_id', memberIds)}
   `);
   const totalAssessments = Number((totalResult.rows[0] as any)?.count ?? 0);
 
@@ -170,7 +176,7 @@ orgRoutes.get('/analytics', async (c) => {
     SELECT ucs.concept_id, COUNT(DISTINCT ucs.user_id) as assessed_by,
            AVG(ucs.mu) as avg_mu
     FROM user_concept_states ucs
-    WHERE ucs.user_id = ANY(${memberIds}) AND ucs.assessment_count > 0
+    WHERE ${sqlInIds('user_id', memberIds)} AND ucs.assessment_count > 0
     GROUP BY ucs.concept_id
     ORDER BY assessed_by DESC
     LIMIT 20
@@ -365,7 +371,7 @@ orgRoutes.get('/integrity', async (c) => {
       COUNT(CASE WHEN integrity_score < ${dampeningThreshold} THEN 1 END)::int as flagged_count,
       COUNT(DISTINCT CASE WHEN integrity_score < ${dampeningThreshold} THEN user_id END)::int as flagged_members
     FROM assessment_events
-    WHERE user_id = ANY(${memberIds}) AND integrity_score IS NOT NULL
+    WHERE ${sqlInIds('user_id', memberIds)} AND integrity_score IS NOT NULL
   `);
 
   const row = result.rows[0] as any;
@@ -408,7 +414,7 @@ orgRoutes.get('/integrity/flagged', async (c) => {
   // Count total
   const countResult = await db.execute(sql`
     SELECT COUNT(*)::int as total FROM assessment_events
-    WHERE user_id = ANY(${memberIds}) AND integrity_score IS NOT NULL AND integrity_score < ${dampeningThreshold}
+    WHERE ${sqlInIds('user_id', memberIds)} AND integrity_score IS NOT NULL AND integrity_score < ${dampeningThreshold}
   `);
   const total = (countResult.rows[0] as any)?.total ?? 0;
 
@@ -419,7 +425,7 @@ orgRoutes.get('/integrity/flagged', async (c) => {
            ae.event_type, ae.rubric_score, ae.created_at
     FROM assessment_events ae
     JOIN "user" u ON ae.user_id = u.id
-    WHERE ae.user_id = ANY(${memberIds}) AND ae.integrity_score IS NOT NULL AND ae.integrity_score < ${dampeningThreshold}
+    WHERE ${sqlInIds('ae.user_id', memberIds)} AND ae.integrity_score IS NOT NULL AND ae.integrity_score < ${dampeningThreshold}
     ORDER BY ae.created_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `);
