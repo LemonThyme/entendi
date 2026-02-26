@@ -1,10 +1,9 @@
-import { readStdin, getDataDir, type HookInput } from './shared.js';
+import { readStdin, type HookInput } from './shared.js';
 import {
   detectPackageInstall,
   parsePackageFromCommand,
   extractConceptsFromPackage,
 } from '../core/concept-extraction.js';
-import { initParser, extractConceptsFromSource, type SupportedLanguage } from '../core/ast-extraction.js';
 
 export interface PostToolUseOutput {
   hookSpecificOutput?: {
@@ -14,67 +13,65 @@ export interface PostToolUseOutput {
 
 interface PostToolUseOptions {
   skipLLM?: boolean;
-  dataDir?: string;
-  userId?: string;
 }
 
 export async function handlePostToolUse(
   input: HookInput,
   options: PostToolUseOptions = {},
 ): Promise<PostToolUseOutput | null> {
-  // 1. Only handle Bash tool
-  if (input.tool_name !== 'Bash') return null;
-
-  // 2. Extract command
-  const toolInput = input.tool_input as { command?: string } | undefined;
-  const command = toolInput?.command;
-  if (!command) return null;
-
-  // 3. Must be a package install command
-  if (!detectPackageInstall(command)) return null;
-
-  // 4. Extract package names
-  const packages = parsePackageFromCommand(command);
-  if (packages.length === 0) return null;
-
-  // 5. Map packages to concepts via lookup table
-  const packageConcepts = packages.flatMap((pkg) => extractConceptsFromPackage(pkg));
-
-  // 6. AST extraction from tool output (best-effort)
-  let astConcepts: Array<{ name: string; domain: string }> = [];
-  try {
-    const toolOutput = getToolOutput(input);
-    if (toolOutput && looksLikeSourceCode(toolOutput)) {
-      await initParser();
-      const language = detectLanguage(toolOutput);
-      const rawAstConcepts = await extractConceptsFromSource(toolOutput, language);
-      astConcepts = rawAstConcepts.map((c) => ({
-        name: c.name,
-        domain: 'programming-languages',
-      }));
-    }
-  } catch {
-    // AST extraction is best-effort; don't fail the hook
-  }
-
-  // 7. Combine and deduplicate
-  const allNames = new Set<string>();
+  const toolName = input.tool_name as string;
   const conceptList: string[] = [];
-  for (const c of [...packageConcepts, ...astConcepts]) {
-    if (!allNames.has(c.name)) {
-      allNames.add(c.name);
-      conceptList.push(c.name);
+
+  // 1. Package install detection (Bash tool)
+  if (toolName === 'Bash') {
+    const command = (input.tool_input as { command?: string })?.command;
+    if (command && detectPackageInstall(command)) {
+      const packages = parsePackageFromCommand(command);
+      const packageConcepts = packages.flatMap((pkg) => extractConceptsFromPackage(pkg));
+      for (const c of packageConcepts) {
+        if (!conceptList.includes(c.name)) conceptList.push(c.name);
+      }
+      // Also add the raw package names as concepts (for packages not in the lookup)
+      for (const pkg of packages) {
+        const normalized = pkg.toLowerCase().replace(/\//g, '-');
+        if (!conceptList.includes(normalized)) conceptList.push(normalized);
+      }
     }
   }
+
+  // 2. File operations — extract concepts from file paths and content patterns
+  if (toolName === 'Write' || toolName === 'Edit' || toolName === 'Read') {
+    const filePath = (input.tool_input as { file_path?: string })?.file_path || '';
+    const pathConcepts = extractConceptsFromPath(filePath);
+    for (const c of pathConcepts) {
+      if (!conceptList.includes(c)) conceptList.push(c);
+    }
+
+    // For Write/Edit, also look at the content being written
+    if (toolName === 'Write' || toolName === 'Edit') {
+      const content = (input.tool_input as { content?: string; new_string?: string })?.content
+        || (input.tool_input as { new_string?: string })?.new_string || '';
+      const contentConcepts = extractConceptsFromCode(content);
+      for (const c of contentConcepts) {
+        if (!conceptList.includes(c)) conceptList.push(c);
+      }
+    }
+  }
+
   if (conceptList.length === 0) return null;
 
-  // 8. Return additionalContext instructing Claude to call entendi_observe
-  const conceptListStr = conceptList.join(', ');
+  // 3. Return additionalContext instructing Claude to call entendi_observe
+  const conceptListStr = conceptList.slice(0, 10).join(', '); // cap at 10
+  const trigger = toolName === 'Bash'
+    ? (input.tool_input as { command?: string })?.command || toolName
+    : toolName;
+
   return {
     hookSpecificOutput: {
       additionalContext:
-        `[Entendi] Concepts detected from tool use: ${conceptListStr}. Trigger: ${command}. ` +
+        `[Entendi] Concepts detected from tool use: ${conceptListStr}. Trigger: ${trigger}. ` +
         `Use the entendi_observe tool to check if a comprehension probe is appropriate. ` +
+        `Pass concepts as [{id: "concept-id", source: "ast"}] for each concept. ` +
         `Complete the user's request fully first. If a probe is warranted, weave it ` +
         `naturally into your response — be conversational, not examiner-like.`,
     },
@@ -82,36 +79,83 @@ export async function handlePostToolUse(
 }
 
 /**
- * Extract tool output as a string from the hook input.
+ * Extract concept hints from a file path.
+ * e.g., "src/api/routes/mcp.ts" → ["hono", "mcp"]
+ *       "src/api/db/schema.ts" → ["drizzle-orm", "database-schema"]
  */
-function getToolOutput(input: HookInput): string | null {
-  if (typeof input.tool_output === 'string') return input.tool_output;
-  const response = input.tool_response as { stdout?: string } | undefined;
-  if (response && typeof response.stdout === 'string') return response.stdout;
-  return null;
+function extractConceptsFromPath(filePath: string): string[] {
+  const concepts: string[] = [];
+  const lower = filePath.toLowerCase();
+
+  const pathPatterns: Array<[RegExp, string[]]> = [
+    [/drizzle|schema\.ts|migrate\.ts/, ['drizzle-orm']],
+    [/hono|routes\//, ['hono']],
+    [/auth\.ts|better-auth|middleware\/auth/, ['better-auth']],
+    [/mcp/, ['mcp-protocol']],
+    [/\.test\.ts|\.spec\.ts|vitest/, ['testing']],
+    [/hooks\//, ['claude-code-hooks']],
+    [/esbuild|build/, ['esbuild']],
+    [/dockerfile|docker-compose/, ['docker']],
+    [/\.sql$/, ['sql']],
+    [/neon|serverless/, ['neon-postgres']],
+    [/webpack|vite\.config/, ['bundler']],
+    [/tailwind/, ['tailwind-css']],
+    [/prisma/, ['prisma']],
+    [/graphql/, ['graphql']],
+    [/redis/, ['redis']],
+  ];
+
+  for (const [pattern, ids] of pathPatterns) {
+    if (pattern.test(lower)) {
+      for (const id of ids) {
+        if (!concepts.includes(id)) concepts.push(id);
+      }
+    }
+  }
+
+  return concepts;
 }
 
 /**
- * Heuristic check: does the output look like source code?
+ * Extract concept hints from code content.
+ * Looks for import statements, API patterns, and library-specific idioms.
  */
-function looksLikeSourceCode(output: string): boolean {
-  const lines = output.split('\n');
-  if (lines.length > 5) return true;
-  const codePatterns = /\b(function|class|import|export|async|await|def|const|let|var|interface|type)\b/;
-  return codePatterns.test(output);
-}
+function extractConceptsFromCode(content: string): string[] {
+  if (!content || content.length < 20) return [];
+  const concepts: string[] = [];
 
-/**
- * Detect language from source code content.
- */
-function detectLanguage(source: string): SupportedLanguage {
-  if (/\bdef\s+\w+\s*\(/.test(source) || (/\bimport\s+\w+/.test(source) && /:\s*$/m.test(source))) {
-    return 'python';
+  const codePatterns: Array<[RegExp, string[]]> = [
+    [/from\s+['"]drizzle-orm/, ['drizzle-orm']],
+    [/from\s+['"]hono/, ['hono']],
+    [/from\s+['"]better-auth/, ['better-auth']],
+    [/from\s+['"]@modelcontextprotocol/, ['mcp-protocol']],
+    [/from\s+['"]@neondatabase/, ['neon-postgres']],
+    [/from\s+['"]zod/, ['zod']],
+    [/from\s+['"]vitest/, ['vitest']],
+    [/pgTable|drizzle\(/, ['drizzle-orm']],
+    [/new Hono|app\.use|app\.get|app\.post|app\.route/, ['hono']],
+    [/betterAuth|drizzleAdapter|apiKey\(/, ['better-auth']],
+    [/McpServer|StdioServerTransport/, ['mcp-protocol']],
+    [/grmUpdate|bayesianUpdate|pMastery|fisherInformation/, ['bayesian-irt', 'grm']],
+    [/fsrsStability|retrievability|decayPrior/, ['fsrs', 'spaced-repetition']],
+    [/async\s+function|await\s+/, ['async-await']],
+    [/z\.object|z\.string|z\.array/, ['zod']],
+    [/\.execute\(sql`|\.select\(\)\.from\(/, ['sql']],
+    [/recursive\s+cte|WITH\s+RECURSIVE/i, ['recursive-cte']],
+    [/cors\(|CORS/, ['cors']],
+    [/Bearer|x-api-key|Authorization/, ['api-authentication']],
+    [/onConflictDoUpdate|onConflictDoNothing/, ['upsert-pattern']],
+  ];
+
+  for (const [pattern, ids] of codePatterns) {
+    if (pattern.test(content)) {
+      for (const id of ids) {
+        if (!concepts.includes(id)) concepts.push(id);
+      }
+    }
   }
-  if (/\b(interface|type)\s+\w+/.test(source) || /:\s*(string|number|boolean|void)\b/.test(source)) {
-    return 'typescript';
-  }
-  return 'typescript';
+
+  return concepts;
 }
 
 async function main() {

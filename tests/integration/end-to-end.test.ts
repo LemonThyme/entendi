@@ -1,10 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { handlePostToolUse } from '../../src/hooks/post-tool-use.js';
 import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
-import { writePendingAction } from '../../src/mcp/pending-action.js';
 import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
 import { buildSeedConceptNodes } from '../../src/config/seed-taxonomy.js';
 import { grmFisherInformation, grmBayesianUpdate } from '../../src/core/probabilistic-model.js';
@@ -12,15 +11,27 @@ import { createDashboardApp } from '../../src/dashboard/server.js';
 import { StateManager } from '../../src/core/state-manager.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 
+function mockPendingAction(action: PendingAction | null) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: action !== null,
+    json: async () => ({ pending: action }),
+  }));
+}
+
 describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
   let projectDir: string;
 
   beforeEach(() => {
     projectDir = mkdtempSync(join(tmpdir(), 'entendi-e2e-'));
+    process.env.ENTENDI_API_URL = 'http://localhost:3456';
+    process.env.ENTENDI_API_KEY = 'test-key';
   });
 
   afterEach(() => {
     rmSync(projectDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    delete process.env.ENTENDI_API_URL;
+    delete process.env.ENTENDI_API_KEY;
   });
 
   it('PostToolUse detects concepts and instructs Claude to call entendi_observe', async () => {
@@ -41,25 +52,20 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
     expect(ctx).toContain('redis');
   });
 
-  it('UserPromptSubmit reads pending action and returns evaluation instructions', async () => {
-    const dataDir = join(projectDir, '.entendi');
-    const action: PendingAction = {
+  it('UserPromptSubmit reads pending action from API and returns evaluation instructions', async () => {
+    mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
       depth: 1,
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const submitResult = await handleUserPromptSubmit(
-      {
-        session_id: 's1',
-        cwd: projectDir,
-        hook_event_name: 'UserPromptSubmit',
-        prompt: 'I need Redis for caching API responses',
-      },
-      { dataDir, skipLLM: true, userId: 'default' },
-    );
+    const submitResult = await handleUserPromptSubmit({
+      session_id: 's1',
+      cwd: projectDir,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'I need Redis for caching API responses',
+    });
 
     expect(submitResult).toBeDefined();
     expect(submitResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
@@ -83,25 +89,20 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
   });
 
   it('tutor active flow: hook returns phase-specific instructions', async () => {
-    const dataDir = join(projectDir, '.entendi');
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
       phase: 'phase2',
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(
-      {
-        session_id: 's1',
-        cwd: projectDir,
-        hook_event_name: 'UserPromptSubmit',
-        prompt: 'It uses memory instead of disk',
-      },
-      { dataDir, skipLLM: true, userId: 'default' },
-    );
+    const result = await handleUserPromptSubmit({
+      session_id: 's1',
+      cwd: projectDir,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'It uses memory instead of disk',
+    });
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -111,8 +112,6 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
   });
 
   it('no probe when concept is routine (hook still detects concepts)', async () => {
-    // PostToolUse is now a thin observer; it always returns concepts if found.
-    // Probe/skip logic is in the MCP entendi_observe tool.
     const result = await handlePostToolUse(
       {
         session_id: 's1',
@@ -124,7 +123,6 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
       { skipLLM: true },
     );
 
-    // Hook always returns concepts if it can map the package
     expect(result).toBeDefined();
     expect(result!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
   });
@@ -135,41 +133,43 @@ describe('Phase 1a Integration', () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'entendi-p1a-'));
+    process.env.ENTENDI_API_URL = 'http://localhost:3456';
+    process.env.ENTENDI_API_KEY = 'test-key';
   });
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    delete process.env.ENTENDI_API_URL;
+    delete process.env.ENTENDI_API_KEY;
   });
 
   it('PostToolUse detects concepts, UserPromptSubmit reads pending action', async () => {
-    const dataDir = join(tmpDir, '.entendi');
-
     // 1. Package install triggers concept detection
     const installResult = await handlePostToolUse(
       { session_id: 's1', cwd: tmpDir, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm install redis' }, tool_output: 'added redis@4' },
-      { skipLLM: true, dataDir, userId: 'student1' },
+      { skipLLM: true },
     );
     expect(installResult).toBeDefined();
     expect(installResult!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
 
-    // 2. Simulate MCP server having written a pending action (observe tool would do this)
-    const action: PendingAction = {
+    // 2. Simulate MCP server writing a pending action — mock API response
+    mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
       depth: 1,
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    // 3. User responds — hook reads pending action and returns instructions
+    // 3. User responds — hook reads pending action from API
     const respondResult = await handleUserPromptSubmit(
       { session_id: 's1', cwd: tmpDir, hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory data store used for caching.' },
-      { skipLLM: true, dataDir, userId: 'student1' },
     );
     expect(respondResult).toBeDefined();
     expect(respondResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
 
     // 4. Dashboard can still serve existing graph data
+    const dataDir = join(tmpDir, '.entendi');
     const sm = new StateManager(dataDir, 'student1');
     sm.save(); // ensure files exist
     const app = createDashboardApp(tmpDir);

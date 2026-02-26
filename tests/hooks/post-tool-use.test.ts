@@ -43,7 +43,7 @@ describe('handlePostToolUse (thin observer)', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null for packages not in the concept map', async () => {
+  it('returns raw package name as concept for unknown packages', async () => {
     const input = {
       session_id: 'test',
       cwd: '/tmp/test-project',
@@ -52,7 +52,10 @@ describe('handlePostToolUse (thin observer)', () => {
       tool_input: { command: 'npm install some-totally-unknown-xyz-pkg' },
     };
     const result = await handlePostToolUse(input);
-    expect(result).toBeNull();
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('some-totally-unknown-xyz-pkg');
+    expect(ctx).toContain('entendi_observe');
   });
 
   it('lists multiple concepts when multiple known packages are installed', async () => {

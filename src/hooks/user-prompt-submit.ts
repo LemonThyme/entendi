@@ -1,17 +1,9 @@
-import { readStdin, getDataDir, type HookInput } from './shared.js';
-import { readPendingAction } from '../mcp/pending-action.js';
-import type { PendingAction } from '../schemas/types.js';
+import { readStdin, type HookInput } from './shared.js';
 
 export interface UserPromptSubmitOutput {
   hookSpecificOutput?: {
     additionalContext?: string;
   };
-}
-
-interface UserPromptSubmitOptions {
-  dataDir?: string;
-  skipLLM?: boolean;
-  userId?: string;
 }
 
 // --- Teach-me pattern detection ---
@@ -22,11 +14,6 @@ const TEACH_ME_PATTERNS = [
   /help\s+me\s+understand\s+(.+)/i,
 ];
 
-/**
- * Detect "teach me about X" / "explain X" / "help me understand X" patterns.
- * Returns the extracted concept name (raw) or null if no match.
- * Does NOT validate against a knowledge graph — Claude + MCP handle that.
- */
 export function detectTeachMePattern(prompt: string): string | null {
   for (const pattern of TEACH_ME_PATTERNS) {
     const match = prompt.match(pattern);
@@ -37,17 +24,34 @@ export function detectTeachMePattern(prompt: string): string | null {
   return null;
 }
 
+// --- API client for pending actions ---
+
+async function fetchPendingAction(): Promise<any | null> {
+  const apiUrl = process.env.ENTENDI_API_URL;
+  const apiKey = process.env.ENTENDI_API_KEY;
+  if (!apiUrl || !apiKey) return null;
+
+  try {
+    const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
+      headers: { 'x-api-key': apiKey },
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { pending: any | null };
+    return data.pending;
+  } catch {
+    return null;
+  }
+}
+
 // --- Main handler ---
 
 export async function handleUserPromptSubmit(
   input: HookInput,
-  options: UserPromptSubmitOptions = {},
 ): Promise<UserPromptSubmitOutput | null> {
-  const dataDir = options.dataDir ?? getDataDir(input.cwd);
   const userPrompt = (input.prompt as string) ?? '';
 
-  // 1. Read pending action (written by MCP server)
-  const pending: PendingAction | null = readPendingAction(dataDir);
+  // 1. Check for pending action via API
+  const pending = await fetchPendingAction();
 
   if (pending) {
     switch (pending.type) {

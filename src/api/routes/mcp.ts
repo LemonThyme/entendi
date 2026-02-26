@@ -509,6 +509,24 @@ mcpRoutes.get('/zpd-frontier', async (c) => {
   return c.json({ frontier, totalConcepts: allCount.length, masteredCount });
 });
 
+// --- GET /pending-action — check for pending action (used by hooks) ---
+mcpRoutes.get('/pending-action', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user')!;
+
+  const [action] = await db.select().from(pendingActions)
+    .where(eq(pendingActions.userId, user.id));
+
+  if (!action) return c.json({ pending: null });
+
+  return c.json({
+    pending: {
+      type: action.actionType,
+      ...(action.data as Record<string, unknown>),
+    },
+  });
+});
+
 // --- Shared: Bayesian update against DB ---
 
 async function applyBayesianUpdateDb(

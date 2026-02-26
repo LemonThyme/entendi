@@ -1,23 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handlePostToolUse } from '../../src/hooks/post-tool-use.js';
 import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
-import { writePendingAction } from '../../src/mcp/pending-action.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 
-describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
-  let dataDir: string;
-  let projectDir: string;
+function mockPendingAction(action: PendingAction | null) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: action !== null,
+    json: async () => ({ pending: action }),
+  }));
+}
 
+describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
   beforeEach(() => {
-    projectDir = mkdtempSync(join(tmpdir(), 'entendi-tutor-flow-'));
-    dataDir = join(projectDir, '.entendi');
+    process.env.ENTENDI_API_URL = 'http://localhost:3456';
+    process.env.ENTENDI_API_KEY = 'test-key';
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    delete process.env.ENTENDI_API_URL;
+    delete process.env.ENTENDI_API_KEY;
   });
 
   it('reactive tutor flow: install -> probe instructions -> tutor offered -> phase instructions', async () => {
@@ -25,19 +27,19 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
     const postToolResult = await handlePostToolUse(
       {
         session_id: 'tutor-flow-test',
-        cwd: projectDir,
+        cwd: '/tmp',
         hook_event_name: 'PostToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'npm install redis' },
       },
-      { skipLLM: true, dataDir, userId: 'test-user' },
+      { skipLLM: true },
     );
 
     expect(postToolResult).toBeDefined();
     expect(postToolResult!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
 
-    // Step 2: MCP server writes awaiting_probe_response (simulating entendi_observe)
-    writePendingAction(dataDir, {
+    // Step 2: MCP server writes awaiting_probe_response — mock API response
+    mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
       depth: 1,
@@ -47,14 +49,13 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
     // Step 3: User responds to probe -> hook returns evaluation instructions
     const probeResponse = await handleUserPromptSubmit(
       { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'I dunno, it stores stuff I think?' },
-      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(probeResponse).toBeDefined();
     expect(probeResponse!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
 
-    // Step 4: MCP server writes tutor_offered (simulating entendi_record_evaluation)
-    writePendingAction(dataDir, {
+    // Step 4: MCP server writes tutor_offered — mock API response
+    mockPendingAction({
       type: 'tutor_offered',
       conceptId: 'Redis',
       triggerScore: 1,
@@ -64,14 +65,13 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
     // Step 5: User accepts tutor -> hook returns accept/decline instructions
     const acceptResult = await handleUserPromptSubmit(
       { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'yes' },
-      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(acceptResult).toBeDefined();
     expect(acceptResult!.hookSpecificOutput?.additionalContext).toContain('entendi_start_tutor');
 
-    // Step 6: MCP server writes tutor_active (simulating entendi_start_tutor)
-    writePendingAction(dataDir, {
+    // Step 6: MCP server writes tutor_active phase1 — mock API response
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
@@ -79,10 +79,9 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
       timestamp: new Date().toISOString(),
     });
 
-    // Step 7: User responds to phase1 -> hook returns phase1 instructions
+    // Step 7: User responds to phase1
     const phase1Result = await handleUserPromptSubmit(
       { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is a key-value store used for caching' },
-      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(phase1Result).toBeDefined();
@@ -92,7 +91,7 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
     expect(p1Ctx).toContain('0-3 rubric');
 
     // Step 8: MCP server advances to phase2
-    writePendingAction(dataDir, {
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
@@ -103,7 +102,6 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
     // Step 9: User responds to phase2
     const phase2Result = await handleUserPromptSubmit(
       { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'It uses memory instead of disk for speed' },
-      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(phase2Result).toBeDefined();
@@ -111,8 +109,8 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
     expect(p2Ctx).toContain('phase2');
     expect(p2Ctx).toContain('misconception');
 
-    // Steps 10-11: phase3 and phase4 follow the same pattern
-    writePendingAction(dataDir, {
+    // Steps 10-11: phase4
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
@@ -122,7 +120,6 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
 
     const phase4Result = await handleUserPromptSubmit(
       { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory store that trades durability for speed' },
-      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(phase4Result).toBeDefined();
@@ -133,10 +130,10 @@ describe('tutor-flow integration (Phase 1c — thin hooks)', () => {
   });
 
   it('proactive tutor flow: "teach me" -> start_tutor instructions', async () => {
-    // No pending action needed — teach-me pattern is detected directly
+    mockPendingAction(null);
+
     const teachResult = await handleUserPromptSubmit(
       { session_id: 'tutor-flow-test', cwd: '/tmp', hook_event_name: 'UserPromptSubmit', prompt: 'teach me about Redis' },
-      { dataDir, skipLLM: true, userId: 'test-user' },
     );
 
     expect(teachResult).toBeDefined();

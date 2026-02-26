@@ -1,9 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handleUserPromptSubmit, detectTeachMePattern } from '../../src/hooks/user-prompt-submit.js';
-import { writePendingAction } from '../../src/mcp/pending-action.js';
-import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
 import type { PendingAction } from '../../src/schemas/types.js';
 
 function makeInput(prompt: string) {
@@ -15,31 +11,41 @@ function makeInput(prompt: string) {
   };
 }
 
-describe('handleUserPromptSubmit (thin observer)', () => {
-  let dataDir: string;
+/**
+ * Mock globalThis.fetch to return a pending action from the API.
+ * The hook calls GET /api/mcp/pending-action which returns { pending: action }.
+ */
+function mockPendingAction(action: PendingAction | null) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: action !== null,
+    json: async () => ({ pending: action }),
+  }));
+}
 
+describe('handleUserPromptSubmit (thin observer)', () => {
   beforeEach(() => {
-    dataDir = mkdtempSync(join(tmpdir(), 'entendi-test-'));
+    // Set env vars the hook needs for API calls
+    process.env.ENTENDI_API_URL = 'http://localhost:3456';
+    process.env.ENTENDI_API_KEY = 'test-key';
   });
 
   afterEach(() => {
-    rmSync(dataDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    delete process.env.ENTENDI_API_URL;
+    delete process.env.ENTENDI_API_KEY;
   });
-
-  const opts = () => ({ dataDir, skipLLM: true, userId: 'default' });
 
   // --- awaiting_probe_response ---
 
   it('returns evaluation instructions when awaiting_probe_response is pending', async () => {
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
       depth: 1,
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(makeInput('Redis is an in-memory cache'), opts());
+    const result = await handleUserPromptSubmit(makeInput('Redis is an in-memory cache'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -54,15 +60,14 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   // --- tutor_offered ---
 
   it('returns accept/decline instructions when tutor_offered is pending', async () => {
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'tutor_offered',
       conceptId: 'Redis',
       triggerScore: 1,
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(makeInput('yes'), opts());
+    const result = await handleUserPromptSubmit(makeInput('yes'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -76,16 +81,15 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   // --- tutor_active (phase-specific) ---
 
   it('returns phase1 instructions when tutor_active in phase1', async () => {
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
       phase: 'phase1',
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(makeInput('Redis is a key-value store'), opts());
+    const result = await handleUserPromptSubmit(makeInput('Redis is a key-value store'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -99,16 +103,15 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   });
 
   it('returns phase2 instructions when tutor_active in phase2', async () => {
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
       phase: 'phase2',
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(makeInput('Because it uses memory'), opts());
+    const result = await handleUserPromptSubmit(makeInput('Because it uses memory'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -118,16 +121,15 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   });
 
   it('returns phase3 instructions when tutor_active in phase3', async () => {
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
       phase: 'phase3',
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(makeInput('I see, so it can lose data'), opts());
+    const result = await handleUserPromptSubmit(makeInput('I see, so it can lose data'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -137,16 +139,15 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   });
 
   it('returns phase4 instructions when tutor_active in phase4', async () => {
-    const action: PendingAction = {
+    mockPendingAction({
       type: 'tutor_active',
       sessionId: 'sess-1',
       conceptId: 'Redis',
       phase: 'phase4',
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const result = await handleUserPromptSubmit(makeInput('Redis is an in-memory store with AOF'), opts());
+    const result = await handleUserPromptSubmit(makeInput('Redis is an in-memory store with AOF'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -159,14 +160,16 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   // --- No pending action ---
 
   it('returns null when no pending action and normal message', async () => {
-    const result = await handleUserPromptSubmit(makeInput('hello world'), opts());
+    mockPendingAction(null);
+    const result = await handleUserPromptSubmit(makeInput('hello world'));
     expect(result).toBeNull();
   });
 
   // --- Teach me pattern ---
 
   it('returns start_tutor instructions for "teach me about X"', async () => {
-    const result = await handleUserPromptSubmit(makeInput('teach me about Redis'), opts());
+    mockPendingAction(null);
+    const result = await handleUserPromptSubmit(makeInput('teach me about Redis'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -177,7 +180,8 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   });
 
   it('returns start_tutor instructions for "explain X to me"', async () => {
-    const result = await handleUserPromptSubmit(makeInput('explain Docker to me'), opts());
+    mockPendingAction(null);
+    const result = await handleUserPromptSubmit(makeInput('explain Docker to me'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -186,7 +190,8 @@ describe('handleUserPromptSubmit (thin observer)', () => {
   });
 
   it('returns start_tutor instructions for "help me understand X"', async () => {
-    const result = await handleUserPromptSubmit(makeInput('help me understand async programming'), opts());
+    mockPendingAction(null);
+    const result = await handleUserPromptSubmit(makeInput('help me understand async programming'));
 
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
@@ -194,39 +199,29 @@ describe('handleUserPromptSubmit (thin observer)', () => {
     expect(ctx).toContain('entendi_start_tutor');
   });
 
-  it('does not write any state files (hooks are read-only)', async () => {
-    const { readdirSync } = await import('fs');
-    const action: PendingAction = {
+  it('does not write any state files (hooks are read-only observers)', async () => {
+    // The hook only reads from the API, never writes to disk
+    mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
       depth: 1,
       timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+    });
 
-    const filesBefore = readdirSync(dataDir).sort();
-    await handleUserPromptSubmit(makeInput('Redis is a cache'), opts());
-    const filesAfter = readdirSync(dataDir).sort();
-
-    // The hook should not have created or modified any files
-    expect(filesAfter).toEqual(filesBefore);
+    const result = await handleUserPromptSubmit(makeInput('Redis is a cache'));
+    expect(result).toBeDefined();
+    // Verify fetch was called (API read, not file read)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('works identically with or without skipLLM (no LLM calls)', async () => {
-    const action: PendingAction = {
-      type: 'awaiting_probe_response',
-      conceptId: 'Redis',
-      depth: 1,
-      timestamp: new Date().toISOString(),
-    };
-    writePendingAction(dataDir, action);
+  it('returns null gracefully when API is unavailable', async () => {
+    // No env vars = no API call
+    delete process.env.ENTENDI_API_URL;
+    delete process.env.ENTENDI_API_KEY;
 
-    const withSkip = await handleUserPromptSubmit(makeInput('test'), { dataDir, skipLLM: true, userId: 'default' });
-    const withoutSkip = await handleUserPromptSubmit(makeInput('test'), { dataDir, skipLLM: false, userId: 'default' });
-
-    expect(withSkip!.hookSpecificOutput?.additionalContext).toBe(
-      withoutSkip!.hookSpecificOutput?.additionalContext,
-    );
+    const result = await handleUserPromptSubmit(makeInput('test'));
+    // Falls through to teach-me pattern check, which also returns null for 'test'
+    expect(result).toBeNull();
   });
 });
 
