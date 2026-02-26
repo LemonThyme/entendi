@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import { eq, sql } from 'drizzle-orm';
-import { member, user, userConceptStates, assessmentEvents, concepts } from '../db/schema.js';
+import { eq, and, sql } from 'drizzle-orm';
+import { member, user, organization, userConceptStates, assessmentEvents, concepts } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
+import { z } from 'zod';
 import type { Env } from '../index.js';
 
 export const orgRoutes = new Hono<Env>();
@@ -165,5 +166,90 @@ orgRoutes.get('/analytics', async (c) => {
       assessedBy: Number(row.assessed_by),
       avgMastery: pMastery(Number(row.avg_mu)),
     })),
+  });
+});
+
+// --- Org Settings ---
+
+const rateLimitsSchema = z.object({
+  probeEvalsPerConcept: z.number().int().min(0).max(100).optional(),
+  probeEvalWindowHours: z.number().min(0).max(720).optional(),
+  probeIntervalSeconds: z.number().int().min(0).max(3600).optional(),
+  maxProbesPerHour: z.number().int().min(0).max(1000).optional(),
+});
+
+// GET /settings — get org settings (rate limits, etc.)
+orgRoutes.get('/settings', async (c) => {
+  const db = c.get('db');
+  const session = c.get('session');
+  const orgId = session?.activeOrganizationId;
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  let settings: Record<string, unknown> = {};
+  if (org.metadata) {
+    try { settings = JSON.parse(org.metadata); } catch { /* ignore */ }
+  }
+
+  return c.json({
+    rateLimitExempt: settings.rateLimitExempt === true,
+    rateLimits: {
+      probeEvalsPerConcept: (settings.rateLimits as any)?.probeEvalsPerConcept ?? 1,
+      probeEvalWindowHours: (settings.rateLimits as any)?.probeEvalWindowHours ?? 24,
+      probeIntervalSeconds: (settings.rateLimits as any)?.probeIntervalSeconds ?? 120,
+      maxProbesPerHour: (settings.rateLimits as any)?.maxProbesPerHour ?? 15,
+    },
+  });
+});
+
+// PUT /settings/rate-limits — update org rate limit settings (owner/admin only)
+orgRoutes.put('/settings/rate-limits', async (c) => {
+  const db = c.get('db');
+  const currentUser = c.get('user')!;
+  const session = c.get('session');
+  const orgId = session?.activeOrganizationId;
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  // Verify user is owner or admin
+  const [membership] = await db.select({ role: member.role }).from(member)
+    .where(and(eq(member.userId, currentUser.id), eq(member.organizationId, orgId)));
+  if (!membership || !['owner', 'admin'].includes(membership.role)) {
+    return c.json({ error: 'Only org owners and admins can update settings' }, 403);
+  }
+
+  const raw = await c.req.json();
+  const parsed = rateLimitsSchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation error', details: parsed.error.issues }, 400);
+  }
+
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  let existing: Record<string, unknown> = {};
+  if (org.metadata) {
+    try { existing = JSON.parse(org.metadata); } catch { /* ignore */ }
+  }
+
+  // Merge rate limits
+  const currentRl = (existing.rateLimits as Record<string, unknown>) ?? {};
+  existing.rateLimits = { ...currentRl, ...parsed.data };
+
+  // If all limits are 0, set rateLimitExempt for convenience
+  const rl = existing.rateLimits as Record<string, number>;
+  const allZero = rl.probeEvalsPerConcept === 0 && rl.probeEvalWindowHours === 0 &&
+    rl.probeIntervalSeconds === 0 && rl.maxProbesPerHour === 0;
+  existing.rateLimitExempt = allZero;
+
+  await db.update(organization).set({ metadata: JSON.stringify(existing) })
+    .where(eq(organization.id, orgId));
+
+  return c.json({
+    rateLimitExempt: existing.rateLimitExempt,
+    rateLimits: existing.rateLimits,
   });
 });

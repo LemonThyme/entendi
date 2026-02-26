@@ -17,6 +17,7 @@ import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.
 import { selectProbeCandidate } from '../../core/probe-selection.js';
 import { resolveConcept } from '../lib/concept-pipeline.js';
 import { resolveConceptId } from '../lib/concept-normalize.js';
+import { getOrgRateLimits } from '../lib/org-rate-limits.js';
 import { conceptSimilarity } from '../lib/embeddings.js';
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
@@ -214,19 +215,20 @@ mcpRoutes.post('/observe', async (c) => {
   // Recover the full candidate (with assessmentCount, daysSince, etc.) from the candidates array
   const selected = candidates.find(c => c.conceptId === selection.selected.conceptId)!;
 
-  // Rate limiting: check probe session
+  // Rate limiting: check probe session (org-configurable limits)
+  const orgLimits = await getOrgRateLimits(db, user.id);
+
   const [probeSession] = await db.select().from(probeSessions)
     .where(eq(probeSessions.userId, user.id));
 
   const now = Date.now();
-  const minIntervalMs = 2 * 60 * 1000; // 2 minutes
-  const maxProbesPerHour = 15;
 
   if (probeSession) {
-    if (probeSession.lastProbeTime && (now - new Date(probeSession.lastProbeTime).getTime()) < minIntervalMs) {
+    if (orgLimits.probeIntervalSeconds > 0 && probeSession.lastProbeTime &&
+        (now - new Date(probeSession.lastProbeTime).getTime()) < orgLimits.probeIntervalSeconds * 1000) {
       return c.json({ shouldProbe: false, conceptId: selected.conceptId, intrusiveness: 'skip', userProfile: 'unknown' });
     }
-    if (probeSession.probesThisSession >= maxProbesPerHour) {
+    if (orgLimits.maxProbesPerHour > 0 && probeSession.probesThisSession >= orgLimits.maxProbesPerHour) {
       return c.json({ shouldProbe: false, conceptId: selected.conceptId, intrusiveness: 'skip', userProfile: 'unknown' });
     }
   }
@@ -390,17 +392,22 @@ mcpRoutes.post('/record-evaluation', async (c) => {
       return c.json({ error: 'Invalid probe token: already used' }, 403);
     }
 
-    // Per-concept rate limit: 1 probe evaluation per concept per 24h
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [recentEval] = await db.select({ id: assessmentEvents.id }).from(assessmentEvents)
-      .where(and(
-        eq(assessmentEvents.userId, user.id),
-        eq(assessmentEvents.conceptId, body.conceptId),
-        eq(assessmentEvents.eventType, 'probe'),
-        sql`${assessmentEvents.createdAt} > ${oneDayAgo}`,
-      )).limit(1);
-    if (recentEval) {
-      return c.json({ error: 'Rate limit: only 1 probe evaluation per concept per 24 hours' }, 429);
+    // Per-concept rate limit (org-configurable)
+    const evalLimits = await getOrgRateLimits(db, user.id);
+    if (evalLimits.probeEvalsPerConcept > 0 && evalLimits.probeEvalWindowHours > 0) {
+      const windowStart = new Date(Date.now() - evalLimits.probeEvalWindowHours * 60 * 60 * 1000);
+      const recentEvals = await db.select({ id: assessmentEvents.id }).from(assessmentEvents)
+        .where(and(
+          eq(assessmentEvents.userId, user.id),
+          eq(assessmentEvents.conceptId, body.conceptId),
+          eq(assessmentEvents.eventType, 'probe'),
+          sql`${assessmentEvents.createdAt} > ${windowStart}`,
+        )).limit(evalLimits.probeEvalsPerConcept);
+      if (recentEvals.length >= evalLimits.probeEvalsPerConcept) {
+        return c.json({
+          error: `Rate limit: max ${evalLimits.probeEvalsPerConcept} probe evaluation(s) per concept per ${evalLimits.probeEvalWindowHours}h`,
+        }, 429);
+      }
     }
 
     // Mark token as used
