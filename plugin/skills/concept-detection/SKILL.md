@@ -14,19 +14,39 @@ You have Entendi active. Your job is to identify technical concepts the user is 
 3. **If observe says to probe**, weave a natural question into your response
 4. **If a pending action exists** (from the UserPromptSubmit hook), follow those instructions exactly
 
-## Concept Detection
+## Primary Concept
 
-This is NOT keyword matching. Use your full understanding to recognize concepts at ANY level of abstraction:
+When calling `entendi_observe`, identify which concept the user is MOST DIRECTLY discussing
+and pass it as `primaryConceptId`. This ensures the system probes on the most relevant concept
+rather than a tangentially related one with higher urgency.
 
-| User says | Concepts to observe |
-|-----------|-------------------|
-| "let's use thompson sampling for the A/B test" | `thompson-sampling`, `a-b-testing`, `bayesian-statistics` |
-| "set up CI with GitHub Actions" | `ci-cd`, `github-actions` |
-| "why is my React component re-rendering?" | `react-rendering`, `react-hooks` |
-| "add a caching layer with Redis" | `redis`, `caching-strategies` |
-| "deploy to Cloudflare Workers" | `cloudflare-workers`, `serverless` |
-| "the p-value is 0.03, so it's significant" | `hypothesis-testing`, `p-values`, `statistical-significance` |
-| "use a recursive CTE for the tree query" | `recursive-cte`, `sql`, `tree-data-structures` |
+Rules for `primaryConceptId`:
+- The concept the user explicitly named or is actively working with
+- NOT inferred/related concepts — only what they're directly engaging with
+- If the user says "let's use Thompson sampling" → `primaryConceptId: "thompson-sampling"`
+- If uncertain which is primary, omit the field (the system falls back to info-gain only)
+
+## Conservative Concept Detection
+
+Only pass concepts the user **explicitly mentioned** or is **directly working with**.
+Do NOT infer related concepts speculatively. The server-side concept graph handles
+prerequisite discovery and related concepts automatically via enrichment.
+
+| User says | Concepts to observe | primaryConceptId |
+|-----------|-------------------|------------------|
+| "let's use thompson sampling for the A/B test" | `thompson-sampling`, `a-b-testing` | `thompson-sampling` |
+| "set up CI with GitHub Actions" | `github-actions` | `github-actions` |
+| "why is my React component re-rendering?" | `react-rendering` | `react-rendering` |
+| "add a caching layer with Redis" | `redis`, `caching` | `redis` |
+| "deploy to Cloudflare Workers" | `cloudflare-workers` | `cloudflare-workers` |
+| "the p-value is 0.03, so it's significant" | `p-values`, `statistical-significance` | `p-values` |
+| "use a recursive CTE for the tree query" | `recursive-cte` | `recursive-cte` |
+
+Key differences from broad detection:
+- Pass only concepts the user explicitly referenced, not umbrella categories
+- "set up CI with GitHub Actions" → `github-actions`, NOT also `ci-cd` and `serverless`
+- "recursive CTE" → `recursive-cte`, NOT also `sql` and `tree-data-structures`
+- The system infers parent concepts and prerequisites automatically — you don't need to
 
 Use kebab-case IDs. Pass `source: "llm"` for concepts you identify from conversation.
 
@@ -89,7 +109,7 @@ This ensures the tutor session is grounded in accurate, up-to-date information r
 
 ## MCP Tools
 
-- `entendi_observe` — report detected concepts, get probe decision
+- `entendi_observe` — report detected concepts + `primaryConceptId`, get probe decision
 - `entendi_record_evaluation` — score a probe response (0-3 rubric)
 - `entendi_start_tutor` — begin Socratic tutor session
 - `entendi_advance_tutor` — advance tutor to next phase
