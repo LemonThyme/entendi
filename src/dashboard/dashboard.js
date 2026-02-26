@@ -813,9 +813,20 @@
     ]);
     area.appendChild(rankingsSection);
 
+    var integritySection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Response Integrity"),
+        h("div", { className: "section-subtitle" }, "Monitor response authenticity across your organization")
+      ]),
+      h("div", { className: "stats-row", id: "integrity-stats" }),
+      h("div", { id: "integrity-flagged-area" })
+    ]);
+    area.appendChild(integritySection);
+
     loadPendingInvites(org.id);
     loadMembers(org.id);
     loadRankings(org.id);
+    loadIntegrityStats();
   }
 
   function inviteMember(orgId) {
@@ -1077,6 +1088,98 @@
         area.appendChild(table);
       })
       .catch(function() {});
+  }
+
+  function loadIntegrityStats() {
+    fetch("/api/org/integrity", { headers: getHeaders() })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        var container = document.getElementById("integrity-stats");
+        if (!container) return;
+        container.textContent = "";
+
+        function statCard(value, label) {
+          return h("div", { className: "stat-card" }, [
+            h("div", { className: "stat-value" }, String(value)),
+            h("div", { className: "stat-label" }, label)
+          ]);
+        }
+
+        container.appendChild(statCard(
+          data.avgScore !== null ? (data.avgScore * 100).toFixed(0) + "%" : "\u2014",
+          "Avg Integrity"
+        ));
+        container.appendChild(statCard(String(data.flaggedCount || 0), "Flagged Responses"));
+        container.appendChild(statCard(String(data.flaggedMemberCount || 0), "Flagged Members"));
+        container.appendChild(statCard(String(data.totalWithIntegrity || 0), "Total Assessed"));
+      });
+    loadFlaggedResponses(1);
+  }
+
+  function loadFlaggedResponses(page) {
+    fetch("/api/org/integrity/flagged?page=" + page + "&limit=10", { headers: getHeaders() })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        var area = document.getElementById("integrity-flagged-area");
+        if (!area) return;
+        area.textContent = "";
+        if (!data || !data.items || data.items.length === 0) {
+          area.appendChild(h("div", { className: "empty-state" }, "No flagged responses yet."));
+          return;
+        }
+
+        var table = h("table", { className: "ranking-table" });
+        table.appendChild(h("thead", null, [
+          h("tr", null, [
+            h("th", null, "Member"),
+            h("th", null, "Concept"),
+            h("th", null, "Integrity"),
+            h("th", null, "Type"),
+            h("th", null, "When")
+          ])
+        ]));
+
+        var tbody = h("tbody");
+        data.items.forEach(function(item) {
+          var scoreText = (item.integrityScore * 100).toFixed(0) + "%";
+          var scoreStyle = item.integrityScore < 0.3 ? "color:var(--danger)" : "color:#b45309";
+          var scoreCell = h("td");
+          scoreCell.style.cssText = scoreStyle + ";font-weight:600";
+          scoreCell.textContent = scoreText;
+
+          var conceptCell = h("td");
+          conceptCell.textContent = item.conceptId;
+          conceptCell.style.fontFamily = "var(--mono)";
+          conceptCell.style.fontSize = "0.85rem";
+
+          tbody.appendChild(h("tr", null, [
+            h("td", null, item.userName || item.userEmail || "Unknown"),
+            conceptCell,
+            scoreCell,
+            h("td", null, item.eventType),
+            h("td", null, timeAgo(item.createdAt))
+          ]));
+        });
+        table.appendChild(tbody);
+        area.appendChild(table);
+
+        // Pagination
+        if (data.total > 10) {
+          var totalPages = Math.ceil(data.total / 10);
+          var paginationRow = h("div", { style: "display:flex;gap:0.5rem;justify-content:center;margin-top:0.75rem" });
+          for (var p = 1; p <= Math.min(totalPages, 5); p++) {
+            (function(pageNum) {
+              var btn = h("button", {
+                className: "filter-btn" + (pageNum === page ? " active" : ""),
+                onclick: function() { loadFlaggedResponses(pageNum); }
+              }, String(pageNum));
+              paginationRow.appendChild(btn);
+            })(p);
+          }
+          area.appendChild(paginationRow);
+        }
+      });
   }
 
   // --- Real-time updates via SSE ---

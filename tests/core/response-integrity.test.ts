@@ -5,6 +5,8 @@ import {
   computeIntegrityScore,
   updateResponseProfile,
   type UserResponseProfile,
+  type IntegrityThresholds,
+  DEFAULT_THRESHOLDS,
 } from '../../src/core/response-integrity.js';
 
 describe('extractResponseFeatures', () => {
@@ -190,5 +192,72 @@ describe('updateResponseProfile', () => {
     const updated = updateResponseProfile(existing, features);
     expect(updated.sampleCount).toBe(1);
     expect(updated.avgWordCount).toBe(features.wordCount);
+  });
+
+  it('applies custom emaAlpha weighting', () => {
+    const existing: UserResponseProfile = {
+      avgWordCount: 20,
+      avgCharCount: 100,
+      avgCharsPerSecond: 5,
+      avgFormattingScore: 0,
+      avgVocabComplexity: 0.1,
+      sampleCount: 5,
+    };
+
+    const features = extractResponseFeatures('short', 2000);
+    const updated = updateResponseProfile(existing, features, 0.5);
+
+    // EMA with alpha=0.5: new = 0.5 * current + 0.5 * existing
+    expect(updated.avgWordCount).toBeCloseTo(0.5 * 1 + 0.5 * 20);
+    expect(updated.sampleCount).toBe(6);
+  });
+});
+
+describe('computeIntegrityScore with custom thresholds', () => {
+  it('flags at lower speed with custom lower charsPerSecondThreshold', () => {
+    // 50 chars in 5 seconds = 10 cps; default threshold is 15, so normally not flagged
+    const text = 'a'.repeat(50);
+    const features = extractResponseFeatures(text, 5000);
+    expect(features.charsPerSecond).toBeCloseTo(10);
+
+    // Default: should NOT flag
+    const resultDefault = computeIntegrityScore(features);
+    expect(resultDefault.flags).not.toContain('typing_speed_anomaly');
+
+    // Custom lower threshold of 8 cps: should flag
+    const strictThresholds: IntegrityThresholds = {
+      ...DEFAULT_THRESHOLDS,
+      charsPerSecondThreshold: 8,
+    };
+    const resultStrict = computeIntegrityScore(features, undefined, strictThresholds);
+    expect(resultStrict.flags).toContain('typing_speed_anomaly');
+    expect(resultStrict.score).toBeLessThan(1.0);
+  });
+
+  it('does NOT flag with custom higher charsPerSecondThreshold', () => {
+    // 200 chars in 10 seconds = 20 cps; default threshold 15 would flag
+    const text = 'a'.repeat(200);
+    const features = extractResponseFeatures(text, 10000);
+    expect(features.charsPerSecond).toBeCloseTo(20);
+
+    // Default: should flag
+    const resultDefault = computeIntegrityScore(features);
+    expect(resultDefault.flags).toContain('typing_speed_anomaly');
+
+    // Lenient threshold of 25 cps: should NOT flag
+    const lenientThresholds: IntegrityThresholds = {
+      ...DEFAULT_THRESHOLDS,
+      charsPerSecondThreshold: 25,
+    };
+    const resultLenient = computeIntegrityScore(features, undefined, lenientThresholds);
+    expect(resultLenient.flags).not.toContain('typing_speed_anomaly');
+  });
+
+  it('backward compatibility: existing tests pass without thresholds param', () => {
+    // This verifies the default behavior is unchanged
+    const features = extractResponseFeatures('I think it uses Bayesian updating', 15000);
+    const result = computeIntegrityScore(features);
+    expect(result.score).toBeCloseTo(1.0);
+    expect(result.flags).toHaveLength(0);
   });
 });

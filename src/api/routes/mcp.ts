@@ -19,6 +19,7 @@ import { selectProbeCandidate } from '../../core/probe-selection.js';
 import { resolveConcept } from '../lib/concept-pipeline.js';
 import { resolveConceptId } from '../lib/concept-normalize.js';
 import { getOrgRateLimits } from '../lib/org-rate-limits.js';
+import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
 import { conceptSimilarity } from '../lib/embeddings.js';
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
@@ -423,6 +424,7 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   let integrityScore: number | undefined;
   let integrityFlags: string[] = [];
   let responseFeatures: Record<string, unknown> | undefined;
+  let dampeningThreshold: number | undefined;
   if (body.eventType === 'probe' && body.responseText && body.probeToken) {
     const responseTimeMs = Date.now() - new Date(body.probeToken.issuedAt).getTime();
     const features = extractResponseFeatures(body.responseText, responseTimeMs);
@@ -440,12 +442,14 @@ mcpRoutes.post('/record-evaluation', async (c) => {
       sampleCount: profile.sampleCount,
     } : undefined;
 
-    const integrity = computeIntegrityScore(features, baseline);
+    const integritySettings = await getOrgIntegritySettings(db, user.id);
+    const integrity = computeIntegrityScore(features, baseline, integritySettings);
     integrityScore = integrity.score;
     integrityFlags = integrity.flags;
+    dampeningThreshold = integritySettings.dampeningThreshold;
 
     // Update user response profile with EMA
-    const updatedProfile = updateResponseProfile(baseline ?? null, features);
+    const updatedProfile = updateResponseProfile(baseline ?? null, features, integritySettings.emaAlpha);
     await db.insert(responseProfiles).values({
       userId: user.id,
       avgWordCount: updatedProfile.avgWordCount,
@@ -479,6 +483,7 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     evaluationCriteria,
     integrityScore,
     responseFeatures,
+    dampeningThreshold,
   });
 
   // Clear pending action
@@ -615,6 +620,7 @@ mcpRoutes.post('/tutor/advance', async (c) => {
 
     // Response integrity analysis for tutor responses
     let responseFeatures: Record<string, unknown> | undefined;
+    let tutorDampeningThreshold: number | undefined;
     if (body.userResponse) {
       const responseTimeMs = Date.now() - new Date(session.lastActivityAt).getTime();
       const features = extractResponseFeatures(body.userResponse, responseTimeMs);
@@ -631,12 +637,14 @@ mcpRoutes.post('/tutor/advance', async (c) => {
         sampleCount: profile.sampleCount,
       } : undefined;
 
-      const integrity = computeIntegrityScore(features, baseline);
+      const integritySettings = await getOrgIntegritySettings(db, user.id);
+      const integrity = computeIntegrityScore(features, baseline, integritySettings);
       integrityScore = integrity.score;
       integrityFlags = integrity.flags;
+      tutorDampeningThreshold = integritySettings.dampeningThreshold;
 
       // Update user response profile with EMA
-      const updatedProfile = updateResponseProfile(baseline ?? null, features);
+      const updatedProfile = updateResponseProfile(baseline ?? null, features, integritySettings.emaAlpha);
       await db.insert(responseProfiles).values({
         userId: user.id,
         avgWordCount: updatedProfile.avgWordCount,
@@ -668,6 +676,7 @@ mcpRoutes.post('/tutor/advance', async (c) => {
       responseText: body.userResponse,
       integrityScore,
       responseFeatures,
+      dampeningThreshold: tutorDampeningThreshold,
     });
     masteryUpdate = { before: result.previousMastery, after: result.newMastery };
 
@@ -944,6 +953,7 @@ async function applyBayesianUpdateDb(
     evaluationCriteria?: string;
     integrityScore?: number;
     responseFeatures?: Record<string, unknown>;
+    dampeningThreshold?: number;
   },
 ) {
   const { conceptId, score, confidence, eventType } = input;
@@ -1020,7 +1030,8 @@ async function applyBayesianUpdateDb(
   }
 
   // 4b. Integrity dampening — suspicious responses shouldn't move mastery much
-  if (input.integrityScore !== undefined && input.integrityScore < 0.5) {
+  const dampThreshold = input.dampeningThreshold ?? 0.5;
+  if (input.integrityScore !== undefined && input.integrityScore < dampThreshold) {
     const dampFactor = input.integrityScore;
     newMu = currentMu + dampFactor * (newMu - currentMu);
     newSigma = currentSigma + dampFactor * (newSigma - currentSigma);

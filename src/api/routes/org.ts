@@ -196,6 +196,17 @@ const rateLimitsSchema = z.object({
   maxProbesPerHour: z.number().int().min(0).max(1000).optional(),
 });
 
+const integritySettingsSchema = z.object({
+  charsPerSecondThreshold: z.number().min(1).max(100).optional(),
+  formattingScoreThreshold: z.number().int().min(0).max(50).optional(),
+  wordCountThreshold: z.number().int().min(10).max(2000).optional(),
+  styleDriftWordCountRatio: z.number().min(1).max(20).optional(),
+  styleDriftCharsPerSecRatio: z.number().min(1).max(20).optional(),
+  styleDriftFormattingDiff: z.number().min(0).max(20).optional(),
+  dampeningThreshold: z.number().min(0).max(1).optional(),
+  emaAlpha: z.number().min(0.01).max(1).optional(),
+});
+
 // GET /settings — get org settings (rate limits, etc.)
 orgRoutes.get('/settings', async (c) => {
   const db = c.get('db');
@@ -218,6 +229,16 @@ orgRoutes.get('/settings', async (c) => {
       probeEvalWindowHours: (settings.rateLimits as any)?.probeEvalWindowHours ?? 24,
       probeIntervalSeconds: (settings.rateLimits as any)?.probeIntervalSeconds ?? 120,
       maxProbesPerHour: (settings.rateLimits as any)?.maxProbesPerHour ?? 15,
+    },
+    integritySettings: {
+      charsPerSecondThreshold: (settings.integritySettings as any)?.charsPerSecondThreshold ?? 15,
+      formattingScoreThreshold: (settings.integritySettings as any)?.formattingScoreThreshold ?? 3,
+      wordCountThreshold: (settings.integritySettings as any)?.wordCountThreshold ?? 150,
+      styleDriftWordCountRatio: (settings.integritySettings as any)?.styleDriftWordCountRatio ?? 3,
+      styleDriftCharsPerSecRatio: (settings.integritySettings as any)?.styleDriftCharsPerSecRatio ?? 2.5,
+      styleDriftFormattingDiff: (settings.integritySettings as any)?.styleDriftFormattingDiff ?? 3,
+      dampeningThreshold: (settings.integritySettings as any)?.dampeningThreshold ?? 0.5,
+      emaAlpha: (settings.integritySettings as any)?.emaAlpha ?? 0.3,
     },
   });
 });
@@ -267,5 +288,157 @@ orgRoutes.put('/settings/rate-limits', async (c) => {
   return c.json({
     rateLimitExempt: existing.rateLimitExempt,
     rateLimits: existing.rateLimits,
+  });
+});
+
+// PUT /settings/integrity — update org integrity settings (owner/admin only)
+orgRoutes.put('/settings/integrity', async (c) => {
+  const db = c.get('db');
+  const currentUser = c.get('user')!;
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  // Verify user is owner or admin
+  const [membership] = await db.select({ role: member.role }).from(member)
+    .where(and(eq(member.userId, currentUser.id), eq(member.organizationId, orgId)));
+  if (!membership || !['owner', 'admin'].includes(membership.role)) {
+    return c.json({ error: 'Only org owners and admins can update settings' }, 403);
+  }
+
+  const raw = await c.req.json();
+  const parsed = integritySettingsSchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation error', details: parsed.error.issues }, 400);
+  }
+
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  let existing: Record<string, unknown> = {};
+  if (org.metadata) {
+    try { existing = JSON.parse(org.metadata); } catch { /* ignore */ }
+  }
+
+  // Merge integrity settings
+  const currentIs = (existing.integritySettings as Record<string, unknown>) ?? {};
+  existing.integritySettings = { ...currentIs, ...parsed.data };
+
+  await db.update(organization).set({ metadata: JSON.stringify(existing) })
+    .where(eq(organization.id, orgId));
+
+  return c.json({
+    integritySettings: existing.integritySettings,
+  });
+});
+
+// GET /integrity — aggregate integrity analytics for org
+orgRoutes.get('/integrity', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  // Get org members
+  const members = await db.select({ userId: member.userId }).from(member)
+    .where(eq(member.organizationId, orgId));
+  const memberIds = members.map(m => m.userId);
+  if (memberIds.length === 0) return c.json({ totalWithIntegrity: 0, avgScore: null, flaggedCount: 0, flaggedMemberCount: 0 });
+
+  // Get org's dampening threshold for flagging cutoff
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+  let dampeningThreshold = 0.5;
+  if (org?.metadata) {
+    try {
+      const parsed = JSON.parse(org.metadata);
+      if (typeof parsed.integritySettings?.dampeningThreshold === 'number') {
+        dampeningThreshold = parsed.integritySettings.dampeningThreshold;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Aggregate query
+  const result = await db.execute(sql`
+    SELECT
+      COUNT(*)::int as total,
+      AVG(integrity_score) as avg_score,
+      COUNT(CASE WHEN integrity_score < ${dampeningThreshold} THEN 1 END)::int as flagged_count,
+      COUNT(DISTINCT CASE WHEN integrity_score < ${dampeningThreshold} THEN user_id END)::int as flagged_members
+    FROM assessment_events
+    WHERE user_id = ANY(${memberIds}) AND integrity_score IS NOT NULL
+  `);
+
+  const row = result.rows[0] as any;
+  return c.json({
+    totalWithIntegrity: row?.total ?? 0,
+    avgScore: row?.avg_score ? Number(row.avg_score) : null,
+    flaggedCount: row?.flagged_count ?? 0,
+    flaggedMemberCount: row?.flagged_members ?? 0,
+  });
+});
+
+// GET /integrity/flagged — paginated list of flagged assessment events
+orgRoutes.get('/integrity/flagged', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const page = Math.max(1, Number(c.req.query('page') || '1'));
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') || '20')));
+  const offset = (page - 1) * limit;
+
+  const members = await db.select({ userId: member.userId }).from(member)
+    .where(eq(member.organizationId, orgId));
+  const memberIds = members.map(m => m.userId);
+  if (memberIds.length === 0) return c.json({ items: [], total: 0, page, limit });
+
+  // Get org's dampening threshold
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+  let dampeningThreshold = 0.5;
+  if (org?.metadata) {
+    try {
+      const parsed = JSON.parse(org.metadata);
+      if (typeof parsed.integritySettings?.dampeningThreshold === 'number') {
+        dampeningThreshold = parsed.integritySettings.dampeningThreshold;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Count total
+  const countResult = await db.execute(sql`
+    SELECT COUNT(*)::int as total FROM assessment_events
+    WHERE user_id = ANY(${memberIds}) AND integrity_score IS NOT NULL AND integrity_score < ${dampeningThreshold}
+  `);
+  const total = (countResult.rows[0] as any)?.total ?? 0;
+
+  // Fetch page
+  const items = await db.execute(sql`
+    SELECT ae.id, ae.user_id, u.name as user_name, u.email as user_email,
+           ae.concept_id, ae.integrity_score, ae.response_features,
+           ae.event_type, ae.rubric_score, ae.created_at
+    FROM assessment_events ae
+    JOIN "user" u ON ae.user_id = u.id
+    WHERE ae.user_id = ANY(${memberIds}) AND ae.integrity_score IS NOT NULL AND ae.integrity_score < ${dampeningThreshold}
+    ORDER BY ae.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+  return c.json({
+    items: items.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      userName: r.user_name,
+      userEmail: r.user_email,
+      conceptId: r.concept_id,
+      integrityScore: Number(r.integrity_score),
+      responseFeatures: r.response_features,
+      eventType: r.event_type,
+      rubricScore: r.rubric_score,
+      createdAt: r.created_at,
+    })),
+    total,
+    page,
+    limit,
   });
 });

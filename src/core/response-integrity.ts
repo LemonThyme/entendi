@@ -25,6 +25,24 @@ export interface IntegrityResult {
   features: ResponseFeatures;
 }
 
+export interface IntegrityThresholds {
+  charsPerSecondThreshold: number;
+  formattingScoreThreshold: number;
+  wordCountThreshold: number;
+  styleDriftWordCountRatio: number;
+  styleDriftCharsPerSecRatio: number;
+  styleDriftFormattingDiff: number;
+}
+
+export const DEFAULT_THRESHOLDS: IntegrityThresholds = {
+  charsPerSecondThreshold: 15,
+  formattingScoreThreshold: 3,
+  wordCountThreshold: 150,
+  styleDriftWordCountRatio: 3,
+  styleDriftCharsPerSecRatio: 2.5,
+  styleDriftFormattingDiff: 3,
+};
+
 export function extractResponseFeatures(text: string, responseTimeMs: number): ResponseFeatures {
   const trimmed = text.trim();
   const charCount = trimmed.length;
@@ -65,29 +83,31 @@ export function extractResponseFeatures(text: string, responseTimeMs: number): R
 export function computeIntegrityScore(
   features: ResponseFeatures,
   baseline?: UserResponseProfile,
+  thresholds?: IntegrityThresholds,
 ): IntegrityResult {
+  const t = thresholds ?? DEFAULT_THRESHOLDS;
   const flags: string[] = [];
   let score = 1.0;
 
   // Typing speed anomaly: human typing is ~5-8 chars/sec
-  if (features.charsPerSecond > 15) {
+  if (features.charsPerSecond > t.charsPerSecondThreshold) {
     flags.push('typing_speed_anomaly');
-    // Scale penalty: 15 cps = mild, 50+ cps = severe
-    const penalty = Math.min(0.6, (features.charsPerSecond - 15) / 50);
+    // Scale penalty: threshold cps = mild, threshold+35 cps = severe
+    const penalty = Math.min(0.6, (features.charsPerSecond - t.charsPerSecondThreshold) / 50);
     score *= (1 - penalty);
   }
 
   // Excessive markdown formatting in chat
-  if (features.formattingScore > 3) {
+  if (features.formattingScore > t.formattingScoreThreshold) {
     flags.push('excessive_formatting');
-    const penalty = Math.min(0.4, (features.formattingScore - 3) * 0.1);
+    const penalty = Math.min(0.4, (features.formattingScore - t.formattingScoreThreshold) * 0.1);
     score *= (1 - penalty);
   }
 
   // Excessive length for a probe response
-  if (features.wordCount > 150) {
+  if (features.wordCount > t.wordCountThreshold) {
     flags.push('excessive_length');
-    const penalty = Math.min(0.3, (features.wordCount - 150) / 500);
+    const penalty = Math.min(0.3, (features.wordCount - t.wordCountThreshold) / 500);
     score *= (1 - penalty);
   }
 
@@ -99,21 +119,21 @@ export function computeIntegrityScore(
     // Word count drift
     if (baseline.avgWordCount > 0) {
       const ratio = features.wordCount / baseline.avgWordCount;
-      if (ratio > 3) { driftSignals++; }
+      if (ratio > t.styleDriftWordCountRatio) { driftSignals++; }
       driftCount++;
     }
 
     // Chars per second drift
     if (baseline.avgCharsPerSecond > 0) {
       const ratio = features.charsPerSecond / baseline.avgCharsPerSecond;
-      if (ratio > 2.5) { driftSignals++; }
+      if (ratio > t.styleDriftCharsPerSecRatio) { driftSignals++; }
       driftCount++;
     }
 
     // Formatting drift
     if (baseline.avgFormattingScore >= 0) {
       const diff = features.formattingScore - baseline.avgFormattingScore;
-      if (diff > 3) { driftSignals++; }
+      if (diff > t.styleDriftFormattingDiff) { driftSignals++; }
       driftCount++;
     }
 
@@ -128,11 +148,10 @@ export function computeIntegrityScore(
   return { score, flags, features };
 }
 
-const EMA_ALPHA = 0.3;
-
 export function updateResponseProfile(
   existing: UserResponseProfile | null,
   features: ResponseFeatures,
+  emaAlpha?: number,
 ): UserResponseProfile {
   if (!existing || existing.sampleCount === 0) {
     return {
@@ -145,12 +164,13 @@ export function updateResponseProfile(
     };
   }
 
+  const alpha = emaAlpha ?? 0.3;
   return {
-    avgWordCount: EMA_ALPHA * features.wordCount + (1 - EMA_ALPHA) * existing.avgWordCount,
-    avgCharCount: EMA_ALPHA * features.charCount + (1 - EMA_ALPHA) * existing.avgCharCount,
-    avgCharsPerSecond: EMA_ALPHA * features.charsPerSecond + (1 - EMA_ALPHA) * existing.avgCharsPerSecond,
-    avgFormattingScore: EMA_ALPHA * features.formattingScore + (1 - EMA_ALPHA) * existing.avgFormattingScore,
-    avgVocabComplexity: EMA_ALPHA * features.vocabularyComplexity + (1 - EMA_ALPHA) * existing.avgVocabComplexity,
+    avgWordCount: alpha * features.wordCount + (1 - alpha) * existing.avgWordCount,
+    avgCharCount: alpha * features.charCount + (1 - alpha) * existing.avgCharCount,
+    avgCharsPerSecond: alpha * features.charsPerSecond + (1 - alpha) * existing.avgCharsPerSecond,
+    avgFormattingScore: alpha * features.formattingScore + (1 - alpha) * existing.avgFormattingScore,
+    avgVocabComplexity: alpha * features.vocabularyComplexity + (1 - alpha) * existing.avgVocabComplexity,
     sampleCount: existing.sampleCount + 1,
   };
 }
