@@ -258,11 +258,27 @@ mcpRoutes.post('/observe', async (c) => {
   });
 
   const concept = selected.conceptId.replace(/\//g, ' ').replace(/-/g, ' ');
-  const guidance = depth === 1
-    ? `Ask about the core purpose and basic usage of ${concept}`
-    : depth === 2
-    ? `Ask about trade-offs and design decisions related to ${concept}`
-    : `Ask about edge cases and failure modes in ${concept}`;
+  const masteryPct = Math.round(pMastery(selected.mu) * 100);
+
+  // Context-aware guidance: depth probing per Design Doc Section 4.3.3
+  let guidance: string;
+  if (depth === 1) {
+    guidance = `Ask about the core purpose and basic usage of ${concept}.`;
+    if (masteryPct > 0 && masteryPct < 50) {
+      guidance += ` Previous assessment suggests gaps — focus on fundamentals.`;
+    }
+  } else if (depth === 2) {
+    guidance = `Ask about trade-offs and design decisions related to ${concept}.`;
+    guidance += ` Probe why they chose it over alternatives.`;
+  } else {
+    guidance = `Ask about edge cases and failure modes in ${concept}.`;
+    guidance += ` Ask when NOT to use it and what could break.`;
+  }
+
+  // Add trigger context to guidance so Claude can reference what the user was doing
+  if (body.triggerContext) {
+    guidance += ` Context: user was ${body.triggerContext}.`;
+  }
 
   return c.json({
     shouldProbe: true,
@@ -271,6 +287,8 @@ mcpRoutes.post('/observe', async (c) => {
     intrusiveness,
     guidance,
     userProfile,
+    mastery: masteryPct,
+    urgency: selected.urgency,
   });
 });
 
