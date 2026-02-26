@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-const { mockBetterAuth } = vi.hoisted(() => {
+const { mockBetterAuth, mockSendEmail, mockOrganization } = vi.hoisted(() => {
   const mockBetterAuth = vi.fn().mockReturnValue({
     api: { getSession: vi.fn(), createApiKey: vi.fn() },
     handler: vi.fn(),
   });
-  return { mockBetterAuth };
+  const mockSendEmail = vi.fn().mockResolvedValue({ id: 'test-email-id' });
+  const mockOrganization = vi.fn((opts: any) => ({ id: 'organization', _opts: opts }));
+  return { mockBetterAuth, mockSendEmail, mockOrganization };
 });
 
 vi.mock('better-auth', () => ({
@@ -17,9 +19,14 @@ vi.mock('better-auth/adapters/drizzle', () => ({
 }));
 
 vi.mock('better-auth/plugins', () => ({
-  organization: vi.fn(() => ({ id: 'organization' })),
+  organization: mockOrganization,
   apiKey: vi.fn(() => ({ id: 'api-key' })),
   bearer: vi.fn(() => ({ id: 'bearer' })),
+}));
+
+vi.mock('../../src/api/lib/email.js', () => ({
+  sendEmail: mockSendEmail,
+  EmailTemplate: { OrgInvite: 'org_invite' },
 }));
 
 import { createAuth } from '../../src/api/lib/auth.js';
@@ -74,6 +81,34 @@ describe('auth config', () => {
 
     const config = mockBetterAuth.mock.calls[0][0];
     expect(config.socialProviders).toBeUndefined();
+  });
+
+  it('configures sendInvitationEmail callback on organization plugin', async () => {
+    createAuth({} as any, { secret: 'test-secret', baseURL: 'http://localhost:3456' });
+
+    // organization() was called with options that include sendInvitationEmail
+    const orgOpts = mockOrganization.mock.calls[0][0];
+    expect(orgOpts.sendInvitationEmail).toBeDefined();
+    expect(typeof orgOpts.sendInvitationEmail).toBe('function');
+
+    // Call the callback and verify it sends email
+    await orgOpts.sendInvitationEmail({
+      id: 'inv-123',
+      role: 'member',
+      email: 'newuser@example.com',
+      organization: { id: 'org-1', name: 'Test Org' },
+      invitation: {},
+      inviter: {},
+    });
+
+    expect(mockSendEmail).toHaveBeenCalledWith({
+      to: 'newuser@example.com',
+      template: 'org_invite',
+      vars: {
+        orgName: 'Test Org',
+        inviteLink: expect.stringContaining('inv-123'),
+      },
+    });
   });
 
   it('includes only github when only github env vars are set', () => {
