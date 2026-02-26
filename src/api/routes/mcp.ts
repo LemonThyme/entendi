@@ -4,10 +4,11 @@ import { z } from 'zod';
 import {
   concepts, conceptEdges, userConceptStates, assessmentEvents,
   tutorSessions, tutorExchanges, probeSessions, pendingActions,
-  probeTokens, dismissalEvents,
+  probeTokens, dismissalEvents, responseProfiles,
 } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createProbeToken, verifyProbeToken, type ProbeToken } from '../../core/probe-token.js';
+import { extractResponseFeatures, computeIntegrityScore, updateResponseProfile, type UserResponseProfile } from '../../core/response-integrity.js';
 import {
   grmUpdate, grmFisherInformation, retrievability, decayPrior,
   mapRubricToFsrsGrade, fsrsStabilityAfterSuccess, fsrsDifficultyUpdate,
@@ -418,6 +419,55 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     evaluationCriteria = body.probeToken.evaluationCriteria;
   }
 
+  // Response integrity analysis (only for probe events with responseText)
+  let integrityScore: number | undefined;
+  let integrityFlags: string[] = [];
+  let responseFeatures: Record<string, unknown> | undefined;
+  if (body.eventType === 'probe' && body.responseText && body.probeToken) {
+    const responseTimeMs = Date.now() - new Date(body.probeToken.issuedAt).getTime();
+    const features = extractResponseFeatures(body.responseText, responseTimeMs);
+    responseFeatures = features as unknown as Record<string, unknown>;
+
+    // Load user baseline profile
+    const [profile] = await db.select().from(responseProfiles)
+      .where(eq(responseProfiles.userId, user.id));
+    const baseline: UserResponseProfile | undefined = profile ? {
+      avgWordCount: profile.avgWordCount,
+      avgCharCount: profile.avgCharCount,
+      avgCharsPerSecond: profile.avgCharsPerSecond,
+      avgFormattingScore: profile.avgFormattingScore,
+      avgVocabComplexity: profile.avgVocabComplexity,
+      sampleCount: profile.sampleCount,
+    } : undefined;
+
+    const integrity = computeIntegrityScore(features, baseline);
+    integrityScore = integrity.score;
+    integrityFlags = integrity.flags;
+
+    // Update user response profile with EMA
+    const updatedProfile = updateResponseProfile(baseline ?? null, features);
+    await db.insert(responseProfiles).values({
+      userId: user.id,
+      avgWordCount: updatedProfile.avgWordCount,
+      avgCharCount: updatedProfile.avgCharCount,
+      avgCharsPerSecond: updatedProfile.avgCharsPerSecond,
+      avgFormattingScore: updatedProfile.avgFormattingScore,
+      avgVocabComplexity: updatedProfile.avgVocabComplexity,
+      sampleCount: updatedProfile.sampleCount,
+    }).onConflictDoUpdate({
+      target: responseProfiles.userId,
+      set: {
+        avgWordCount: updatedProfile.avgWordCount,
+        avgCharCount: updatedProfile.avgCharCount,
+        avgCharsPerSecond: updatedProfile.avgCharsPerSecond,
+        avgFormattingScore: updatedProfile.avgFormattingScore,
+        avgVocabComplexity: updatedProfile.avgVocabComplexity,
+        sampleCount: updatedProfile.sampleCount,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
   const result = await applyBayesianUpdateDb(db, user.id, {
     conceptId: body.conceptId,
     score: body.score,
@@ -427,6 +477,8 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     probeTokenId,
     responseText: body.responseText,
     evaluationCriteria,
+    integrityScore,
+    responseFeatures,
   });
 
   // Clear pending action
@@ -460,6 +512,8 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     sigma: result.newSigma,
     previousSigma: result.previousSigma,
     shouldOfferTutor,
+    integrityScore,
+    integrityFlags: integrityFlags.length > 0 ? integrityFlags : undefined,
     message: `Mastery ${direction} from ${(result.previousMastery * 100).toFixed(1)}% to ${(result.newMastery * 100).toFixed(1)}%`,
   });
 });
@@ -832,6 +886,8 @@ async function applyBayesianUpdateDb(
     probeTokenId?: string;
     responseText?: string;
     evaluationCriteria?: string;
+    integrityScore?: number;
+    responseFeatures?: Record<string, unknown>;
   },
 ) {
   const { conceptId, score, confidence, eventType } = input;
@@ -907,6 +963,13 @@ async function applyBayesianUpdateDb(
     newUntutoredCount += 1;
   }
 
+  // 4b. Integrity dampening — suspicious responses shouldn't move mastery much
+  if (input.integrityScore !== undefined && input.integrityScore < 0.5) {
+    const dampFactor = input.integrityScore;
+    newMu = currentMu + dampFactor * (newMu - currentMu);
+    newSigma = currentSigma + dampFactor * (newSigma - currentSigma);
+  }
+
   // 5. Record assessment event
   const probeDepth = eventType === 'probe' ? 1 : eventType === 'tutor_phase1' ? 1 : 3;
   await db.insert(assessmentEvents).values({
@@ -922,6 +985,8 @@ async function applyBayesianUpdateDb(
     probeTokenId: input.probeTokenId,
     responseText: input.responseText,
     evaluationCriteria: input.evaluationCriteria,
+    responseFeatures: input.responseFeatures,
+    integrityScore: input.integrityScore,
   });
 
   // 6. Upsert user concept state

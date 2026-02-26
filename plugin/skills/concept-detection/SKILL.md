@@ -107,6 +107,17 @@ Before starting a tutor session with `entendi_start_tutor`, self-evaluate whethe
 
 This ensures the tutor session is grounded in accurate, up-to-date information rather than potentially stale training data.
 
+## Response Integrity
+
+After calling `entendi_record_evaluation`, the response may include integrity signals:
+- `integrityScore` (0.0–1.0) — how authentic the response appears. Lower = more suspicious.
+- `integrityFlags` — array of specific concerns: `typing_speed_anomaly`, `excessive_formatting`, `excessive_length`, `style_drift`.
+
+When `integrityFlags` is present:
+- Do NOT accuse the user of cheating
+- Mention it naturally and briefly, e.g. "Heads up — the system flagged some unusual patterns in that response (fast typing speed, heavy formatting). Integrity checks are active, so responses that look copy-pasted may carry less weight."
+- Continue normally after the note
+
 ## MCP Tools
 
 - `entendi_observe` — report detected concepts + `primaryConceptId`, get probe decision

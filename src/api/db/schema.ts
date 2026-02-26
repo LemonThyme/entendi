@@ -191,6 +191,8 @@ export const assessmentEvents = pgTable('assessment_events', {
   probeTokenId: text('probe_token_id'),
   responseText: text('response_text'),
   evaluationCriteria: text('evaluation_criteria'),
+  responseFeatures: jsonb('response_features'),
+  integrityScore: real('integrity_score'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_assessment_events_user_concept').on(table.userId, table.conceptId),
@@ -359,6 +361,19 @@ export const subscriptions = pgTable('subscriptions', {
   index('idx_subscriptions_org').on(table.organizationId),
   index('idx_subscriptions_stripe_customer').on(table.stripeCustomerId),
 ]);
+
+// --- Response Profiles ---
+
+export const responseProfiles = pgTable('response_profiles', {
+  userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
+  avgWordCount: real('avg_word_count').notNull().default(0),
+  avgCharCount: real('avg_char_count').notNull().default(0),
+  avgCharsPerSecond: real('avg_chars_per_second').notNull().default(0),
+  avgFormattingScore: real('avg_formatting_score').notNull().default(0),
+  avgVocabComplexity: real('avg_vocab_complexity').notNull().default(0),
+  sampleCount: integer('sample_count').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 // --- Email Preferences ---
 
