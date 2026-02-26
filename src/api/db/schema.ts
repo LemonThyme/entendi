@@ -216,3 +216,50 @@ export const pendingActions = pgTable('pending_actions', {
   data: jsonb('data').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Courses ---
+
+export const courses = pgTable('courses', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  status: text('status').notNull().default('draft'),
+  ownerId: text('owner_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  orgId: text('org_id').references(() => organization.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courseModules = pgTable('course_modules', {
+  id: text('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courseConcepts = pgTable('course_concepts', {
+  id: text('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  moduleId: text('module_id').references(() => courseModules.id, { onDelete: 'set null' }),
+  learningObjective: text('learning_objective'),
+  requiredMasteryThreshold: real('required_mastery_threshold').notNull().default(0.7),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_course_concepts_course').on(table.courseId),
+  index('idx_course_concepts_concept').on(table.conceptId),
+]);
+
+export const courseEnrollments = pgTable('course_enrollments', {
+  id: text('id').primaryKey(),
+  courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_course_enrollments_course').on(table.courseId),
+  index('idx_course_enrollments_user').on(table.userId),
+]);
