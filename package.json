@@ -9,7 +9,7 @@
     "build:hooks": "node --import tsx esbuild.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-"db:generate": "drizzle-kit generate",
+    "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
