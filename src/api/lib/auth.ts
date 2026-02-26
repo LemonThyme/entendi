@@ -1,7 +1,9 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { organization, apiKey, bearer } from 'better-auth/plugins';
+import { eq, and } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
+import { invitation, member } from '../db/schema.js';
 import { sendEmail, EmailTemplate } from './email.js';
 
 function buildSocialProviders(): Record<string, { clientId: string; clientSecret: string }> | undefined {
@@ -41,6 +43,39 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
     },
 
     ...(socialProviders ? { socialProviders } : {}),
+
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            // Auto-accept pending org invitations matching the new user's email
+            try {
+              const pendingInvitations = await db.select()
+                .from(invitation)
+                .where(and(
+                  eq(invitation.email, user.email),
+                  eq(invitation.status, 'pending'),
+                ));
+
+              for (const inv of pendingInvitations) {
+                const memberId = crypto.randomUUID();
+                await db.insert(member).values({
+                  id: memberId,
+                  userId: user.id,
+                  organizationId: inv.organizationId,
+                  role: inv.role,
+                });
+                await db.update(invitation)
+                  .set({ status: 'accepted' })
+                  .where(eq(invitation.id, inv.id));
+              }
+            } catch {
+              // Non-critical — don't fail user creation if auto-accept fails
+            }
+          },
+        },
+      },
+    },
 
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 days

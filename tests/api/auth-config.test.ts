@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-const { mockBetterAuth, mockSendEmail, mockOrganization } = vi.hoisted(() => {
+const { mockBetterAuth, mockSendEmail, mockOrganization, mockDbSelect, mockDbInsert, mockDbUpdate } = vi.hoisted(() => {
   const mockBetterAuth = vi.fn().mockReturnValue({
     api: { getSession: vi.fn(), createApiKey: vi.fn() },
     handler: vi.fn(),
   });
   const mockSendEmail = vi.fn().mockResolvedValue({ id: 'test-email-id' });
   const mockOrganization = vi.fn((opts: any) => ({ id: 'organization', _opts: opts }));
-  return { mockBetterAuth, mockSendEmail, mockOrganization };
+  const mockDbSelect = vi.fn();
+  const mockDbInsert = vi.fn();
+  const mockDbUpdate = vi.fn();
+  return { mockBetterAuth, mockSendEmail, mockOrganization, mockDbSelect, mockDbInsert, mockDbUpdate };
 });
 
 vi.mock('better-auth', () => ({
@@ -27,6 +30,16 @@ vi.mock('better-auth/plugins', () => ({
 vi.mock('../../src/api/lib/email.js', () => ({
   sendEmail: mockSendEmail,
   EmailTemplate: { OrgInvite: 'org_invite' },
+}));
+
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn((...args: any[]) => args),
+  and: vi.fn((...args: any[]) => args),
+}));
+
+vi.mock('../../src/api/db/schema.js', () => ({
+  invitation: { id: 'invitation_id', email: 'invitation_email', status: 'invitation_status', organizationId: 'invitation_org_id', role: 'invitation_role' },
+  member: { id: 'member_id', userId: 'member_user_id', organizationId: 'member_org_id', role: 'member_role' },
 }));
 
 import { createAuth } from '../../src/api/lib/auth.js';
@@ -109,6 +122,49 @@ describe('auth config', () => {
         inviteLink: expect.stringContaining('inv-123'),
       },
     });
+  });
+
+  it('configures databaseHooks to auto-accept pending invitations on sign-up', async () => {
+    // Set up mock DB to return a pending invitation
+    const mockWhere = vi.fn().mockResolvedValue([
+      { id: 'inv-1', email: 'alice@example.com', organizationId: 'org-1', role: 'member', status: 'pending' },
+    ]);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelectResult = { from: mockFrom };
+    mockDbSelect.mockReturnValue(mockSelectResult);
+
+    const mockInsertValues = vi.fn().mockResolvedValue([]);
+    mockDbInsert.mockReturnValue({ values: mockInsertValues });
+
+    const mockUpdateSet = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) });
+    mockDbUpdate.mockReturnValue({ set: mockUpdateSet });
+
+    const mockDb = {
+      select: mockDbSelect,
+      insert: mockDbInsert,
+      update: mockDbUpdate,
+    } as any;
+
+    createAuth(mockDb, { secret: 'test-secret', baseURL: 'http://localhost:3456' });
+
+    const config = mockBetterAuth.mock.calls[0][0];
+    expect(config.databaseHooks).toBeDefined();
+    expect(config.databaseHooks.user.create.after).toBeDefined();
+
+    // Simulate user creation
+    await config.databaseHooks.user.create.after(
+      { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
+      null,
+    );
+
+    // Verify it queried for pending invitations
+    expect(mockDbSelect).toHaveBeenCalled();
+
+    // Verify it created a member entry
+    expect(mockDbInsert).toHaveBeenCalled();
+
+    // Verify it updated the invitation status
+    expect(mockDbUpdate).toHaveBeenCalled();
   });
 
   it('includes only github when only github env vars are set', () => {
