@@ -88,6 +88,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       confidence: z.coerce.number().min(0).max(1),
       reasoning: z.string(),
       eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
+      probeToken: z.object({
+        tokenId: z.string(),
+        userId: z.string(),
+        conceptId: z.string(),
+        depth: z.coerce.number(),
+        evaluationCriteria: z.string(),
+        issuedAt: z.string(),
+        expiresAt: z.string(),
+        signature: z.string(),
+      }).optional(),
+      responseText: z.string().optional(),
     },
     async (args) => {
       mcpLog('tool:entendi_record_evaluation called', args);
@@ -98,6 +109,8 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
           confidence: args.confidence,
           reasoning: args.reasoning,
           eventType: args.eventType,
+          probeToken: args.probeToken,
+          responseText: args.responseText,
         });
         mcpLog('tool:entendi_record_evaluation result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };

@@ -77,6 +77,17 @@ export class EntendiApiClient {
     confidence: number;
     reasoning: string;
     eventType: 'probe' | 'tutor_phase1' | 'tutor_phase4';
+    probeToken?: {
+      tokenId: string;
+      userId: string;
+      conceptId: string;
+      depth: number;
+      evaluationCriteria: string;
+      issuedAt: string;
+      expiresAt: string;
+      signature: string;
+    };
+    responseText?: string;
   }) {
     return this.request('POST', '/api/mcp/record-evaluation', input);
   }
