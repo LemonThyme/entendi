@@ -623,6 +623,23 @@ mcpRoutes.post('/dismiss', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
 
+  // Read pending action before clearing, to record dismissal
+  const [action] = await db.select().from(pendingActions)
+    .where(eq(pendingActions.userId, user.id));
+
+  let dismissalRecorded = false;
+  if (action && action.actionType === 'awaiting_probe_response') {
+    const data = action.data as { conceptId?: string };
+    if (data.conceptId) {
+      await db.insert(dismissalEvents).values({
+        userId: user.id,
+        conceptId: data.conceptId,
+        probeTokenId: action.probeTokenId,
+      });
+      dismissalRecorded = true;
+    }
+  }
+
   // Clear probe session
   await db.update(probeSessions).set({
     pendingConceptId: null,
@@ -639,7 +656,7 @@ mcpRoutes.post('/dismiss', async (c) => {
   // Clear pending action
   await db.delete(pendingActions).where(eq(pendingActions.userId, user.id));
 
-  return c.json({ acknowledged: true });
+  return c.json({ acknowledged: true, dismissalRecorded });
 });
 
 // --- GET /status ---
