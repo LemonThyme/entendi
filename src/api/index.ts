@@ -8,6 +8,7 @@ import { orgRoutes } from './routes/org.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { createDb, type Database } from './db/connection.js';
 import { createAuth, type Auth } from './lib/auth.js';
+import { rateLimit } from './middleware/rate-limit.js';
 
 export type Env = {
   Variables: {
@@ -23,8 +24,24 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   const db = createDb(databaseUrl);
   const auth = createAuth(db, authOptions);
 
+  // Global error handler
+  app.onError((err, c) => {
+    const status = 'status' in err && typeof err.status === 'number' ? err.status : 500;
+    if (status >= 500) {
+      console.error(`[Entendi] ${c.req.method} ${c.req.path} — ${err.message}`);
+    }
+    return c.json(
+      { error: status >= 500 ? 'Internal server error' : err.message },
+      status as any,
+    );
+  });
+
+  // CORS — allow configured origins or fall back to permissive
+  const allowedOrigins = process.env.ENTENDI_CORS_ORIGINS?.split(',').map(s => s.trim());
   app.use('*', cors({
-    origin: (origin) => origin || '*',
+    origin: allowedOrigins
+      ? (origin) => allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+      : (origin) => origin || '*',
     allowHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
@@ -51,13 +68,24 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     await next();
   });
 
+  // Rate limit API routes (200 requests/minute per user/IP)
+  app.use('/api/*', rateLimit({ windowMs: 60_000, max: 200 }));
+
   // Better Auth route handler
   app.on(['POST', 'GET'], '/api/auth/*', (c) => {
     return auth.handler(c.req.raw);
   });
 
-  // Health check
-  app.get('/health', (c) => c.json({ status: 'ok' }));
+  // Health check with DB connectivity
+  app.get('/health', async (c) => {
+    try {
+      const { sql } = await import('drizzle-orm');
+      await db.execute(sql`SELECT 1`);
+      return c.json({ status: 'ok', db: 'connected' });
+    } catch (err) {
+      return c.json({ status: 'degraded', db: 'unreachable', error: String(err) }, 503);
+    }
+  });
 
   // Current user
   app.get('/api/me', (c) => {
