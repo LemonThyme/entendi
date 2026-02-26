@@ -113,6 +113,7 @@ export const concepts = pgTable('concepts', {
   domain: text('domain').notNull(),
   specificity: text('specificity').notNull(),
   parentId: text('parent_id'),
+  description: text('description').notNull().default(''),
   discrimination: real('discrimination').notNull().default(1.0),
   threshold1: real('threshold_1').notNull().default(-1.0),
   threshold2: real('threshold_2').notNull().default(0.0),
@@ -129,9 +130,28 @@ export const conceptEdges = pgTable('concept_edges', {
   sourceId: text('source_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
   targetId: text('target_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
   edgeType: text('edge_type').notNull(),
+  source: text('source').notNull().default('manual'),
 }, (table) => [
   primaryKey({ columns: [table.sourceId, table.targetId, table.edgeType] }),
   index('idx_concept_edges_target').on(table.targetId),
+]);
+
+// --- Concept Embeddings (pgvector) ---
+
+export const conceptEmbeddings = pgTable('concept_embeddings', {
+  conceptId: text('concept_id').primaryKey().references(() => concepts.id, { onDelete: 'cascade' }),
+  embedding: text('embedding').notNull(), // JSON-serialized float array; actual DB column is vector(768) via migration
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Concept Aliases (normalization) ---
+
+export const conceptAliases = pgTable('concept_aliases', {
+  alias: text('alias').primaryKey(),
+  canonicalId: text('canonical_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_concept_aliases_canonical').on(table.canonicalId),
 ]);
 
 // --- User Mastery ---
