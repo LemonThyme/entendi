@@ -608,14 +608,66 @@ mcpRoutes.post('/tutor/advance', async (c) => {
 
   // Bayesian update at scored phases (phase1, phase4)
   const isScored = currentPhase === 'phase1' || currentPhase === 'phase4';
+  let integrityScore: number | undefined;
+  let integrityFlags: string[] = [];
   if (isScored && body.score !== undefined) {
     const eventType = currentPhase === 'phase1' ? 'tutor_phase1' as const : 'tutor_phase4' as const;
+
+    // Response integrity analysis for tutor responses
+    let responseFeatures: Record<string, unknown> | undefined;
+    if (body.userResponse) {
+      const responseTimeMs = Date.now() - new Date(session.lastActivityAt).getTime();
+      const features = extractResponseFeatures(body.userResponse, responseTimeMs);
+      responseFeatures = features as unknown as Record<string, unknown>;
+
+      const [profile] = await db.select().from(responseProfiles)
+        .where(eq(responseProfiles.userId, user.id));
+      const baseline: UserResponseProfile | undefined = profile ? {
+        avgWordCount: profile.avgWordCount,
+        avgCharCount: profile.avgCharCount,
+        avgCharsPerSecond: profile.avgCharsPerSecond,
+        avgFormattingScore: profile.avgFormattingScore,
+        avgVocabComplexity: profile.avgVocabComplexity,
+        sampleCount: profile.sampleCount,
+      } : undefined;
+
+      const integrity = computeIntegrityScore(features, baseline);
+      integrityScore = integrity.score;
+      integrityFlags = integrity.flags;
+
+      // Update user response profile with EMA
+      const updatedProfile = updateResponseProfile(baseline ?? null, features);
+      await db.insert(responseProfiles).values({
+        userId: user.id,
+        avgWordCount: updatedProfile.avgWordCount,
+        avgCharCount: updatedProfile.avgCharCount,
+        avgCharsPerSecond: updatedProfile.avgCharsPerSecond,
+        avgFormattingScore: updatedProfile.avgFormattingScore,
+        avgVocabComplexity: updatedProfile.avgVocabComplexity,
+        sampleCount: updatedProfile.sampleCount,
+      }).onConflictDoUpdate({
+        target: responseProfiles.userId,
+        set: {
+          avgWordCount: updatedProfile.avgWordCount,
+          avgCharCount: updatedProfile.avgCharCount,
+          avgCharsPerSecond: updatedProfile.avgCharsPerSecond,
+          avgFormattingScore: updatedProfile.avgFormattingScore,
+          avgVocabComplexity: updatedProfile.avgVocabComplexity,
+          sampleCount: updatedProfile.sampleCount,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     const result = await applyBayesianUpdateDb(db, user.id, {
       conceptId: session.conceptId,
       score: body.score,
       confidence: body.confidence ?? 0.5,
       reasoning: body.reasoning ?? '',
       eventType,
+      responseText: body.userResponse,
+      integrityScore,
+      responseFeatures,
     });
     masteryUpdate = { before: result.previousMastery, after: result.newMastery };
 
@@ -660,6 +712,8 @@ mcpRoutes.post('/tutor/advance', async (c) => {
       isComplete: true,
       sessionSummary: `Tutor session for ${session.conceptId} complete. Phase 1 score: ${p1}/3, Phase 4 score: ${p4}/3.${masteryStr}`,
       masteryUpdate,
+      integrityScore,
+      integrityFlags: integrityFlags.length > 0 ? integrityFlags : undefined,
     });
   }
 
@@ -690,6 +744,8 @@ mcpRoutes.post('/tutor/advance', async (c) => {
     phase: nextPhase,
     isComplete: false,
     guidance: guidanceMap[nextPhase] || '',
+    integrityScore,
+    integrityFlags: integrityFlags.length > 0 ? integrityFlags : undefined,
     masteryUpdate,
   });
 });
