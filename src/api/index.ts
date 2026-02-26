@@ -10,6 +10,7 @@ import { courseRoutes } from './routes/courses.js';
 import { deviceCodeRoutes } from './routes/device-code.js';
 import { billingRoutes } from './routes/billing.js';
 import { preferencesRoutes } from './routes/preferences.js';
+import { eventRoutes } from './routes/events.js';
 import { createDb, type Database } from './db/connection.js';
 import { createAuth, type Auth } from './lib/auth.js';
 import { rateLimit } from './middleware/rate-limit.js';
@@ -60,6 +61,12 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
 
   // Session middleware — resolves user from cookie, bearer token, or API key
   app.use('*', async (c, next) => {
+    // Support token query param for SSE (EventSource can't set headers)
+    const tokenParam = new URL(c.req.url).searchParams.get('token');
+    if (tokenParam && !c.req.header('Authorization')) {
+      c.req.raw.headers.set('Authorization', `Bearer ${tokenParam}`);
+    }
+
     try {
       const session = await auth.api.getSession({ headers: c.req.raw.headers });
       c.set('user', session?.user ?? null);
@@ -113,6 +120,14 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/courses', courseRoutes);
   app.route('/api/billing', billingRoutes);
   app.route('/api/preferences', preferencesRoutes);
+  app.route('/api/events', eventRoutes);
+
+  // Cache static assets with immutable headers
+  app.get('/assets/*', async (c, next) => {
+    await next();
+    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+  });
+
   // Dashboard at root (must be after /api/* and /health routes)
   app.route('/', dashboardRoutes);
 
