@@ -39,9 +39,15 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
 
   // Session middleware — resolves user from cookie, bearer token, or API key
   app.use('*', async (c, next) => {
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    c.set('user', session?.user ?? null);
-    c.set('session', session?.session ?? null);
+    try {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      c.set('user', session?.user ?? null);
+      c.set('session', session?.session ?? null);
+    } catch {
+      // Session resolution failed (e.g., rate-limited API key) — continue unauthenticated
+      c.set('user', null);
+      c.set('session', null);
+    }
     await next();
   });
 
