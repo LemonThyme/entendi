@@ -2,8 +2,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { appendFileSync, mkdirSync } from 'fs';
+import { execFile } from 'child_process';
 import { join } from 'path';
 import { homedir } from 'os';
+import { platform } from 'os';
 import { EntendiApiClient } from './api-client.js';
 
 const MCP_LOG_DIR = join(homedir(), '.entendi');
@@ -242,6 +244,59 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
   );
   registeredTools.push({ name: 'entendi_get_zpd_frontier' });
+
+  // --- Tool 8: entendi_login ---
+  mcpServer.tool(
+    'entendi_login',
+    'Link this device to your Entendi account. Opens a browser for authentication and returns an API key.',
+    {},
+    async () => {
+      mcpLog('tool:entendi_login called');
+      try {
+        // Step 1: Create device code
+        const { code, verifyUrl, expiresAt } = await api.createDeviceCode();
+        mcpLog('tool:entendi_login device code created', { code, verifyUrl });
+
+        // Step 2: Open browser
+        const os = platform();
+        const openCmd = os === 'darwin' ? 'open' : os === 'win32' ? 'cmd' : 'xdg-open';
+        const openArgs = os === 'win32' ? ['/c', 'start', verifyUrl] : [verifyUrl];
+        execFile(openCmd, openArgs, (err) => {
+          if (err) mcpLog('tool:entendi_login browser open failed', { error: String(err) });
+        });
+
+        // Step 3: Poll until confirmed or expired
+        const pollInterval = 2000;
+        const deadline = new Date(expiresAt).getTime();
+
+        while (Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          const pollResult = await api.pollDeviceCode(code);
+          mcpLog('tool:entendi_login poll result', pollResult);
+
+          if (pollResult.status === 'confirmed' && pollResult.apiKey) {
+            const instructions = [
+              `Device linked successfully! Your API key: ${pollResult.apiKey}`,
+              '',
+              'To configure the plugin, run:',
+              `  claude plugin configure entendi --env ENTENDI_API_KEY=${pollResult.apiKey}`,
+            ].join('\n');
+            return { content: [{ type: 'text' as const, text: instructions }] };
+          }
+
+          if (pollResult.status === 'expired') {
+            return { content: [{ type: 'text' as const, text: 'Device code expired. Please try again.' }], isError: true };
+          }
+        }
+
+        return { content: [{ type: 'text' as const, text: 'Device code expired (timeout). Please try again.' }], isError: true };
+      } catch (err) {
+        mcpLog('tool:entendi_login error', { error: String(err) });
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+      }
+    },
+  );
+  registeredTools.push({ name: 'entendi_login' });
 
   return {
     close: async () => { await mcpServer.close(); },

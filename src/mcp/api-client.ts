@@ -122,4 +122,34 @@ export class EntendiApiClient {
   async getZpdFrontier() {
     return this.request('GET', '/api/mcp/zpd-frontier');
   }
+
+  /** Create a device code for CLI-first auth (no auth required). */
+  async createDeviceCode(): Promise<{ code: string; verifyUrl: string; expiresAt: string }> {
+    const url = `${this.apiUrl}/api/auth/device-code`;
+    apiLog('POST /api/auth/device-code (unauthenticated)');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Device code creation failed (${res.status}): ${text}`);
+    }
+    return res.json();
+  }
+
+  /** Poll device code status (no auth required). */
+  async pollDeviceCode(code: string): Promise<{ status: string; apiKey?: string }> {
+    const url = `${this.apiUrl}/api/auth/device-code/${encodeURIComponent(code)}`;
+    apiLog(`GET /api/auth/device-code/${code} (unauthenticated)`);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Device code poll failed (${res.status}): ${text}`);
+    }
+    return res.json();
+  }
 }
