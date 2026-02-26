@@ -998,32 +998,24 @@
           infoSpan.style.color = "var(--text-tertiary)";
           infoSpan.textContent = masteryInfo;
 
-          var actions = h("div", { style: "display:flex;gap:4px;align-items:center;" });
+          var actions = h("div");
           if (m.role !== "owner") {
-            var roleToggle = h("button", {
-              className: "btn-sm",
-              onclick: function() { updateMemberRole(m.userId, m.role === "admin" ? "member" : "admin", orgId); }
-            }, m.role === "admin" ? "Demote" : "Promote");
-            roleToggle.style.fontSize = "0.65rem";
-            roleToggle.style.padding = "0.15rem 0.4rem";
-            roleToggle.style.border = "1px solid var(--border)";
-            roleToggle.style.background = "white";
-            roleToggle.style.borderRadius = "4px";
-            roleToggle.style.cursor = "pointer";
-            actions.appendChild(roleToggle);
-
-            var removeBtn = h("button", {
-              className: "btn-sm",
-              onclick: function() { removeMember(m.userId, orgId); }
-            }, "Remove");
-            removeBtn.style.fontSize = "0.65rem";
-            removeBtn.style.padding = "0.15rem 0.4rem";
-            removeBtn.style.color = "var(--red)";
-            removeBtn.style.border = "1px solid var(--border)";
-            removeBtn.style.background = "white";
-            removeBtn.style.borderRadius = "4px";
-            removeBtn.style.cursor = "pointer";
-            actions.appendChild(removeBtn);
+            var dropdown = h("div", { className: "dot-menu-dropdown" });
+            dropdown.appendChild(h("button", {
+              className: "dot-menu-item",
+              onclick: function() { dropdown.classList.remove("open"); updateMemberRole(m.userId, m.role === "admin" ? "member" : "admin", orgId); }
+            }, m.role === "admin" ? "Demote" : "Promote"));
+            dropdown.appendChild(h("button", {
+              className: "dot-menu-item danger",
+              onclick: function() { dropdown.classList.remove("open"); removeMember(m.userId, orgId); }
+            }, "Remove"));
+            var trigger = h("button", { className: "dot-menu-trigger", onclick: function(e) {
+              e.stopPropagation();
+              dropdown.classList.toggle("open");
+            }}, "\u22EF");
+            var menu = h("div", { className: "dot-menu" }, [trigger, dropdown]);
+            document.addEventListener("click", function() { dropdown.classList.remove("open"); });
+            actions.appendChild(menu);
           }
 
           var row = h("div", { className: "member-row" }, [
