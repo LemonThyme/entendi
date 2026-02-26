@@ -125,6 +125,9 @@ function getTutorPhaseInstructions(phase: string): string {
 
 async function main() {
   const raw = await readStdin();
+  if (!raw || !raw.trim()) {
+    process.exit(0);
+  }
   const input: HookInput = JSON.parse(raw);
   const result = await handleUserPromptSubmit(input);
 
