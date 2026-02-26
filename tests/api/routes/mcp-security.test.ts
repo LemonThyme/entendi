@@ -6,10 +6,13 @@ import { createApp } from '../../../src/api/index.js';
 
 const testDbUrl = process.env.DATABASE_URL;
 const testApiKey = process.env.ENTENDI_API_KEY;
-const describeWithDb = testDbUrl && testApiKey ? describe : describe.skip;
+const testSecret = process.env.BETTER_AUTH_SECRET;
+// Integration tests require matching API key + secret + DB. Only run when explicitly opted in.
+const canRun = testDbUrl && testApiKey && testSecret && process.env.INTEGRATION_TESTS === '1';
+const describeWithDb = canRun ? describe : describe.skip;
 
 describeWithDb('MCP security: probe tokens, evaluation validation, dismiss tracking', () => {
-  const { app } = createApp(testDbUrl!, { secret: 'test-secret-that-is-at-least-32-chars-long-yep' });
+  const { app } = createApp(testDbUrl!, { secret: testSecret! });
   const headers = { 'Content-Type': 'application/json', 'x-api-key': testApiKey! };
 
   // --- Task 3: Observe returns probeToken when shouldProbe is true ---
