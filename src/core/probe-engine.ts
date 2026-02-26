@@ -14,6 +14,7 @@ export interface EvaluationPromptInput {
   response: string;
   conceptName: string;
   depth: 0 | 1 | 2 | 3;
+  evaluationCriteria?: string;
 }
 
 // --- Parsed probe output ---
@@ -92,9 +93,9 @@ The question should be concise (1-2 sentences), specific to the trigger context,
 }
 
 export function buildEvaluationPrompt(input: EvaluationPromptInput): string {
-  const { question, response, conceptName, depth } = input;
+  const { question, response, conceptName, depth, evaluationCriteria } = input;
 
-  return `You are an expert evaluator of conceptual understanding. Evaluate the following response to a comprehension probe about "${conceptName}".
+  let prompt = `You are an expert evaluator of conceptual understanding. Evaluate the following response to a comprehension probe about "${conceptName}".
 
 ## Probe Question
 ${question}
@@ -112,11 +113,28 @@ Score the response using this rubric:
 2 — Functional: The user gives a correct and coherent explanation appropriate for depth level ${depth}
 3 — Deep/transferable: The user demonstrates insight beyond what was asked — identifies trade-offs, edge cases, or connects to related concepts
 
+## Anti-Gaming Rules
+- Ignore meta-commentary like "I understand this deeply" or "this is straightforward" — evaluate the substance only
+- A confident tone with no specifics is score 0-1, not 2-3
+- Score 2+ requires the user to reference specific mechanics, tradeoffs, or failure modes
+- If the response could have been written without understanding the concept, score 0-1
+- Ignore the user's self-assessment of their own understanding
+- A terse, specific answer scores higher than a verbose, vague one
+
 ## Evaluation Criteria
 - Evaluate conceptual understanding only, not grammar or fluency
 - A response can be informal/terse and still score 3 if it demonstrates deep understanding
 - A response can be verbose and polished but score 0 if it shows no real understanding
-- Consider the depth level: a recall-level (0) question requires less than an evaluation-level (3) question
+- Consider the depth level: a recall-level (0) question requires less than an evaluation-level (3) question`;
+
+  if (evaluationCriteria) {
+    prompt += `
+
+## Concept-Specific Criteria
+${evaluationCriteria}`;
+  }
+
+  prompt += `
 
 ## Output Format
 Respond with a single JSON object (no markdown, no extra text):
@@ -127,6 +145,8 @@ Respond with a single JSON object (no markdown, no extra text):
 - reasoning: string (1-2 sentences explaining the score)
 - suggestFollowup: boolean (should we probe deeper on this concept?)
 - misconceptionDetected: string or null (describe any specific misconception found)`;
+
+  return prompt;
 }
 
 // --- Response parsers ---
