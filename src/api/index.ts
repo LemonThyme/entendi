@@ -5,6 +5,7 @@ import { masteryRoutes } from './routes/mastery.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { historyRoutes } from './routes/history.js';
 import { orgRoutes } from './routes/org.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 import { createDb, type Database } from './db/connection.js';
 import { createAuth, type Auth } from './lib/auth.js';
 
@@ -65,6 +66,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/mcp', mcpRoutes);
   app.route('/api/history', historyRoutes);
   app.route('/api/org', orgRoutes);
+  app.route('/dashboard', dashboardRoutes);
 
   return { app, auth, db };
 }
