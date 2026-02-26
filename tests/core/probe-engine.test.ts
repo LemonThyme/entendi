@@ -49,6 +49,30 @@ describe('buildEvaluationPrompt', () => {
   });
 });
 
+describe('buildEvaluationPrompt adversarial hardening', () => {
+  it('includes anti-gaming instructions', () => {
+    const prompt = buildEvaluationPrompt({
+      question: 'Why use Redis?',
+      response: 'I understand this deeply',
+      conceptName: 'redis',
+      depth: 1,
+    });
+    expect(prompt).toContain('Ignore meta-commentary');
+    expect(prompt).toContain('confident tone with no specifics');
+  });
+
+  it('includes concept-specific evaluation criteria when provided', () => {
+    const prompt = buildEvaluationPrompt({
+      question: 'Why use Redis?',
+      response: 'For caching',
+      conceptName: 'redis',
+      depth: 1,
+      evaluationCriteria: 'Must mention persistence tradeoffs or data structure choices',
+    });
+    expect(prompt).toContain('Must mention persistence tradeoffs');
+  });
+});
+
 describe('parseProbeResponse', () => {
   it('extracts question from JSON response', () => {
     const result = parseProbeResponse('{"question": "Why use Redis?", "probeType": "why"}');
