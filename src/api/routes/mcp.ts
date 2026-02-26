@@ -4,8 +4,10 @@ import { z } from 'zod';
 import {
   concepts, conceptEdges, userConceptStates, assessmentEvents,
   tutorSessions, tutorExchanges, probeSessions, pendingActions,
+  probeTokens, dismissalEvents,
 } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
+import { createProbeToken, verifyProbeToken, type ProbeToken } from '../../core/probe-token.js';
 import {
   grmUpdate, grmFisherInformation, retrievability, decayPrior,
   mapRubricToFsrsGrade, fsrsStabilityAfterSuccess, fsrsDifficultyUpdate,
@@ -16,6 +18,9 @@ import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } fr
 import type { Env } from '../index.js';
 import type { Context } from 'hono';
 import type { Database } from '../db/connection.js';
+
+const PROBE_TOKEN_SECRET = process.env.BETTER_AUTH_SECRET ?? 'entendi-default-secret-change-in-production';
+const PROBE_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 export const mcpRoutes = new Hono<Env>();
 
@@ -281,6 +286,32 @@ mcpRoutes.post('/observe', async (c) => {
     guidance += ` Context: user was ${body.triggerContext}.`;
   }
 
+  // Generate signed probe token for tamper-resistant evaluation
+  const probeToken = createProbeToken({
+    userId: user.id,
+    conceptId: selected.conceptId,
+    depth,
+    evaluationCriteria: guidance,
+    secret: PROBE_TOKEN_SECRET,
+    ttlMs: PROBE_TOKEN_TTL_MS,
+  });
+
+  // Store token in DB for server-side validation
+  await db.insert(probeTokens).values({
+    id: probeToken.tokenId,
+    userId: user.id,
+    conceptId: selected.conceptId,
+    depth,
+    evaluationCriteria: guidance,
+    expiresAt: new Date(probeToken.expiresAt),
+    signature: probeToken.signature,
+  });
+
+  // Link token to pending action
+  await db.update(pendingActions).set({
+    probeTokenId: probeToken.tokenId,
+  }).where(eq(pendingActions.userId, user.id));
+
   return c.json({
     shouldProbe: true,
     conceptId: selected.conceptId,
@@ -290,6 +321,7 @@ mcpRoutes.post('/observe', async (c) => {
     userProfile,
     mastery: masteryPct,
     urgency: selected.urgency,
+    probeToken,
   });
 });
 
