@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node '${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.js'",
+            "command": "bash '${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh' post-tool-use.js",
             "timeout": 30
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node '${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.js'",
+            "command": "bash '${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh' user-prompt-submit.js",
             "timeout": 30
           }
         ]
