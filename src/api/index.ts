@@ -102,6 +102,9 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/org', orgRoutes);
   app.route('/dashboard', dashboardRoutes);
 
+  // 404 handler
+  app.notFound((c) => c.json({ error: 'Not found' }, 404));
+
   return { app, auth, db };
 }
 

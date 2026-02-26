@@ -163,7 +163,8 @@ async function main() {
   const raw = await readStdin();
   if (!raw || !raw.trim()) {
     log('hook:post-tool-use', 'empty stdin, exiting');
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
   log('hook:post-tool-use', 'stdin received', { length: raw.length });
   let input: HookInput;
@@ -171,7 +172,8 @@ async function main() {
     input = JSON.parse(raw);
   } catch {
     log('hook:post-tool-use', 'invalid JSON, exiting');
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
   log('hook:post-tool-use', 'parsed input', { tool: input.tool_name, event: input.hook_event_name });
   const result = await handlePostToolUse(input);
@@ -184,12 +186,12 @@ async function main() {
     log('hook:post-tool-use', 'no output (null result)');
   }
 
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   main().catch((err) => {
     log('hook:post-tool-use', 'fatal error', { error: String(err), stack: (err as Error)?.stack });
-    process.exit(0);
+    process.exitCode = 0;
   });
 }

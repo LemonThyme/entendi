@@ -15,6 +15,7 @@ import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
 import type { Context } from 'hono';
+import type { Database } from '../db/connection.js';
 
 export const mcpRoutes = new Hono<Env>();
 
@@ -678,7 +679,7 @@ mcpRoutes.get('/pending-action', async (c) => {
 // --- Shared: Bayesian update against DB ---
 
 async function applyBayesianUpdateDb(
-  db: any,
+  db: Database,
   userId: string,
   input: {
     conceptId: string;
