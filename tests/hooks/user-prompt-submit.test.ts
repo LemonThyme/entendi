@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { handleUserPromptSubmit, detectTeachMePattern } from '../../src/hooks/user-prompt-submit.js';
+import { handleUserPromptSubmit, detectTeachMePattern, detectLoginPattern } from '../../src/hooks/user-prompt-submit.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 import { loadConfig } from '../../src/shared/config.js';
 
@@ -229,6 +229,87 @@ describe('handleUserPromptSubmit (thin observer)', () => {
     const result = await handleUserPromptSubmit(makeInput('test'));
     // Falls through to teach-me pattern check, which also returns null for 'test'
     expect(result).toBeNull();
+  });
+});
+
+describe('detectLoginPattern', () => {
+  it('matches "entendi login"', () => {
+    expect(detectLoginPattern('entendi login')).toBe(true);
+  });
+
+  it('matches "entendi log in"', () => {
+    expect(detectLoginPattern('entendi log in')).toBe(true);
+  });
+
+  it('matches "log in to entendi"', () => {
+    expect(detectLoginPattern('log in to entendi')).toBe(true);
+  });
+
+  it('matches "login to entendi"', () => {
+    expect(detectLoginPattern('login to entendi')).toBe(true);
+  });
+
+  it('matches "link my account"', () => {
+    expect(detectLoginPattern('link my account')).toBe(true);
+  });
+
+  it('matches "link my entendi account"', () => {
+    expect(detectLoginPattern('link my entendi account')).toBe(true);
+  });
+
+  it('matches "entendi auth"', () => {
+    expect(detectLoginPattern('entendi auth')).toBe(true);
+  });
+
+  it('matches case-insensitively', () => {
+    expect(detectLoginPattern('Entendi Login')).toBe(true);
+  });
+
+  it('returns false for unrelated prompts', () => {
+    expect(detectLoginPattern('how do I install webpack?')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(detectLoginPattern('')).toBe(false);
+  });
+});
+
+describe('handleUserPromptSubmit — login detection', () => {
+  beforeEach(() => {
+    // No API key — simulates unauthenticated user
+    mockLoadConfig.mockReturnValue({ apiUrl: 'http://localhost:3456', apiKey: undefined });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns login instructions when user says "entendi login"', async () => {
+    const result = await handleUserPromptSubmit(makeInput('entendi login'));
+
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('Entendi');
+    expect(ctx).toContain('entendi_login');
+    expect(ctx).toContain('device-code');
+  });
+
+  it('login detection takes priority over pending actions', async () => {
+    mockLoadConfig.mockReturnValue({ apiUrl: 'http://localhost:3456', apiKey: 'test-key' });
+    mockPendingAction({
+      type: 'awaiting_probe_response',
+      conceptId: 'Redis',
+      depth: 1,
+      timestamp: new Date().toISOString(),
+    });
+
+    const result = await handleUserPromptSubmit(makeInput('entendi login'));
+
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('entendi_login');
+    // Should NOT contain probe instructions
+    expect(ctx).not.toContain('entendi_record_evaluation');
   });
 });
 

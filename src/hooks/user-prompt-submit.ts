@@ -7,6 +7,20 @@ export interface UserPromptSubmitOutput {
   };
 }
 
+// --- Login pattern detection ---
+
+const LOGIN_PATTERNS = [
+  /entendi\s+log\s*in/i,
+  /entendi\s+login/i,
+  /log\s*in\s+(?:to\s+)?entendi/i,
+  /link\s+(?:my\s+)?(?:entendi\s+)?account/i,
+  /entendi\s+auth/i,
+];
+
+export function detectLoginPattern(prompt: string): boolean {
+  return LOGIN_PATTERNS.some((p) => p.test(prompt));
+}
+
 // --- Teach-me pattern detection ---
 
 const TEACH_ME_PATTERNS = [
@@ -60,6 +74,18 @@ export async function handleUserPromptSubmit(
   input: HookInput,
 ): Promise<UserPromptSubmitOutput | null> {
   const userPrompt = (input.prompt as string) ?? '';
+
+  // 0. Check for login request (must run before pending action — user may not have an API key yet)
+  if (detectLoginPattern(userPrompt)) {
+    log('hook:user-prompt-submit', 'login pattern detected');
+    return {
+      hookSpecificOutput: {
+        additionalContext:
+          `[Entendi] The user wants to log in to Entendi. ` +
+          `Call entendi_login (with no arguments) to start the device-code authentication flow.`,
+      },
+    };
+  }
 
   // 1. Check for pending action via API
   const pending = await fetchPendingAction();
