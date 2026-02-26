@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# SessionStart hook — injects Entendi concept detection skill into every session
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+
+mkdir -p "$LOG_DIR"
+
+# Read the concept-detection skill
+SKILL_CONTENT=$(cat "${PLUGIN_ROOT}/skills/concept-detection/SKILL.md" 2>/dev/null || echo "Error reading concept-detection skill")
+
+# Escape for JSON embedding (same approach as superpowers)
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+SKILL_ESCAPED=$(escape_for_json "$SKILL_CONTENT")
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:session-start:bash] injecting concept-detection skill (${#SKILL_CONTENT} bytes)" >> "$LOG_FILE"
+
+# Output JSON — both shapes for compatibility (Cursor + Claude Code)
+cat <<EOF
+{
+  "additional_context": "${SKILL_ESCAPED}",
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "${SKILL_ESCAPED}"
+  }
+}
+EOF
+
+exit 0

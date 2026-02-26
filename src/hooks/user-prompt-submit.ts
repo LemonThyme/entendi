@@ -127,7 +127,6 @@ export async function handleUserPromptSubmit(
     };
   }
 
-  // 3. Nothing to do
   return null;
 }
 
@@ -161,7 +160,6 @@ async function main() {
   if (result?.hookSpecificOutput?.additionalContext) {
     const text = result.hookSpecificOutput.additionalContext;
     log('hook:user-prompt-submit', 'output (plain text)', { length: text.length, preview: text.slice(0, 300) });
-    // Write plain text — avoids Claude Code Issue #13912 (JSON stdout causes false hook errors)
     await new Promise<void>((resolve, reject) => {
       process.stdout.write(text, (err) => err ? reject(err) : resolve());
     });
