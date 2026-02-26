@@ -43,6 +43,17 @@ const recordEvaluationSchema = z.object({
   confidence: z.number().min(0).max(1),
   reasoning: z.string().max(2000),
   eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
+  probeToken: z.object({
+    tokenId: z.string(),
+    userId: z.string(),
+    conceptId: z.string(),
+    depth: z.number(),
+    evaluationCriteria: z.string(),
+    issuedAt: z.string(),
+    expiresAt: z.string(),
+    signature: z.string(),
+  }).optional(),
+  responseText: z.string().min(1).max(10000).optional(),
 });
 
 const tutorStartSchema = z.object({
@@ -334,7 +345,67 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   if (parsed instanceof Response) return parsed;
   const body = parsed;
 
-  const result = await applyBayesianUpdateDb(db, user.id, body);
+  // For probe events, require a valid probe token and responseText
+  let probeTokenId: string | undefined;
+  let evaluationCriteria: string | undefined;
+  if (body.eventType === 'probe') {
+    if (!body.probeToken) {
+      return c.json({ error: 'Probe token required for probe evaluations' }, 403);
+    }
+    if (!body.responseText) {
+      return c.json({ error: 'Response text required for probe evaluations' }, 400);
+    }
+
+    // Verify cryptographic signature, expiry, userId, and conceptId
+    const verification = verifyProbeToken(body.probeToken as ProbeToken, PROBE_TOKEN_SECRET, {
+      userId: user.id,
+      conceptId: body.conceptId,
+    });
+    if (!verification.valid) {
+      return c.json({ error: `Invalid probe token: ${verification.reason}` }, 403);
+    }
+
+    // Check token exists in DB and hasn't been used
+    const [existingToken] = await db.select().from(probeTokens)
+      .where(eq(probeTokens.id, body.probeToken.tokenId));
+    if (!existingToken) {
+      return c.json({ error: 'Invalid probe token: not found' }, 403);
+    }
+    if (existingToken.usedAt) {
+      return c.json({ error: 'Invalid probe token: already used' }, 403);
+    }
+
+    // Per-concept rate limit: 1 probe evaluation per concept per 24h
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [recentEval] = await db.select({ id: assessmentEvents.id }).from(assessmentEvents)
+      .where(and(
+        eq(assessmentEvents.userId, user.id),
+        eq(assessmentEvents.conceptId, body.conceptId),
+        eq(assessmentEvents.eventType, 'probe'),
+        sql`${assessmentEvents.createdAt} > ${oneDayAgo}`,
+      )).limit(1);
+    if (recentEval) {
+      return c.json({ error: 'Rate limit: only 1 probe evaluation per concept per 24 hours' }, 429);
+    }
+
+    // Mark token as used
+    await db.update(probeTokens).set({ usedAt: new Date() })
+      .where(eq(probeTokens.id, body.probeToken.tokenId));
+
+    probeTokenId = body.probeToken.tokenId;
+    evaluationCriteria = body.probeToken.evaluationCriteria;
+  }
+
+  const result = await applyBayesianUpdateDb(db, user.id, {
+    conceptId: body.conceptId,
+    score: body.score,
+    confidence: body.confidence,
+    reasoning: body.reasoning,
+    eventType: body.eventType,
+    probeTokenId,
+    responseText: body.responseText,
+    evaluationCriteria,
+  });
 
   // Clear pending action
   await db.delete(pendingActions).where(eq(pendingActions.userId, user.id));
@@ -719,6 +790,9 @@ async function applyBayesianUpdateDb(
     confidence: number;
     reasoning: string;
     eventType: 'probe' | 'tutor_phase1' | 'tutor_phase4';
+    probeTokenId?: string;
+    responseText?: string;
+    evaluationCriteria?: string;
   },
 ) {
   const { conceptId, score, confidence, eventType } = input;
@@ -806,6 +880,9 @@ async function applyBayesianUpdateDb(
     muAfter: newMu,
     probeDepth,
     tutored: isTutored,
+    probeTokenId: input.probeTokenId,
+    responseText: input.responseText,
+    evaluationCriteria: input.evaluationCriteria,
   });
 
   // 6. Upsert user concept state
