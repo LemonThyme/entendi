@@ -163,6 +163,19 @@ function getDashboardHTML(): string {
     .event-type { font-size: 0.7rem; color: var(--text-tertiary); }
     .time-ago { font-size: 0.75rem; color: var(--text-tertiary); }
 
+    /* ZPD frontier */
+    .zpd-list { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .zpd-chip {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.75rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg-card);
+      font-family: var(--mono); font-size: 0.75rem; font-weight: 500;
+      color: var(--text); cursor: default; transition: border-color 0.15s;
+    }
+    .zpd-chip:hover { border-color: var(--accent); }
+    .zpd-mastery { font-size: 0.65rem; color: var(--text-tertiary); font-weight: 400; }
+    .zpd-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
     /* Empty states */
     .empty-state { text-align: center; padding: 2rem; color: var(--text-tertiary); font-size: 0.85rem; }
 
@@ -185,6 +198,14 @@ function getDashboardHTML(): string {
       </div>
       <div id="user-bar"></div>
       <div class="stats-row" id="stats-row"></div>
+
+      <div class="section" id="zpd-section" style="display:none;">
+        <div class="section-header">
+          <div class="section-title">Ready to Learn</div>
+          <div class="section-subtitle">Concepts with mastered prerequisites</div>
+        </div>
+        <div class="zpd-list" id="zpd-list"></div>
+      </div>
 
       <div class="section">
         <div class="section-header">
@@ -332,10 +353,33 @@ function getDashboardHTML(): string {
           fetch("/api/concepts", { headers: getHeaders() }).then(function(r) { return r.json(); }),
           fetch("/api/mastery", { headers: getHeaders() }).then(function(r) { return r.json(); }),
           fetch("/api/mcp/status", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+          fetch("/api/mcp/zpd-frontier", { headers: getHeaders() }).then(function(r) { return r.json(); }),
         ]).then(function(results) {
           renderStats(results[2]);
+          renderZpdFrontier(results[3]);
           renderConcepts(results[0], results[1]);
           loadActivity();
+        });
+      }
+
+      function renderZpdFrontier(data) {
+        var section = document.getElementById("zpd-section");
+        var container = document.getElementById("zpd-list");
+        container.textContent = "";
+        if (!data.frontier || data.frontier.length === 0) { section.style.display = "none"; return; }
+        section.style.display = "block";
+
+        var items = data.frontier.slice(0, 12);
+        items.forEach(function(item) {
+          var pct = Math.round(item.mastery * 100);
+          var dot = h("span", { className: "zpd-dot" });
+          dot.style.background = masteryColor(pct);
+          var chip = h("span", { className: "zpd-chip" }, [
+            dot,
+            h("span", null, item.conceptId),
+            h("span", { className: "zpd-mastery" }, pct + "%")
+          ]);
+          container.appendChild(chip);
         });
       }
 
