@@ -9,6 +9,7 @@ import {
   grmUpdate, grmFisherInformation, retrievability, decayPrior,
   mapRubricToFsrsGrade, fsrsStabilityAfterSuccess, fsrsDifficultyUpdate,
 } from '../../core/probabilistic-model.js';
+import { probeUrgency } from '../../core/probe-urgency.js';
 import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
 import type { Env } from '../index.js';
 
@@ -58,17 +59,25 @@ mcpRoutes.post('/observe', async (c) => {
       thresholds: [conceptRow?.threshold1 ?? -1.0, conceptRow?.threshold2 ?? 0.0, conceptRow?.threshold3 ?? 1.0],
     };
 
+    const fisherInfo = grmFisherInformation(mu, itemParams);
+
     return {
       conceptId: concept.id,
       mu, sigma, stability, daysSince, lastAssessed,
-      fisherInfo: grmFisherInformation(mu, itemParams),
+      fisherInfo,
+      urgency: probeUrgency({
+        mu, sigma, stability,
+        daysSinceAssessed: daysSince,
+        assessmentCount: ucs?.assessmentCount ?? 0,
+        fisherInfo,
+      }),
       itemParams,
       assessmentCount: ucs?.assessmentCount ?? 0,
     };
   }));
 
-  // Select best candidate by Fisher information
-  const sorted = candidates.sort((a, b) => b.fisherInfo - a.fisherInfo);
+  // Select best candidate by probe urgency (combines mastery gap, uncertainty, and decay)
+  const sorted = candidates.sort((a, b) => b.urgency - a.urgency);
   const selected = sorted[0];
   if (!selected) {
     return c.json({ shouldProbe: false, intrusiveness: 'skip', userProfile: 'unknown' });
@@ -208,6 +217,8 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   return c.json({
     mastery: result.newMastery,
     previousMastery: result.previousMastery,
+    sigma: result.newSigma,
+    previousSigma: result.previousSigma,
     shouldOfferTutor,
     message: `Mastery ${direction} from ${(result.previousMastery * 100).toFixed(1)}% to ${(result.newMastery * 100).toFixed(1)}%`,
   });
@@ -424,14 +435,38 @@ mcpRoutes.get('/status', async (c) => {
     const [ucs] = await db.select().from(userConceptStates)
       .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, conceptId)));
 
+    const mu = ucs?.mu ?? 0;
+    const sigma = ucs?.sigma ?? 1.5;
+    const stability = ucs?.stability ?? 1.0;
+    const lastAssessedTs = ucs?.lastAssessed;
+    const daysSince = lastAssessedTs
+      ? (Date.now() - new Date(lastAssessedTs).getTime()) / (1000 * 60 * 60 * 24)
+      : 999;
+    const count = ucs?.assessmentCount ?? 0;
+
+    // Classify confidence level from sigma
+    let confidenceLevel: 'high' | 'medium' | 'low' | 'none';
+    if (count === 0) confidenceLevel = 'none';
+    else if (sigma < 0.4) confidenceLevel = 'high';
+    else if (sigma < 0.8) confidenceLevel = 'medium';
+    else confidenceLevel = 'low';
+
     return c.json({
       concept: {
-        mastery: pMastery(ucs?.mu ?? 0),
-        sigma: ucs?.sigma ?? 1.5,
-        assessmentCount: ucs?.assessmentCount ?? 0,
-        lastAssessed: ucs?.lastAssessed ?? null,
+        mastery: pMastery(mu),
+        sigma,
+        posteriorVariance: sigma * sigma,
+        confidenceLevel,
+        assessmentCount: count,
+        lastAssessed: lastAssessedTs ?? null,
         tutoredCount: ucs?.tutoredCount ?? 0,
         untutoredCount: ucs?.untutoredCount ?? 0,
+        urgency: probeUrgency({
+          mu, sigma, stability,
+          daysSinceAssessed: daysSince,
+          assessmentCount: count,
+          fisherInfo: 0, // not needed for display
+        }),
       },
     });
   }
@@ -558,6 +593,7 @@ async function applyBayesianUpdateDb(
   const sigmaUntutored = ucs?.sigmaUntutored ?? 1.5;
 
   const previousMastery = pMastery(mu);
+  const previousSigma = sigma;
 
   // Load concept item params
   const [conceptRow] = await db.select().from(concepts).where(eq(concepts.id, conceptId));
@@ -663,5 +699,5 @@ async function applyBayesianUpdateDb(
   }
 
   const newMastery = pMastery(newMu);
-  return { previousMastery, newMastery };
+  return { previousMastery, newMastery, previousSigma, newSigma: newSigma };
 }
