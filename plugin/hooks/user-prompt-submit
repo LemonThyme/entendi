@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# UserPromptSubmit hook — checks for pending actions via API
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-exec node "${SCRIPT_DIR}/user-prompt-submit.js" "$@"

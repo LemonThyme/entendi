@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# PostToolUse hook — detects concepts from tool use and injects observation context
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-exec node "${SCRIPT_DIR}/post-tool-use.js" "$@"
