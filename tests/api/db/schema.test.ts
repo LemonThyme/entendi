@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { concepts, conceptEdges, userConceptStates, assessmentEvents, tutorSessions, tutorExchanges, probeSessions, pendingActions } from '../../../src/api/db/schema.js';
+import {
+  user, session, account, verification, organization, member, invitation, apikey,
+  concepts, conceptEdges, userConceptStates, assessmentEvents,
+  tutorSessions, tutorExchanges, probeSessions, pendingActions,
+} from '../../../src/api/db/schema.js';
 import { getTableName } from 'drizzle-orm';
 
 describe('Drizzle schema', () => {
-  it('defines all 8 tables', () => {
-    const tables = [concepts, conceptEdges, userConceptStates, assessmentEvents, tutorSessions, tutorExchanges, probeSessions, pendingActions];
-    expect(tables).toHaveLength(8);
-    tables.forEach(t => expect(getTableName(t)).toBeDefined());
+  const appTables = [concepts, conceptEdges, userConceptStates, assessmentEvents, tutorSessions, tutorExchanges, probeSessions, pendingActions];
+  const authTables = [user, session, account, verification, organization, member, invitation, apikey];
+
+  it('defines all 16 tables', () => {
+    const all = [...appTables, ...authTables];
+    expect(all).toHaveLength(16);
+    all.forEach(t => expect(getTableName(t)).toBeDefined());
   });
 
   it('concepts table has correct name', () => {
@@ -23,5 +30,16 @@ describe('Drizzle schema', () => {
 
   it('assessment_events has correct name', () => {
     expect(getTableName(assessmentEvents)).toBe('assessment_events');
+  });
+
+  it('auth tables have correct names', () => {
+    expect(getTableName(user)).toBe('user');
+    expect(getTableName(session)).toBe('session');
+    expect(getTableName(account)).toBe('account');
+    expect(getTableName(verification)).toBe('verification');
+    expect(getTableName(organization)).toBe('organization');
+    expect(getTableName(member)).toBe('member');
+    expect(getTableName(invitation)).toBe('invitation');
+    expect(getTableName(apikey)).toBe('apikey');
   });
 });

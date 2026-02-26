@@ -1,5 +1,110 @@
 import { pgTable, text, real, integer, smallint, boolean, timestamp, jsonb, primaryKey, index, serial } from 'drizzle-orm/pg-core';
 
+// --- Auth (Better Auth) ---
+
+export const user = pgTable('user', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  emailVerified: boolean('emailVerified').notNull().default(false),
+  image: text('image'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export const session = pgTable('session', {
+  id: text('id').primaryKey(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  token: text('token').notNull().unique(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  ipAddress: text('ipAddress'),
+  userAgent: text('userAgent'),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  activeOrganizationId: text('activeOrganizationId'),
+});
+
+export const account = pgTable('account', {
+  id: text('id').primaryKey(),
+  accountId: text('accountId').notNull(),
+  providerId: text('providerId').notNull(),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  accessToken: text('accessToken'),
+  refreshToken: text('refreshToken'),
+  idToken: text('idToken'),
+  accessTokenExpiresAt: timestamp('accessTokenExpiresAt'),
+  refreshTokenExpiresAt: timestamp('refreshTokenExpiresAt'),
+  scope: text('scope'),
+  password: text('password'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export const verification = pgTable('verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  createdAt: timestamp('createdAt'),
+  updatedAt: timestamp('updatedAt'),
+});
+
+// --- Auth: Organization plugin ---
+
+export const organization = pgTable('organization', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').unique(),
+  logo: text('logo'),
+  metadata: text('metadata'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export const member = pgTable('member', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  organizationId: text('organizationId').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export const invitation = pgTable('invitation', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull(),
+  inviterId: text('inviterId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  organizationId: text('organizationId').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(),
+  status: text('status').notNull(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+// --- Auth: API Key plugin ---
+
+export const apikey = pgTable('apikey', {
+  id: text('id').primaryKey(),
+  name: text('name'),
+  start: text('start'),
+  prefix: text('prefix'),
+  key: text('key').notNull(),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  refillInterval: integer('refillInterval'),
+  refillAmount: integer('refillAmount'),
+  lastRefillAt: timestamp('lastRefillAt'),
+  enabled: boolean('enabled').default(true),
+  rateLimitEnabled: boolean('rateLimitEnabled').default(false),
+  rateLimitTimeWindow: integer('rateLimitTimeWindow'),
+  rateLimitMax: integer('rateLimitMax'),
+  requestCount: integer('requestCount').default(0),
+  remaining: integer('remaining'),
+  lastRequest: timestamp('lastRequest'),
+  expiresAt: timestamp('expiresAt'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  permissions: text('permissions'),
+  metadata: text('metadata'),
+});
+
 // --- Concepts ---
 
 export const concepts = pgTable('concepts', {
@@ -7,7 +112,7 @@ export const concepts = pgTable('concepts', {
   aliases: text('aliases').array().notNull().default([]),
   domain: text('domain').notNull(),
   specificity: text('specificity').notNull(),
-  parentId: text('parent_id').references(() => concepts.id),
+  parentId: text('parent_id'),
   discrimination: real('discrimination').notNull().default(1.0),
   threshold1: real('threshold_1').notNull().default(-1.0),
   threshold2: real('threshold_2').notNull().default(0.0),
@@ -29,8 +134,10 @@ export const conceptEdges = pgTable('concept_edges', {
   index('idx_concept_edges_target').on(table.targetId),
 ]);
 
+// --- User Mastery ---
+
 export const userConceptStates = pgTable('user_concept_states', {
-  userId: text('user_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
   mu: real('mu').notNull().default(0.0),
   sigma: real('sigma').notNull().default(1.5),
@@ -47,6 +154,8 @@ export const userConceptStates = pgTable('user_concept_states', {
 }, (table) => [
   primaryKey({ columns: [table.userId, table.conceptId] }),
 ]);
+
+// --- Assessment History ---
 
 export const assessmentEvents = pgTable('assessment_events', {
   id: serial('id').primaryKey(),
@@ -65,9 +174,11 @@ export const assessmentEvents = pgTable('assessment_events', {
   index('idx_assessment_events_created').on(table.createdAt),
 ]);
 
+// --- Tutor Sessions ---
+
 export const tutorSessions = pgTable('tutor_sessions', {
   id: text('id').primaryKey(),
-  userId: text('user_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   conceptId: text('concept_id').notNull().references(() => concepts.id),
   phase: text('phase').notNull(),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
@@ -87,16 +198,20 @@ export const tutorExchanges = pgTable('tutor_exchanges', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Probe Sessions ---
+
 export const probeSessions = pgTable('probe_sessions', {
-  userId: text('user_id').primaryKey(),
+  userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   pendingConceptId: text('pending_concept_id').references(() => concepts.id),
   pendingProbeData: jsonb('pending_probe_data'),
   lastProbeTime: timestamp('last_probe_time', { withTimezone: true }),
   probesThisSession: integer('probes_this_session').notNull().default(0),
 });
 
+// --- Pending Actions ---
+
 export const pendingActions = pgTable('pending_actions', {
-  userId: text('user_id').primaryKey(),
+  userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   actionType: text('action_type').notNull(),
   data: jsonb('data').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

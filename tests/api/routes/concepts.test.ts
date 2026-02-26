@@ -8,7 +8,7 @@ const testDbUrl = process.env.DATABASE_URL;
 const describeWithDb = testDbUrl ? describe : describe.skip;
 
 describeWithDb('API routes (integration)', () => {
-  const app = createApp(testDbUrl!);
+  const { app } = createApp(testDbUrl!, { secret: 'test-secret-that-is-at-least-32-chars-long' });
 
   it('GET /health returns ok', async () => {
     const res = await app.request('/health');
@@ -53,24 +53,13 @@ describeWithDb('API routes (integration)', () => {
     expect(Array.isArray(body)).toBe(true);
   });
 
-  it('GET /api/mastery requires userId', async () => {
+  it('GET /api/mastery requires auth (returns 401)', async () => {
     const res = await app.request('/api/mastery');
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
-  it('GET /api/mastery?userId=test returns empty array for new user', async () => {
-    const res = await app.request('/api/mastery?userId=test-user-123');
-    expect(res.status).toBe(200);
-    const body = await res.json() as any[];
-    expect(Array.isArray(body)).toBe(true);
-    expect(body).toHaveLength(0);
-  });
-
-  it('GET /api/mastery/:conceptId returns defaults for unassessed concept', async () => {
-    const res = await app.request('/api/mastery/react-hooks?userId=test-user-123');
-    expect(res.status).toBe(200);
-    const body = await res.json() as any;
-    expect(body.mu).toBe(0);
-    expect(body.sigma).toBe(1.5);
+  it('GET /api/mcp/status requires auth (returns 401)', async () => {
+    const res = await app.request('/api/mcp/status');
+    expect(res.status).toBe(401);
   });
 });

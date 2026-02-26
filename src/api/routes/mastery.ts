@@ -1,31 +1,59 @@
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
-import { userConceptStates, assessmentEvents } from '../db/schema.js';
+import { eq, and, sql } from 'drizzle-orm';
+import { userConceptStates, assessmentEvents, concepts, conceptEdges } from '../db/schema.js';
+import { requireAuth } from '../middleware/auth.js';
 import type { Env } from '../index.js';
 
 export const masteryRoutes = new Hono<Env>();
 
-// Get all mastery states for a user
+// All mastery routes require authentication
+masteryRoutes.use('*', requireAuth);
+
+// Get all mastery states for the authenticated user
 masteryRoutes.get('/', async (c) => {
   const db = c.get('db');
-  const userId = c.req.query('userId');
-  if (!userId) return c.json({ error: 'userId required' }, 400);
+  const user = c.get('user')!;
 
   const states = await db.select().from(userConceptStates)
-    .where(eq(userConceptStates.userId, userId));
+    .where(eq(userConceptStates.userId, user.id));
   return c.json(states);
+});
+
+// ZPD frontier for the authenticated user
+masteryRoutes.get('/zpd-frontier', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user')!;
+  const threshold = parseFloat(c.req.query('threshold') || '0.7');
+
+  const result = await db.execute(sql`
+    SELECT c.id, c.domain, c.specificity,
+           COALESCE(ucs.mu, 0) AS mu,
+           COALESCE(ucs.sigma, 1.5) AS sigma
+    FROM concepts c
+    LEFT JOIN user_concept_states ucs ON ucs.concept_id = c.id AND ucs.user_id = ${user.id}
+    WHERE (1.0 / (1.0 + EXP(-COALESCE(ucs.mu, 0)))) < ${threshold}
+      AND NOT EXISTS (
+        SELECT 1 FROM concept_edges ce
+        LEFT JOIN user_concept_states pucs ON pucs.concept_id = ce.target_id AND pucs.user_id = ${user.id}
+        WHERE ce.source_id = c.id
+          AND ce.edge_type = 'requires'
+          AND (1.0 / (1.0 + EXP(-COALESCE(pucs.mu, 0)))) < ${threshold}
+      )
+    ORDER BY c.id
+  `);
+
+  return c.json({ frontier: result.rows });
 });
 
 // Get mastery for a specific concept
 masteryRoutes.get('/:conceptId', async (c) => {
   const db = c.get('db');
-  const userId = c.req.query('userId');
+  const user = c.get('user')!;
   const conceptId = c.req.param('conceptId');
-  if (!userId) return c.json({ error: 'userId required' }, 400);
 
   const [state] = await db.select().from(userConceptStates)
     .where(and(
-      eq(userConceptStates.userId, userId),
+      eq(userConceptStates.userId, user.id),
       eq(userConceptStates.conceptId, conceptId),
     ));
 
@@ -36,13 +64,12 @@ masteryRoutes.get('/:conceptId', async (c) => {
 // Get assessment history for a concept
 masteryRoutes.get('/:conceptId/history', async (c) => {
   const db = c.get('db');
-  const userId = c.req.query('userId');
+  const user = c.get('user')!;
   const conceptId = c.req.param('conceptId');
-  if (!userId) return c.json({ error: 'userId required' }, 400);
 
   const events = await db.select().from(assessmentEvents)
     .where(and(
-      eq(assessmentEvents.userId, userId),
+      eq(assessmentEvents.userId, user.id),
       eq(assessmentEvents.conceptId, conceptId),
     ))
     .orderBy(assessmentEvents.createdAt)

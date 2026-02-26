@@ -8,6 +8,13 @@
       "when": 1772070130382,
       "tag": "0000_talented_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772071100332,
+      "tag": "0001_flaky_jasper_sitwell",
+      "breakpoints": true
     }
   ]
 }

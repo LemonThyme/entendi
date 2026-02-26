@@ -23,6 +23,7 @@
     "@hono/node-server": "^1.19.9",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@neondatabase/serverless": "^1.0.2",
+    "better-auth": "^1.4.19",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.12.2",
     "tree-sitter-javascript": "^0.25.0",
