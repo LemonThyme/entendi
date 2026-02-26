@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeConcept } from '../../src/api/lib/concept-normalize.js';
+import { normalizeConcept, resolveConceptId } from '../../src/api/lib/concept-normalize.js';
 
 describe('normalizeConcept', () => {
   it('lowercases', () => {
@@ -37,5 +37,44 @@ describe('normalizeConcept', () => {
   it('handles empty-ish input', () => {
     expect(normalizeConcept('---')).toBe('');
     expect(normalizeConcept('  ')).toBe('');
+  });
+});
+
+describe('resolveConceptId', () => {
+  it('returns canonical ID if alias exists', async () => {
+    const mockDb = {
+      select: () => ({
+        from: () => ({
+          where: () => [{ canonicalId: 'a-b-testing' }],
+        }),
+      }),
+    };
+    const result = await resolveConceptId(mockDb as any, 'ab-testing');
+    expect(result).toBe('a-b-testing');
+  });
+
+  it('returns normalized input if no alias exists', async () => {
+    const mockDb = {
+      select: () => ({
+        from: () => ({
+          where: () => [],
+        }),
+      }),
+    };
+    const result = await resolveConceptId(mockDb as any, 'Thompson Sampling');
+    expect(result).toBe('thompson-sampling');
+  });
+
+  it('normalizes before looking up alias', async () => {
+    const mockDb = {
+      select: () => ({
+        from: () => ({
+          where: () => [{ canonicalId: 'react-hooks' }],
+        }),
+      }),
+    };
+    // Input with mixed case and spaces should be normalized before alias lookup
+    const result = await resolveConceptId(mockDb as any, 'React Hooks');
+    expect(result).toBe('react-hooks');
   });
 });

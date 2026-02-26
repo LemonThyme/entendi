@@ -1,3 +1,7 @@
+import { eq } from 'drizzle-orm';
+import { conceptAliases } from '../db/schema.js';
+import type { Database } from '../db/connection.js';
+
 /**
  * Deterministic concept ID normalization.
  * Tier 1 of the three-tier normalization pipeline.
@@ -16,4 +20,18 @@ export function normalizeConcept(raw: string): string {
     .replace(/-{2,}/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 200);
+}
+
+/**
+ * Resolve a concept ID through normalization + alias lookup.
+ * Returns the canonical concept ID.
+ */
+export async function resolveConceptId(db: Database, raw: string): Promise<string> {
+  const normalized = normalizeConcept(raw);
+
+  const [alias] = await db.select({ canonicalId: conceptAliases.canonicalId })
+    .from(conceptAliases)
+    .where(eq(conceptAliases.alias, normalized));
+
+  return alias?.canonicalId ?? normalized;
 }
