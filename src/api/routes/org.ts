@@ -5,16 +5,37 @@ import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
 import { z } from 'zod';
 import type { Env } from '../index.js';
+import type { Context } from 'hono';
+import type { Database } from '../db/connection.js';
 
 export const orgRoutes = new Hono<Env>();
 
 orgRoutes.use('*', requireAuth);
 
+/**
+ * Resolve the user's org ID: prefer session.activeOrganizationId,
+ * fall back to their first org membership.
+ */
+async function resolveOrgId(c: Context<Env>): Promise<string | null> {
+  const session = c.get('session');
+  if (session?.activeOrganizationId) return session.activeOrganizationId;
+
+  const userId = c.get('user')?.id;
+  if (!userId) return null;
+
+  const db = c.get('db');
+  const [membership] = await db.select({ organizationId: member.organizationId })
+    .from(member)
+    .where(eq(member.userId, userId))
+    .limit(1);
+
+  return membership?.organizationId ?? null;
+}
+
 // GET /members — list org members with mastery overview
 orgRoutes.get('/members', async (c) => {
   const db = c.get('db');
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const members = await db.select({
@@ -52,8 +73,7 @@ orgRoutes.get('/members', async (c) => {
 // GET /members/:userId — detailed member knowledge graph
 orgRoutes.get('/members/:userId', async (c) => {
   const db = c.get('db');
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   const targetUserId = c.req.param('userId');
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
@@ -83,8 +103,7 @@ orgRoutes.get('/members/:userId', async (c) => {
 // GET /rankings — mastery leaderboard for org members
 orgRoutes.get('/rankings', async (c) => {
   const db = c.get('db');
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const members = await db.select({
@@ -126,8 +145,7 @@ orgRoutes.get('/rankings', async (c) => {
 // GET /analytics — aggregate org analytics
 orgRoutes.get('/analytics', async (c) => {
   const db = c.get('db');
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   // Get all member user IDs
@@ -181,8 +199,7 @@ const rateLimitsSchema = z.object({
 // GET /settings — get org settings (rate limits, etc.)
 orgRoutes.get('/settings', async (c) => {
   const db = c.get('db');
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const [org] = await db.select({ metadata: organization.metadata })
@@ -209,8 +226,7 @@ orgRoutes.get('/settings', async (c) => {
 orgRoutes.put('/settings/rate-limits', async (c) => {
   const db = c.get('db');
   const currentUser = c.get('user')!;
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   // Verify user is owner or admin
