@@ -74,7 +74,7 @@ if (existsSync('plugin')) {
   copyDir('plugin', pluginDir);
 }
 
-// 2. Copy bundled hook entrypoints (only the two CLI scripts)
+// 2. Copy bundled hook entrypoints (JS bundles + bash wrappers)
 const hookEntrypoints = ['post-tool-use.js', 'user-prompt-submit.js'];
 mkdirSync(join(pluginDir, 'hooks'), { recursive: true });
 for (const file of hookEntrypoints) {
@@ -82,6 +82,15 @@ for (const file of hookEntrypoints) {
   if (existsSync(src)) {
     copyFileSync(src, join(pluginDir, 'hooks', file));
     chmodSync(join(pluginDir, 'hooks', file), 0o755);
+  }
+}
+
+// 2b. Ensure bash wrapper scripts and run-hook.cmd are executable
+const hookScripts = ['run-hook.cmd', 'post-tool-use', 'user-prompt-submit'];
+for (const file of hookScripts) {
+  const dest = join(pluginDir, 'hooks', file);
+  if (existsSync(dest)) {
+    chmodSync(dest, 0o755);
   }
 }
 

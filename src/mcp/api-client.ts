@@ -2,6 +2,25 @@
  * HTTP client for the Entendi API. Replaces StateManager for the MCP server,
  * delegating all state operations to the production API.
  */
+import { appendFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+
+const LOG_DIR = join(homedir(), '.entendi');
+const LOG_FILE = join(LOG_DIR, 'debug.log');
+let logReady = false;
+
+function apiLog(message: string, data?: unknown): void {
+  if (!logReady) {
+    try { mkdirSync(LOG_DIR, { recursive: true }); } catch {}
+    logReady = true;
+  }
+  const ts = new Date().toISOString();
+  const dataStr = data !== undefined ? ` ${JSON.stringify(data)}` : '';
+  try {
+    appendFileSync(LOG_FILE, `[${ts}] [api-client] ${message}${dataStr}\n`);
+  } catch {}
+}
 
 export interface ApiClientOptions {
   apiUrl: string;
@@ -15,6 +34,7 @@ export class EntendiApiClient {
   constructor(options: ApiClientOptions) {
     this.apiUrl = options.apiUrl.replace(/\/$/, '');
     this.apiKey = options.apiKey;
+    apiLog('initialized', { apiUrl: this.apiUrl });
   }
 
   private async request(method: string, path: string, body?: unknown): Promise<any> {
@@ -29,14 +49,19 @@ export class EntendiApiClient {
     if (body) {
       init.body = JSON.stringify(body);
     }
+    apiLog(`${method} ${path}`, body ? { body } : undefined);
+    const start = Date.now();
     const res = await fetch(url, init);
 
     if (!res.ok) {
       const text = await res.text();
+      apiLog(`${method} ${path} FAILED`, { status: res.status, elapsed: Date.now() - start, error: text });
       throw new Error(`API ${method} ${path} failed (${res.status}): ${text}`);
     }
 
-    return res.json();
+    const result = await res.json();
+    apiLog(`${method} ${path} OK`, { status: res.status, elapsed: Date.now() - start, result });
+    return result;
   }
 
   async observe(input: {

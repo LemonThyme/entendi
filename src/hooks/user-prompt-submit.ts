@@ -1,4 +1,4 @@
-import { readStdin, type HookInput } from './shared.js';
+import { readStdin, log, type HookInput } from './shared.js';
 
 export interface UserPromptSubmitOutput {
   hookSpecificOutput?: {
@@ -26,19 +26,41 @@ export function detectTeachMePattern(prompt: string): string | null {
 
 // --- API client for pending actions ---
 
+async function loadEnvFromProject(cwd: string): Promise<void> {
+  if (process.env.ENTENDI_API_URL) return;
+  try {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const envFile = readFileSync(join(cwd, '.env'), 'utf-8');
+    for (const line of envFile.split('\n')) {
+      const match = line.match(/^(ENTENDI_\w+)=(.+)$/);
+      if (match) process.env[match[1]] = match[2].trim();
+    }
+  } catch {}
+}
+
 async function fetchPendingAction(): Promise<any | null> {
   const apiUrl = process.env.ENTENDI_API_URL;
   const apiKey = process.env.ENTENDI_API_KEY;
-  if (!apiUrl || !apiKey) return null;
+  if (!apiUrl || !apiKey) {
+    log('hook:user-prompt-submit', 'fetchPendingAction: missing env vars', { hasUrl: !!apiUrl, hasKey: !!apiKey });
+    return null;
+  }
 
   try {
+    log('hook:user-prompt-submit', 'fetchPendingAction: calling API', { url: `${apiUrl}/api/mcp/pending-action` });
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
       headers: { 'x-api-key': apiKey },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      log('hook:user-prompt-submit', 'fetchPendingAction: API error', { status: res.status });
+      return null;
+    }
     const data = await res.json() as { pending: any | null };
+    log('hook:user-prompt-submit', 'fetchPendingAction: result', data);
     return data.pending;
-  } catch {
+  } catch (err) {
+    log('hook:user-prompt-submit', 'fetchPendingAction: exception', { error: String(err) });
     return null;
   }
 }
@@ -51,6 +73,7 @@ export async function handleUserPromptSubmit(
   const userPrompt = (input.prompt as string) ?? '';
 
   // 1. Check for pending action via API
+  await loadEnvFromProject(input.cwd);
   const pending = await fetchPendingAction();
 
   if (pending) {
@@ -124,23 +147,34 @@ function getTutorPhaseInstructions(phase: string): string {
 }
 
 async function main() {
+  log('hook:user-prompt-submit', 'started');
   const raw = await readStdin();
   if (!raw || !raw.trim()) {
-    process.exit(0);
+    log('hook:user-prompt-submit', 'empty stdin, exiting');
+    process.exitCode = 0;
+    return;
   }
+  log('hook:user-prompt-submit', 'stdin received', { length: raw.length, preview: raw.slice(0, 200) });
   const input: HookInput = JSON.parse(raw);
   const result = await handleUserPromptSubmit(input);
 
-  if (result) {
-    process.stdout.write(JSON.stringify(result));
+  if (result?.hookSpecificOutput?.additionalContext) {
+    const text = result.hookSpecificOutput.additionalContext;
+    log('hook:user-prompt-submit', 'output (plain text)', { length: text.length, preview: text.slice(0, 300) });
+    // Write plain text — avoids Claude Code Issue #13912 (JSON stdout causes false hook errors)
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(text, (err) => err ? reject(err) : resolve());
+    });
+  } else {
+    log('hook:user-prompt-submit', 'no output (null result)');
   }
 
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   main().catch((err) => {
-    process.stderr.write(`[Entendi] Hook error: ${String(err)}\n`);
-    process.exit(0);
+    log('hook:user-prompt-submit', 'fatal error', { error: String(err), stack: (err as Error)?.stack });
+    process.exitCode = 0;
   });
 }

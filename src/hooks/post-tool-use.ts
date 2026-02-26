@@ -1,4 +1,4 @@
-import { readStdin, type HookInput } from './shared.js';
+import { readStdin, log, type HookInput } from './shared.js';
 import {
   detectPackageInstall,
   parsePackageFromCommand,
@@ -159,15 +159,23 @@ function extractConceptsFromCode(content: string): string[] {
 }
 
 async function main() {
+  log('hook:post-tool-use', 'started');
   const raw = await readStdin();
   if (!raw || !raw.trim()) {
+    log('hook:post-tool-use', 'empty stdin, exiting');
     process.exit(0);
   }
+  log('hook:post-tool-use', 'stdin received', { length: raw.length });
   const input: HookInput = JSON.parse(raw);
+  log('hook:post-tool-use', 'parsed input', { tool: input.tool_name, event: input.hook_event_name });
   const result = await handlePostToolUse(input);
 
   if (result) {
-    process.stdout.write(JSON.stringify(result));
+    const output = JSON.stringify(result);
+    log('hook:post-tool-use', 'output', { length: output.length, preview: output.slice(0, 300) });
+    process.stdout.write(output);
+  } else {
+    log('hook:post-tool-use', 'no output (null result)');
   }
 
   process.exit(0);
@@ -175,7 +183,7 @@ async function main() {
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   main().catch((err) => {
-    process.stderr.write(`[Entendi] Hook error: ${String(err)}\n`);
+    log('hook:post-tool-use', 'fatal error', { error: String(err), stack: (err as Error)?.stack });
     process.exit(0);
   });
 }

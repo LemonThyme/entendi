@@ -1,7 +1,26 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { appendFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { EntendiApiClient } from './api-client.js';
+
+const MCP_LOG_DIR = join(homedir(), '.entendi');
+const MCP_LOG_FILE = join(MCP_LOG_DIR, 'debug.log');
+let mcpLogReady = false;
+
+function mcpLog(message: string, data?: unknown): void {
+  if (!mcpLogReady) {
+    try { mkdirSync(MCP_LOG_DIR, { recursive: true }); } catch {}
+    mcpLogReady = true;
+  }
+  const ts = new Date().toISOString();
+  const dataStr = data !== undefined ? ` ${JSON.stringify(data)}` : '';
+  try {
+    appendFileSync(MCP_LOG_FILE, `[${ts}] [mcp] ${message}${dataStr}\n`);
+  } catch {}
+}
 
 export interface EntendiServerOptions {
   /** API base URL (e.g. http://localhost:3456 or https://api.entendi.dev) */
@@ -43,13 +62,16 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       triggerContext: z.string(),
     },
     async (args) => {
+      mcpLog('tool:entendi_observe called', args);
       try {
         const result = await api.observe({
           concepts: args.concepts,
           triggerContext: args.triggerContext,
         });
+        mcpLog('tool:entendi_observe result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_observe error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -68,6 +90,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
     },
     async (args) => {
+      mcpLog('tool:entendi_record_evaluation called', args);
       try {
         const result = await api.recordEvaluation({
           conceptId: args.conceptId,
@@ -76,8 +99,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
           reasoning: args.reasoning,
           eventType: args.eventType,
         });
+        mcpLog('tool:entendi_record_evaluation result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_record_evaluation error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -93,13 +118,16 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       triggerScore: z.union([z.literal(0), z.literal(1), z.null()]).optional(),
     },
     async (args) => {
+      mcpLog('tool:entendi_start_tutor called', args);
       try {
         const result = await api.startTutor({
           conceptId: args.conceptId,
           triggerScore: args.triggerScore as 0 | 1 | null | undefined,
         });
+        mcpLog('tool:entendi_start_tutor result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_start_tutor error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -119,6 +147,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       misconception: z.string().optional(),
     },
     async (args) => {
+      mcpLog('tool:entendi_advance_tutor called', args);
       try {
         const result = await api.advanceTutor({
           sessionId: args.sessionId,
@@ -128,8 +157,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
           reasoning: args.reasoning,
           misconception: args.misconception,
         });
+        mcpLog('tool:entendi_advance_tutor result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_advance_tutor error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -144,12 +175,15 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       reason: z.enum(['user_declined', 'topic_changed', 'timeout']).optional(),
     },
     async (args) => {
+      mcpLog('tool:entendi_dismiss called', args);
       try {
         const result = await api.dismiss({
           reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined,
         });
+        mcpLog('tool:entendi_dismiss result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_dismiss error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -164,10 +198,13 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       conceptId: z.string().optional(),
     },
     async (args) => {
+      mcpLog('tool:entendi_get_status called', args);
       try {
         const result = await api.getStatus(args.conceptId);
+        mcpLog('tool:entendi_get_status result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_get_status error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -180,10 +217,13 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
     {},
     async () => {
+      mcpLog('tool:entendi_get_zpd_frontier called');
       try {
         const result = await api.getZpdFrontier();
+        mcpLog('tool:entendi_get_zpd_frontier result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
+        mcpLog('tool:entendi_get_zpd_frontier error', { error: String(err) });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
