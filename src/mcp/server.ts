@@ -1,37 +1,34 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { StateManager } from '../core/state-manager.js';
-import { handleObserve } from './tools/observe.js';
-import { handleRecordEvaluation } from './tools/record-evaluation.js';
-import { handleGetStatus, handleGetZPDFrontier } from './tools/query.js';
-import { handleStartTutor, handleAdvanceTutor, handleDismiss } from './tools/tutor.js';
-import { loadConfig } from '../config/config-loader.js';
+import { EntendiApiClient } from './api-client.js';
 
 export interface EntendiServerOptions {
-  dataDir: string;
-  userId?: string;
+  /** API base URL (e.g. http://localhost:3456 or https://api.entendi.dev) */
+  apiUrl: string;
+  /** API key for authentication */
+  apiKey: string;
 }
 
 export interface EntendiServer {
   close(): Promise<void>;
   getRegisteredTools(): Array<{ name: string }>;
-  getStateManager(): StateManager;
+  getApiClient(): EntendiApiClient;
   /** The underlying McpServer instance, for transport connection */
   getMcpServer(): McpServer;
 }
 
 export function createEntendiServer(options: EntendiServerOptions): EntendiServer {
-  const { dataDir, userId = process.env.ENTENDI_USER_ID ?? process.env.USER ?? 'default' } = options;
-
   const mcpServer = new McpServer({
     name: 'entendi',
     version: '0.2.0',
   });
 
-  const sm = new StateManager(dataDir, userId);
+  const api = new EntendiApiClient({
+    apiUrl: options.apiUrl,
+    apiKey: options.apiKey,
+  });
 
-  // Track registered tools for testing/introspection
   const registeredTools: Array<{ name: string }> = [];
 
   // --- Tool 1: entendi_observe ---
@@ -47,26 +44,19 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args) => {
       try {
-        const result = handleObserve(
-          { concepts: args.concepts, triggerContext: args.triggerContext },
-          sm,
-          userId,
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.observe({
+          concepts: args.concepts,
+          triggerContext: args.triggerContext,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
   registeredTools.push({ name: 'entendi_observe' });
 
   // --- Tool 2: entendi_record_evaluation ---
-  const resolvedConfig = loadConfig(dataDir);
   mcpServer.tool(
     'entendi_record_evaluation',
     'Record the evaluation of a probe or tutor response. Updates the knowledge graph with Bayesian scoring.',
@@ -79,26 +69,16 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args) => {
       try {
-        const result = handleRecordEvaluation(
-          {
-            conceptId: args.conceptId,
-            score: args.score as 0 | 1 | 2 | 3,
-            confidence: args.confidence,
-            reasoning: args.reasoning,
-            eventType: args.eventType,
-          },
-          sm,
-          userId,
-          resolvedConfig,
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.recordEvaluation({
+          conceptId: args.conceptId,
+          score: args.score as 0 | 1 | 2 | 3,
+          confidence: args.confidence,
+          reasoning: args.reasoning,
+          eventType: args.eventType,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
@@ -114,23 +94,13 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args) => {
       try {
-        const result = handleStartTutor(
-          {
-            conceptId: args.conceptId,
-            triggerScore: args.triggerScore as 0 | 1 | null | undefined,
-          },
-          sm,
-          userId,
-          resolvedConfig,
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.startTutor({
+          conceptId: args.conceptId,
+          triggerScore: args.triggerScore as 0 | 1 | null | undefined,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
@@ -150,27 +120,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args) => {
       try {
-        const result = handleAdvanceTutor(
-          {
-            sessionId: args.sessionId,
-            userResponse: args.userResponse,
-            score: args.score as 0 | 1 | 2 | 3 | undefined,
-            confidence: args.confidence,
-            reasoning: args.reasoning,
-            misconception: args.misconception,
-          },
-          sm,
-          userId,
-          resolvedConfig,
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.advanceTutor({
+          sessionId: args.sessionId,
+          userResponse: args.userResponse,
+          score: args.score as 0 | 1 | 2 | 3 | undefined,
+          confidence: args.confidence,
+          reasoning: args.reasoning,
+          misconception: args.misconception,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
@@ -185,19 +145,12 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args) => {
       try {
-        const result = handleDismiss(
-          { reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined },
-          sm,
-          userId,
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.dismiss({
+          reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined,
+        });
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
@@ -212,15 +165,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args) => {
       try {
-        const result = handleGetStatus({ conceptId: args.conceptId }, sm, userId);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.getStatus(args.conceptId);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
@@ -233,38 +181,40 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     {},
     async () => {
       try {
-        const result = handleGetZPDFrontier(sm, userId);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        const result = await api.getZpdFrontier();
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
   );
   registeredTools.push({ name: 'entendi_get_zpd_frontier' });
 
   return {
-    close: async () => { sm.save(); await mcpServer.close(); },
+    close: async () => { await mcpServer.close(); },
     getRegisteredTools: () => [...registeredTools],
-    getStateManager: () => sm,
+    getApiClient: () => api,
     getMcpServer: () => mcpServer,
   };
 }
 
 // --- Standalone entry point ---
 async function main() {
-  const dataDir = process.env.ENTENDI_DATA_DIR ?? '.entendi';
-  const server = createEntendiServer({ dataDir });
+  const apiUrl = process.env.ENTENDI_API_URL ?? 'http://localhost:3456';
+  const apiKey = process.env.ENTENDI_API_KEY;
+
+  if (!apiKey) {
+    process.stderr.write('[Entendi MCP] Error: ENTENDI_API_KEY environment variable is required\n');
+    process.stderr.write('[Entendi MCP] Generate an API key at your Entendi dashboard\n');
+    process.exit(1);
+  }
+
+  const server = createEntendiServer({ apiUrl, apiKey });
   const transport = new StdioServerTransport();
   await server.getMcpServer().connect(transport);
-  process.stderr.write('[Entendi MCP] Server started on stdio\n');
+  process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl})\n`);
 }
 
-// Only run main when invoked directly
 const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 if (isMainModule) {
   main().catch((err) => {

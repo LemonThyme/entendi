@@ -1,6 +1,10 @@
 {
   "entendi": {
     "command": "node",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.js"]
+    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.js"],
+    "env": {
+      "ENTENDI_API_URL": "${ENTENDI_API_URL}",
+      "ENTENDI_API_KEY": "${ENTENDI_API_KEY}"
+    }
   }
 }

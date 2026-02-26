@@ -1,44 +1,32 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { describe, it, expect } from 'vitest';
 import { createEntendiServer, type EntendiServer } from '../../src/mcp/server.js';
 
-describe('MCP Server Skeleton', () => {
-  let dataDir: string;
-  let server: EntendiServer;
+const testOptions = { apiUrl: 'http://localhost:3456', apiKey: 'test-key' };
 
-  beforeEach(() => {
-    dataDir = mkdtempSync(join(tmpdir(), 'entendi-mcp-server-'));
-  });
-
-  afterEach(() => {
-    rmSync(dataDir, { recursive: true, force: true });
-  });
-
+describe('MCP Server', () => {
   it('exports createEntendiServer function', () => {
     expect(typeof createEntendiServer).toBe('function');
   });
 
   it('creates a server with close method', () => {
-    server = createEntendiServer({ dataDir });
+    const server = createEntendiServer(testOptions);
     expect(server).toBeDefined();
     expect(typeof server.close).toBe('function');
   });
 
   it('creates a server with getRegisteredTools method', () => {
-    server = createEntendiServer({ dataDir });
+    const server = createEntendiServer(testOptions);
     expect(typeof server.getRegisteredTools).toBe('function');
   });
 
-  it('creates a server with getStateManager method', () => {
-    server = createEntendiServer({ dataDir });
-    expect(typeof server.getStateManager).toBe('function');
-    expect(server.getStateManager()).toBeDefined();
+  it('creates a server with getApiClient method', () => {
+    const server = createEntendiServer(testOptions);
+    expect(typeof server.getApiClient).toBe('function');
+    expect(server.getApiClient()).toBeDefined();
   });
 
   it('registers all 7 entendi tools', () => {
-    server = createEntendiServer({ dataDir });
+    const server = createEntendiServer(testOptions);
     const tools = server.getRegisteredTools();
     const toolNames = tools.map((t: { name: string }) => t.name);
     expect(toolNames).toContain('entendi_observe');
@@ -52,7 +40,7 @@ describe('MCP Server Skeleton', () => {
   });
 
   it('returns a copy of registered tools (not internal array)', () => {
-    server = createEntendiServer({ dataDir });
+    const server = createEntendiServer(testOptions);
     const tools1 = server.getRegisteredTools();
     const tools2 = server.getRegisteredTools();
     expect(tools1).not.toBe(tools2);
@@ -60,15 +48,10 @@ describe('MCP Server Skeleton', () => {
   });
 
   it('can create multiple independent server instances', () => {
-    const dataDir2 = mkdtempSync(join(tmpdir(), 'entendi-mcp-server2-'));
-    try {
-      const server1 = createEntendiServer({ dataDir });
-      const server2 = createEntendiServer({ dataDir: dataDir2 });
-      expect(server1.getRegisteredTools()).toHaveLength(7);
-      expect(server2.getRegisteredTools()).toHaveLength(7);
-      expect(server1.getStateManager()).not.toBe(server2.getStateManager());
-    } finally {
-      rmSync(dataDir2, { recursive: true, force: true });
-    }
+    const server1 = createEntendiServer(testOptions);
+    const server2 = createEntendiServer({ apiUrl: 'http://localhost:3457', apiKey: 'other-key' });
+    expect(server1.getRegisteredTools()).toHaveLength(7);
+    expect(server2.getRegisteredTools()).toHaveLength(7);
+    expect(server1.getApiClient()).not.toBe(server2.getApiClient());
   });
 });
