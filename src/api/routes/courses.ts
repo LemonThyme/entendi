@@ -48,7 +48,7 @@ courseRoutes.post('/', async (c) => {
   await db.insert(courses).values({
     id,
     name: parsed.name,
-    description: parsed.description ?? null,
+    description: parsed.description ?? '',
     status: 'draft',
     ownerId: user.id,
     orgId: parsed.orgId ?? null,
@@ -105,17 +105,13 @@ courseRoutes.post('/:id/concepts', async (c) => {
     if (!mod) return c.json({ error: 'Module not found in this course' }, 404);
   }
 
-  const id = crypto.randomUUID();
-  await db.insert(courseConcepts).values({
-    id,
+  const [created] = await db.insert(courseConcepts).values({
     courseId,
     conceptId: parsed.conceptId,
     moduleId: parsed.moduleId ?? null,
     learningObjective: parsed.learningObjective ?? null,
     requiredMasteryThreshold: parsed.requiredMasteryThreshold,
-  });
-
-  const [created] = await db.select().from(courseConcepts).where(eq(courseConcepts.id, id));
+  }).returning();
   return c.json(created, 201);
 });
 
@@ -150,14 +146,10 @@ courseRoutes.post('/:id/enroll', async (c) => {
   );
   if (existing) return c.json({ error: 'Already enrolled' }, 409);
 
-  const id = crypto.randomUUID();
-  await db.insert(courseEnrollments).values({
-    id,
+  const [enrollment] = await db.insert(courseEnrollments).values({
     courseId,
     userId: user.id,
-  });
-
-  const [enrollment] = await db.select().from(courseEnrollments).where(eq(courseEnrollments.id, id));
+  }).returning();
   return c.json(enrollment, 201);
 });
 
