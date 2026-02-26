@@ -119,6 +119,62 @@ mcpRoutes.post('/observe', async (c) => {
     };
   }));
 
+  // Prerequisite inconsistency detection (Design Doc Section 5.5):
+  // If any observed concept has higher mastery than its prerequisites,
+  // add those prerequisites as probe candidates with elevated urgency.
+  const INCONSISTENCY_MARGIN = 0.5; // mu difference to trigger
+  const candidateIds = new Set(candidates.map(c => c.conceptId));
+
+  for (const candidate of [...candidates]) {
+    if (candidate.assessmentCount === 0) continue; // skip unassessed concepts
+    // Find prerequisites of this concept
+    const prereqEdges = await db.select().from(conceptEdges)
+      .where(and(eq(conceptEdges.sourceId, candidate.conceptId), eq(conceptEdges.edgeType, 'requires')));
+
+    for (const edge of prereqEdges) {
+      if (candidateIds.has(edge.targetId)) continue; // already a candidate
+      const [prereqState] = await db.select().from(userConceptStates)
+        .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, edge.targetId)));
+
+      const prereqMu = prereqState?.mu ?? 0.0;
+      // Inconsistency: child has materially higher mastery than prerequisite
+      if (candidate.mu - prereqMu > INCONSISTENCY_MARGIN) {
+        const prereqSigma = prereqState?.sigma ?? 1.5;
+        const prereqStability = prereqState?.stability ?? 1.0;
+        const prereqLastAssessed = prereqState?.lastAssessed;
+        const prereqDaysSince = prereqLastAssessed
+          ? (Date.now() - new Date(prereqLastAssessed).getTime()) / (1000 * 60 * 60 * 24)
+          : 999;
+        const prereqCount = prereqState?.assessmentCount ?? 0;
+
+        const [prereqConcept] = await db.select().from(concepts).where(eq(concepts.id, edge.targetId));
+        const prereqItemParams: GRMItemParams = {
+          discrimination: prereqConcept?.discrimination ?? 1.0,
+          thresholds: [prereqConcept?.threshold1 ?? -1.0, prereqConcept?.threshold2 ?? 0.0, prereqConcept?.threshold3 ?? 1.0],
+        };
+        const prereqFisher = grmFisherInformation(prereqMu, prereqItemParams);
+
+        // Boost urgency for inconsistent prerequisites
+        const baseUrgency = probeUrgency({
+          mu: prereqMu, sigma: prereqSigma, stability: prereqStability,
+          daysSinceAssessed: prereqDaysSince, assessmentCount: prereqCount,
+          fisherInfo: prereqFisher,
+        });
+
+        candidates.push({
+          conceptId: edge.targetId,
+          mu: prereqMu, sigma: prereqSigma, stability: prereqStability,
+          daysSince: prereqDaysSince, lastAssessed: prereqLastAssessed ?? null,
+          fisherInfo: prereqFisher,
+          urgency: Math.min(1.0, baseUrgency + 0.2), // 0.2 boost for inconsistency
+          itemParams: prereqItemParams,
+          assessmentCount: prereqCount,
+        });
+        candidateIds.add(edge.targetId);
+      }
+    }
+  }
+
   // Select best candidate by probe urgency (combines mastery gap, uncertainty, and decay)
   const sorted = candidates.sort((a, b) => b.urgency - a.urgency);
   const selected = sorted[0];
