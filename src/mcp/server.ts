@@ -84,8 +84,8 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     'Record the evaluation of a probe or tutor response. Updates the knowledge graph with Bayesian scoring.',
     {
       conceptId: z.string(),
-      score: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
-      confidence: z.number().min(0).max(1),
+      score: z.coerce.number().int().min(0).max(3),
+      confidence: z.coerce.number().min(0).max(1),
       reasoning: z.string(),
       eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
     },
@@ -115,7 +115,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     'Start a 4-phase Socratic tutor session for a concept.',
     {
       conceptId: z.string(),
-      triggerScore: z.union([z.literal(0), z.literal(1), z.null()]).optional(),
+      triggerScore: z.coerce.number().int().min(0).max(1).nullable().optional(),
     },
     async (args) => {
       mcpLog('tool:entendi_start_tutor called', args);
@@ -141,8 +141,8 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     {
       sessionId: z.string(),
       userResponse: z.string(),
-      score: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]).optional(),
-      confidence: z.number().min(0).max(1).optional(),
+      score: z.coerce.number().int().min(0).max(3).optional(),
+      confidence: z.coerce.number().min(0).max(1).optional(),
       reasoning: z.string().optional(),
       misconception: z.string().optional(),
     },
