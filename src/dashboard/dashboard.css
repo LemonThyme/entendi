@@ -361,6 +361,91 @@ body {
 }
 .toast.show { opacity: 1; transform: translateY(0); }
 
+/* --- Chart panels --- */
+.chart-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+/* --- Scroll containers --- */
+.scroll-container {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.scroll-container::-webkit-scrollbar { width: 6px; }
+.scroll-container::-webkit-scrollbar-track { background: transparent; }
+.scroll-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* --- Mastery range in tables --- */
+.mastery-range { font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.5rem; }
+.mastery-range-large { font-size: 1.1rem; font-weight: 600; margin-left: 0.75rem; }
+.mastery-bar-container { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.mastery-bar { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+/* --- Concept detail --- */
+.concept-detail-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.concept-detail-header h2 { font-size: 1.25rem; margin: 0; }
+.btn-back {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer;
+  color: var(--text-secondary); margin-bottom: 1rem;
+}
+.btn-back:hover { background: var(--bg); }
+
+/* --- Confidence badges --- */
+.confidence-badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 4px; }
+.confidence-badge.confidence-high { background: #f0fdf4; color: #16a34a; }
+.confidence-badge.confidence-med { background: #fffbeb; color: #d97706; }
+.confidence-badge.confidence-low { background: #fef2f2; color: #dc2626; }
+
+/* --- Concept rows (clickable in Concepts tab) --- */
+#concepts-list .concept-row { cursor: pointer; transition: background 0.15s; }
+#concepts-list .concept-row:hover { background: var(--bg); }
+
+/* --- Domain badges --- */
+.domain-badge {
+  font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 3px;
+  background: var(--bg); color: var(--text-secondary); margin-left: 0.5rem;
+}
+
+/* --- Tutor session cards --- */
+.tutor-session-card {
+  display: flex; gap: 1rem; align-items: center; padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border); font-size: 0.85rem;
+}
+
+/* --- Prerequisite items --- */
+.prereq-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.4rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+}
+
+/* --- Text helpers --- */
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+
+/* --- Skeleton loading --- */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* --- Velocity toggle --- */
+.velocity-toggle { display: flex; gap: 0.25rem; }
+.velocity-toggle button {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.2rem 0.5rem; font-size: 0.7rem; cursor: pointer; color: var(--text-secondary);
+}
+.velocity-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+
 /* Responsive */
 @media (max-width: 640px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
