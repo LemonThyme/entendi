@@ -129,6 +129,9 @@ orgRoutes.get('/members/:userId/history', async (c) => {
     muAfter: assessmentEvents.muAfter,
     evaluatorConfidence: assessmentEvents.evaluatorConfidence,
     integrityScore: assessmentEvents.integrityScore,
+    responseText: assessmentEvents.responseText,
+    evaluationCriteria: assessmentEvents.evaluationCriteria,
+    responseFeatures: assessmentEvents.responseFeatures,
     createdAt: assessmentEvents.createdAt,
   }).from(assessmentEvents)
     .where(eq(assessmentEvents.userId, targetUserId))

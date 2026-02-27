@@ -49,6 +49,7 @@ analyticsRoutes.get('/timeline/:conceptId', async (c) => {
     const estimatedSigma = initialSigma / Math.sqrt(1 + i * 0.5);
     const range = masteryRange(ev.muAfter, estimatedSigma);
     return {
+      eventId: ev.id,
       timestamp: ev.createdAt,
       mastery: range,
       eventType: ev.eventType,
@@ -210,6 +211,7 @@ analyticsRoutes.get('/concept/:conceptId', async (c) => {
     timeline: events.map((ev, i) => {
       const estimatedSigma = 1.5 / Math.sqrt(1 + i * 0.5);
       return {
+        eventId: ev.id,
         timestamp: ev.createdAt,
         mastery: masteryRange(ev.muAfter, estimatedSigma),
         eventType: ev.eventType,
