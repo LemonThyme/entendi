@@ -1,6 +1,7 @@
 import * as esbuild from 'esbuild';
-import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync, writeFileSync, rmSync } from 'fs';
+import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync, writeFileSync, rmSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { execFileSync } from 'child_process';
 
 const hookDir = join('src', 'hooks');
 let hookFiles: string[] = [];
@@ -75,6 +76,23 @@ function copyDir(src: string, dest: string): void {
 // 1. Copy static plugin metadata
 if (existsSync('plugin')) {
   copyDir('plugin', pluginDir);
+}
+
+// 1b. Stamp plugin version with git hash to bust Claude Code's plugin cache
+let gitHash = 'unknown';
+try {
+  gitHash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf-8' }).trim();
+} catch {
+  // not in a git repo — use timestamp as fallback
+  gitHash = Date.now().toString(36);
+}
+
+const pluginJsonPath = join(pluginDir, '.claude-plugin', 'plugin.json');
+if (existsSync(pluginJsonPath)) {
+  const pluginMeta = JSON.parse(readFileSync(pluginJsonPath, 'utf-8'));
+  pluginMeta.version = `${pluginMeta.version}+${gitHash}`;
+  writeFileSync(pluginJsonPath, JSON.stringify(pluginMeta, null, 2) + '\n');
+  console.log(`Plugin version stamped: ${pluginMeta.version}`);
 }
 
 // 2. Copy bundled hook entrypoints (JS bundles + bash wrappers)
