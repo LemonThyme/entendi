@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { handlePostToolUse } from '../../src/hooks/post-tool-use.js';
 import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
 import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
 import { buildSeedConceptNodes } from '../../src/config/seed-taxonomy.js';
@@ -16,7 +15,7 @@ function mockPendingAction(action: PendingAction | null) {
   }));
 }
 
-describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
+describe('end-to-end flow (thin hooks + MCP)', () => {
   let projectDir: string;
 
   beforeEach(() => {
@@ -30,24 +29,6 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
     vi.restoreAllMocks();
     delete process.env.ENTENDI_API_URL;
     delete process.env.ENTENDI_API_KEY;
-  });
-
-  it('PostToolUse detects concepts and instructs Claude to call entendi_observe', async () => {
-    const postToolResult = await handlePostToolUse(
-      {
-        session_id: 's1',
-        cwd: projectDir,
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'npm install redis' },
-      },
-      { skipLLM: true },
-    );
-
-    expect(postToolResult).toBeDefined();
-    const ctx = postToolResult!.hookSpecificOutput?.additionalContext!;
-    expect(ctx).toContain('entendi_observe');
-    expect(ctx).toContain('redis');
   });
 
   it('UserPromptSubmit reads pending action from API and returns evaluation instructions', async () => {
@@ -68,22 +49,6 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
     expect(submitResult).toBeDefined();
     expect(submitResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
     expect(submitResult!.hookSpecificOutput?.additionalContext).toContain('Entendi');
-  });
-
-  it('handles multiple packages in one install', async () => {
-    const postToolResult = await handlePostToolUse(
-      {
-        session_id: 's1',
-        cwd: projectDir,
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'npm install express zod' },
-      },
-      { skipLLM: true },
-    );
-
-    expect(postToolResult).toBeDefined();
-    expect(postToolResult!.hookSpecificOutput?.additionalContext).toBeTruthy();
   });
 
   it('tutor active flow: hook returns phase-specific instructions', async () => {
@@ -108,22 +73,6 @@ describe('end-to-end flow (Phase 1c — thin hooks + MCP)', () => {
     expect(ctx).toContain('entendi_advance_tutor');
     expect(ctx).toContain('misconception');
   });
-
-  it('no probe when concept is routine (hook still detects concepts)', async () => {
-    const result = await handlePostToolUse(
-      {
-        session_id: 's1',
-        cwd: projectDir,
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'npm install redis' },
-      },
-      { skipLLM: true },
-    );
-
-    expect(result).toBeDefined();
-    expect(result!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
-  });
 });
 
 describe('Phase 1a Integration', () => {
@@ -142,16 +91,7 @@ describe('Phase 1a Integration', () => {
     delete process.env.ENTENDI_API_KEY;
   });
 
-  it('PostToolUse detects concepts, UserPromptSubmit reads pending action', async () => {
-    // 1. Package install triggers concept detection
-    const installResult = await handlePostToolUse(
-      { session_id: 's1', cwd: tmpDir, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm install redis' }, tool_output: 'added redis@4' },
-      { skipLLM: true },
-    );
-    expect(installResult).toBeDefined();
-    expect(installResult!.hookSpecificOutput?.additionalContext).toContain('entendi_observe');
-
-    // 2. Simulate MCP server writing a pending action — mock API response
+  it('UserPromptSubmit reads pending action and returns evaluation instructions', async () => {
     mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
@@ -159,13 +99,11 @@ describe('Phase 1a Integration', () => {
       timestamp: new Date().toISOString(),
     });
 
-    // 3. User responds — hook reads pending action from API
     const respondResult = await handleUserPromptSubmit(
       { session_id: 's1', cwd: tmpDir, hook_event_name: 'UserPromptSubmit', prompt: 'Redis is an in-memory data store used for caching.' },
     );
     expect(respondResult).toBeDefined();
     expect(respondResult!.hookSpecificOutput?.additionalContext).toContain('entendi_record_evaluation');
-
   });
 
   it('GRM update produces valid posteriors across rubric scores', () => {

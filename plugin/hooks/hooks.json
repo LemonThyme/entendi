@@ -13,18 +13,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Write|Edit|Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [

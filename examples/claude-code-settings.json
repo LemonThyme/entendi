@@ -3,18 +3,6 @@
   "_comment_hooks": "LEGACY (local dev only): Add this to .claude/settings.local.json. Replace <ENTENDI_PATH> with your Entendi path.",
   "_comment_mcp": "The MCP server is registered separately via: claude mcp add entendi -- node <ENTENDI_PATH>/dist/mcp/server.js",
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node <ENTENDI_PATH>/dist/hooks/post-tool-use.js",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [
