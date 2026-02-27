@@ -528,8 +528,216 @@
 
   // --- Concepts Tab ---
 
+  var currentConceptDetail = null;
+
   function renderConceptsTab() {
-    // Populated in Task 10
+    var listContainer = document.getElementById("concepts-list");
+    var detailContainer = document.getElementById("concept-detail");
+    var countEl = document.getElementById("concepts-count");
+    listContainer.textContent = "";
+    detailContainer.style.display = "none";
+
+    // Skeleton
+    for (var i = 0; i < 8; i++) {
+      listContainer.appendChild(h("div", { className: "concept-row skeleton" }, "Loading..."));
+    }
+
+    Promise.all([
+      fetch("/api/mastery", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+      fetch("/api/concepts", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+      var states = results[0];
+      var allConceptsData = results[1];
+      listContainer.textContent = "";
+
+      // Only show concepts the user has state for
+      var userConcepts = states.map(function(s) {
+        var concept = allConceptsData.find(function(c) { return c.id === s.conceptId; });
+        return { state: s, concept: concept };
+      }).filter(function(item) { return item.concept; });
+
+      countEl.textContent = userConcepts.length + " concepts assessed";
+
+      // Header row
+      var header = h("div", { className: "concept-header" }, [
+        h("div", null, "Concept"),
+        h("div", null, "Mastery"),
+        h("div", { style: "text-align:center" }, "Confidence"),
+        h("div", { style: "text-align:right" }, "Assessments"),
+      ]);
+      listContainer.appendChild(header);
+
+      userConcepts.sort(function(a, b) {
+        return (b.state.lastAssessed || "").localeCompare(a.state.lastAssessed || "");
+      });
+
+      userConcepts.forEach(function(item) {
+        var s = item.state;
+        var c = item.concept;
+        var p = Math.round(pMastery(s.mu) * 100);
+        var low = Math.round(pMastery(s.mu - 2 * s.sigma) * 100);
+        var high = Math.min(100, Math.round(pMastery(s.mu + 2 * s.sigma) * 100));
+        var confidence = s.sigma < 0.3 ? "High" : s.sigma < 0.8 ? "Med" : "Low";
+
+        var row = h("div", { className: "concept-row", onclick: function() { openConceptDetail(s.conceptId); } }, [
+          h("div", { className: "concept-name" }, [
+            h("span", null, c.id),
+            c.domain ? h("span", { className: "domain-badge" }, c.domain) : null,
+          ]),
+          h("div", { className: "mastery-cell" }, [
+            h("div", { className: "mastery-bar-container" }, [
+              (function() {
+                var bar = h("div", { className: "mastery-bar" });
+                bar.style.width = p + "%";
+                bar.style.background = masteryColor(p);
+                return bar;
+              })()
+            ]),
+            h("span", { className: "mastery-range" }, low + "\u2013" + high + "%"),
+          ]),
+          h("div", { style: "text-align:center" }, h("span", { className: "confidence-badge confidence-" + confidence.toLowerCase() }, confidence)),
+          h("div", { style: "text-align:right" }, String(s.assessmentCount)),
+        ]);
+        listContainer.appendChild(row);
+      });
+    });
+  }
+
+  function openConceptDetail(conceptId) {
+    var listContainer = document.getElementById("concepts-list");
+    var detailContainer = document.getElementById("concept-detail");
+    listContainer.style.display = "none";
+    detailContainer.style.display = "block";
+    detailContainer.textContent = "";
+
+    // Back button
+    detailContainer.appendChild(h("button", {
+      className: "btn-back",
+      onclick: function() {
+        detailContainer.style.display = "none";
+        listContainer.style.display = "block";
+      }
+    }, "\u2190 Back to concepts"));
+
+    // Skeleton
+    detailContainer.appendChild(h("div", { className: "skeleton", style: "height:300px;margin:1rem 0" }, ""));
+
+    fetch("/api/analytics/concept/" + encodeURIComponent(conceptId), { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        // Clear skeleton, keep back button
+        while (detailContainer.children.length > 1) detailContainer.removeChild(detailContainer.lastChild);
+
+        // Concept header
+        var c = data.concept;
+        var m = data.mastery;
+        detailContainer.appendChild(h("div", { className: "concept-detail-header" }, [
+          h("h2", null, c.id),
+          c.domain ? h("span", { className: "domain-badge" }, c.domain) : null,
+          m ? h("span", { className: "mastery-range-large" }, m.low + "\u2013" + m.high + "%") : null,
+        ]));
+
+        // Analytics stats
+        if (data.analytics) {
+          var a = data.analytics;
+          var statsRow = h("div", { className: "stats-row" });
+          statsRow.appendChild(statCard(a.totalProbes, "Probes", ""));
+          statsRow.appendChild(statCard(a.totalTutorSessions, "Tutor Sessions", ""));
+          statsRow.appendChild(statCard(a.currentStreak, "Current Streak", a.currentStreak > 0 ? "green" : ""));
+          statsRow.appendChild(statCard(a.longestStreak, "Best Streak", "accent"));
+          detailContainer.appendChild(statsRow);
+        }
+
+        // Mastery timeline chart with confidence band
+        var chartPanel = h("div", { className: "chart-panel", style: "height:300px;margin:1rem 0" });
+        detailContainer.appendChild(chartPanel);
+
+        if (data.timeline && data.timeline.length > 0 && typeof echarts !== "undefined") {
+          var chart = echarts.init(chartPanel);
+          var timestamps = data.timeline.map(function(t) { return new Date(t.timestamp).toLocaleDateString(); });
+          var values = data.timeline.map(function(t) { return t.mastery.value; });
+          var lows = data.timeline.map(function(t) { return t.mastery.low; });
+          var highs = data.timeline.map(function(t) { return t.mastery.high; });
+
+          chart.setOption({
+            tooltip: {
+              trigger: "axis",
+              formatter: function(params) {
+                var idx = params[0].dataIndex;
+                var t = data.timeline[idx];
+                return timestamps[idx] + "<br/>Mastery: " + t.mastery.low + "\u2013" + t.mastery.high + "%"
+                  + "<br/>Score: " + t.rubricScore + "/3"
+                  + "<br/>Type: " + t.eventType;
+              }
+            },
+            xAxis: { type: "category", data: timestamps },
+            yAxis: { type: "value", min: 0, max: 100, name: "Mastery %" },
+            series: [
+              { type: "line", data: lows, stack: "band", areaStyle: { opacity: 0 }, lineStyle: { opacity: 0 }, symbol: "none" },
+              { type: "line", data: highs.map(function(h, i) { return h - lows[i]; }), stack: "band", areaStyle: { opacity: 0.15, color: "#2563eb" }, lineStyle: { opacity: 0 }, symbol: "none" },
+              { type: "line", data: values, smooth: true, lineStyle: { width: 2, color: "#2563eb" }, itemStyle: { color: "#2563eb" }, symbol: "circle", symbolSize: 6 },
+            ],
+            grid: { top: 30, right: 20, bottom: 30, left: 50 },
+          });
+          window.addEventListener("resize", function() { chart.resize(); });
+        }
+
+        // Event log
+        if (data.timeline && data.timeline.length > 0) {
+          detailContainer.appendChild(h("div", { className: "section-title", style: "margin-top:1.5rem" }, "Assessment History"));
+          var scrollContainer = h("div", { className: "scroll-container", style: "max-height:300px;overflow-y:auto" });
+          var table = h("table", { className: "activity-table" });
+          var thead = h("thead", null, [
+            h("tr", null, [
+              h("th", null, "Type"), h("th", null, "Score"), h("th", null, "Mastery"),
+              h("th", null, "Integrity"), h("th", null, "When"),
+            ])
+          ]);
+          table.appendChild(thead);
+          var tbody = h("tbody");
+          data.timeline.forEach(function(ev) {
+            tbody.appendChild(h("tr", null, [
+              h("td", null, ev.eventType),
+              h("td", null, ev.rubricScore + "/3"),
+              h("td", null, ev.mastery.low + "\u2013" + ev.mastery.high + "%"),
+              h("td", null, ev.integrityScore !== null ? (ev.integrityScore * 100).toFixed(0) + "%" : "\u2014"),
+              h("td", null, timeAgo(ev.timestamp)),
+            ]));
+          });
+          table.appendChild(tbody);
+          scrollContainer.appendChild(table);
+          detailContainer.appendChild(scrollContainer);
+        }
+
+        // Tutor sessions
+        if (data.tutorSessions && data.tutorSessions.length > 0) {
+          detailContainer.appendChild(h("div", { className: "section-title", style: "margin-top:1.5rem" }, "Tutor Sessions"));
+          var tutorScroll = h("div", { className: "scroll-container", style: "max-height:250px;overflow-y:auto" });
+          data.tutorSessions.forEach(function(ts) {
+            tutorScroll.appendChild(h("div", { className: "tutor-session-card" }, [
+              h("div", null, "Phase " + ts.phase + "/4"),
+              ts.phase1Score !== null ? h("div", null, "P1 Score: " + ts.phase1Score + "/3") : null,
+              ts.phase4Score !== null ? h("div", null, "P4 Score: " + ts.phase4Score + "/3") : null,
+              h("div", { className: "text-secondary" }, timeAgo(ts.startedAt)),
+            ]));
+          });
+          detailContainer.appendChild(tutorScroll);
+        }
+
+        // Prerequisites
+        if (data.prerequisites && data.prerequisites.length > 0) {
+          detailContainer.appendChild(h("div", { className: "section-title", style: "margin-top:1.5rem" }, "Prerequisites"));
+          data.prerequisites.forEach(function(p) {
+            var prereqEl = h("div", { className: "prereq-item" }, [
+              h("span", null, p.conceptId),
+              p.mastery
+                ? h("span", { className: "mastery-range" }, p.mastery.low + "\u2013" + p.mastery.high + "%")
+                : h("span", { className: "text-tertiary" }, "Not assessed"),
+            ]);
+            detailContainer.appendChild(prereqEl);
+          });
+        }
+      });
   }
 
   // --- Integrity Tab ---
