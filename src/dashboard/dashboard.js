@@ -775,10 +775,28 @@
             series: [
               { type: "line", data: lows, stack: "band", areaStyle: { opacity: 0 }, lineStyle: { opacity: 0 }, symbol: "none" },
               { type: "line", data: highs.map(function(h, i) { return h - lows[i]; }), stack: "band", areaStyle: { opacity: 0.15 }, lineStyle: { opacity: 0 }, symbol: "none" },
-              { type: "line", data: values, smooth: true, lineStyle: { width: 2 }, symbol: "circle", symbolSize: 6 },
+              { type: "line", data: values, smooth: true, lineStyle: { width: 2 }, symbol: "circle", symbolSize: 6, cursor: "pointer" },
             ],
             grid: { top: 30, right: 20, bottom: 30, left: 50 },
           });
+
+          // Click handler → open event detail panel
+          var timelineEventIds = data.timeline.filter(function(t) { return t.eventId; }).map(function(t) { return t.eventId; });
+          chart.on("click", function(params) {
+            if (params.seriesIndex !== 2) return; // only the main mastery line
+            var idx = params.dataIndex;
+            var ev = data.timeline[idx];
+            if (!ev || !ev.eventId) return;
+            var currentIndex = timelineEventIds.indexOf(ev.eventId);
+            fetchEventDetail(ev.eventId).then(function(eventData) {
+              openEventPanel(eventData, {
+                eventIds: timelineEventIds,
+                currentIndex: currentIndex,
+                fetchEvent: fetchEventDetail
+              });
+            });
+          });
+
           window.addEventListener("resize", function() { chart.resize(); });
         }
 
@@ -795,14 +813,24 @@
           ]);
           table.appendChild(thead);
           var tbody = h("tbody");
-          data.timeline.forEach(function(ev) {
-            tbody.appendChild(h("tr", null, [
+          var historyEventIds = data.timeline.filter(function(t) { return t.eventId; }).map(function(t) { return t.eventId; });
+          data.timeline.forEach(function(ev, idx) {
+            var row = h("tr", { style: ev.eventId ? "cursor:pointer" : "", onclick: ev.eventId ? (function(evRef, i) { return function() {
+              fetchEventDetail(evRef.eventId).then(function(eventData) {
+                openEventPanel(eventData, {
+                  eventIds: historyEventIds,
+                  currentIndex: i,
+                  fetchEvent: fetchEventDetail
+                });
+              });
+            }; })(ev, historyEventIds.indexOf(ev.eventId)) : null }, [
               h("td", null, ev.eventType),
               h("td", null, ev.rubricScore + "/3"),
               h("td", null, ev.mastery.low + "\u2013" + ev.mastery.high + "%"),
               h("td", null, ev.integrityScore !== null ? (ev.integrityScore * 100).toFixed(0) + "%" : "\u2014"),
               h("td", null, timeAgo(ev.timestamp)),
-            ]));
+            ]);
+            tbody.appendChild(row);
           });
           table.appendChild(tbody);
           scrollContainer.appendChild(table);
@@ -926,15 +954,26 @@
           h("th", { style: "text-align:right" }, "When")
         ])));
         var tbody = h("tbody", {});
-        flaggedEvents.slice(0, 15).forEach(function(ev) {
+        var flaggedSlice = flaggedEvents.slice(0, 15);
+        var flaggedIds = flaggedSlice.filter(function(e) { return e.id; }).map(function(e) { return e.id; });
+        flaggedSlice.forEach(function(ev) {
           var name = (ev._conceptId || ev.conceptId || "").replace(/-/g, " ");
-          tbody.appendChild(h("tr", {}, [
+          var row = h("tr", { style: ev.id ? "cursor:pointer" : "", onclick: ev.id ? (function(evRef) { return function() {
+            fetchEventDetail(evRef.id).then(function(eventData) {
+              openEventPanel(eventData, {
+                eventIds: flaggedIds,
+                currentIndex: flaggedIds.indexOf(evRef.id),
+                fetchEvent: fetchEventDetail
+              });
+            });
+          }; })(ev) : null }, [
             h("td", { className: "concept-name" }, name),
             h("td", { className: "event-type" }, ev.eventType === "probe" ? "Probe" : ev.eventType),
             h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
             h("td", {}, h("span", { style: "color:" + (ev.integrityScore < 0.3 ? "var(--red)" : "var(--amber)") + ";font-weight:600" }, (ev.integrityScore * 100).toFixed(0) + "%")),
             h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
-          ]));
+          ]);
+          tbody.appendChild(row);
         });
         table.appendChild(tbody);
         dismissEl.appendChild(table);
@@ -1746,6 +1785,7 @@
         ])));
 
         var tbody = h("tbody", {});
+        var memberEventIds = events.filter(function(e) { return e.id; }).map(function(e) { return e.id; });
         events.forEach(function(ev) {
           var displayName = ev.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
           var pBefore = Math.round(pMastery(ev.muBefore) * 100);
@@ -1765,13 +1805,23 @@
           masteryText.appendChild(deltaSpan);
           masteryCell.appendChild(masteryText);
 
-          tbody.appendChild(h("tr", {}, [
+          var row = h("tr", { style: ev.id ? "cursor:pointer" : "", onclick: ev.id ? (function(evRef) { return function() {
+            fetchOrgEventDetail(evRef.id).then(function(eventData) {
+              openEventPanel(eventData, {
+                eventIds: memberEventIds,
+                currentIndex: memberEventIds.indexOf(evRef.id),
+                fetchEvent: fetchOrgEventDetail,
+                isAdmin: true
+              });
+            });
+          }; })(ev) : null }, [
             h("td", {}, h("span", { className: "concept-name" }, displayName)),
             h("td", { className: "event-type" }, typeLabel),
             h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
             masteryCell,
             h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
-          ]));
+          ]);
+          tbody.appendChild(row);
         });
         table.appendChild(tbody);
         area.appendChild(table);
@@ -1817,16 +1867,27 @@
           ])));
 
           var tbody = h("tbody", {});
+          var memberFlaggedIds = flagged.filter(function(e) { return e.id; }).map(function(e) { return e.id; });
           flagged.forEach(function(ev) {
             var displayName = ev.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
             var intPct = ev.integrityScore !== null ? (ev.integrityScore * 100).toFixed(0) + "%" : "\u2014";
-            tbody.appendChild(h("tr", {}, [
+            var row = h("tr", { style: ev.id ? "cursor:pointer" : "", onclick: ev.id ? (function(evRef) { return function() {
+              fetchOrgEventDetail(evRef.id).then(function(eventData) {
+                openEventPanel(eventData, {
+                  eventIds: memberFlaggedIds,
+                  currentIndex: memberFlaggedIds.indexOf(evRef.id),
+                  fetchEvent: fetchOrgEventDetail,
+                  isAdmin: true
+                });
+              });
+            }; })(ev) : null }, [
               h("td", {}, h("span", { className: "concept-name" }, displayName)),
               h("td", { className: "event-type" }, ev.eventType),
               h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
               h("td", {}, h("span", { style: "color:var(--red);font-weight:600" }, intPct)),
               h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
-            ]));
+            ]);
+            tbody.appendChild(row);
           });
           table.appendChild(tbody);
           area.appendChild(table);

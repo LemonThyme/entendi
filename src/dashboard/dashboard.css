@@ -165,6 +165,7 @@ body {
 .activity-table td { padding: 0.5rem 1rem; font-size: 0.8rem; border-bottom: 1px solid var(--border); }
 .activity-table tr:last-child td { border-bottom: none; }
 .activity-table tr:hover td { background: var(--bg); }
+.activity-table tr[style*="cursor:pointer"]:hover td { background: var(--accent-light); }
 .score-badge {
   display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px;
   font-size: 0.7rem; font-weight: 600;
