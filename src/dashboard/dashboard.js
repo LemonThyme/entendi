@@ -753,18 +753,21 @@
         detailContainer.appendChild(chartPanel);
 
         if (data.timeline && data.timeline.length > 0 && typeof echarts !== "undefined") {
+          var chartTimeline = data.timeline.filter(function(t) { return t.mastery; });
+          if (chartTimeline.length === 0) { chartPanel.style.display = "none"; }
           var chart = echarts.init(chartPanel, 'warm');
-          var timestamps = data.timeline.map(function(t) { return new Date(t.timestamp).toLocaleDateString(); });
-          var values = data.timeline.map(function(t) { return t.mastery.value; });
-          var lows = data.timeline.map(function(t) { return t.mastery.low; });
-          var highs = data.timeline.map(function(t) { return t.mastery.high; });
+          var timestamps = chartTimeline.map(function(t) { return new Date(t.timestamp).toLocaleDateString(); });
+          var values = chartTimeline.map(function(t) { return t.mastery.value; });
+          var lows = chartTimeline.map(function(t) { return t.mastery.low; });
+          var highs = chartTimeline.map(function(t) { return t.mastery.high; });
 
           chart.setOption({
             tooltip: {
               trigger: "axis",
               formatter: function(params) {
                 var idx = params[0].dataIndex;
-                var t = data.timeline[idx];
+                var t = chartTimeline[idx];
+                if (!t || !t.mastery) return timestamps[idx];
                 return timestamps[idx] + "<br/>Mastery: " + t.mastery.low + "\u2013" + t.mastery.high + "%"
                   + "<br/>Score: " + t.rubricScore + "/3"
                   + "<br/>Type: " + t.eventType;
