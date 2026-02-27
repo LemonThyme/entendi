@@ -1537,9 +1537,11 @@
   // --- Real-time updates via SSE ---
 
   var eventSource = null;
+  var sseReady = false;
 
   function connectSSE() {
     if (eventSource) eventSource.close();
+    sseReady = false;
     var url = "/api/events";
     if (token) {
       // EventSource doesn't support custom headers, use query param
@@ -1554,6 +1556,8 @@
 
     eventSource.addEventListener("connected", function() {
       showLiveIndicator(true);
+      // Suppress toasts for buffered events; only show for real-time updates
+      setTimeout(function() { sseReady = true; }, 500);
     });
 
     eventSource.onerror = function() {
@@ -1568,8 +1572,8 @@
       allMasteryMap[data.conceptId].lastAssessed = data.createdAt;
     }
 
-    // Flash notification
-    showUpdateToast(data);
+    // Only toast for real-time updates, not buffered events on connect
+    if (sseReady) showUpdateToast(data);
   }
 
   function showLiveIndicator(connected) {
@@ -1579,17 +1583,23 @@
     meta.style.color = connected ? "var(--green)" : "var(--text-tertiary)";
   }
 
+  var activeToast = null;
+
   function showUpdateToast(data) {
+    // Dismiss previous toast
+    if (activeToast) { activeToast.remove(); activeToast = null; }
+
     var delta = data.masteryAfter - data.masteryBefore;
     var sign = delta >= 0 ? "+" : "";
     var msg = data.conceptId + ": " + data.masteryBefore + "% \u2192 " + data.masteryAfter + "% (" + sign + delta + "%)";
 
     var toast = h("div", { className: "toast" }, msg);
+    activeToast = toast;
     document.body.appendChild(toast);
     setTimeout(function() { toast.classList.add("show"); }, 10);
     setTimeout(function() {
       toast.classList.remove("show");
-      setTimeout(function() { toast.remove(); }, 300);
+      setTimeout(function() { if (activeToast === toast) activeToast = null; toast.remove(); }, 300);
     }, 3000);
   }
 
