@@ -121,13 +121,26 @@ const dashboardBuild = await esbuild.build({
   metafile: true,
 });
 
+// Separate bundled build for charts.js (ECharts tree-shaken)
+const chartsBuild = await esbuild.build({
+  entryPoints: [join('src', 'dashboard', 'charts.js')],
+  bundle: true,
+  minify: true,
+  outdir: join('public', 'assets'),
+  entryNames: '[name]-[hash]',
+  metafile: true,
+  format: 'esm',
+});
+
 // Generate asset manifest from metafile
 const manifest: Record<string, string> = {};
-for (const [outPath, meta] of Object.entries(dashboardBuild.metafile!.outputs)) {
-  if (meta.entryPoint) {
-    const name = meta.entryPoint.replace('src/dashboard/', '');
-    const hashed = outPath.replace('public/', '/');
-    manifest[name] = hashed;
+for (const build of [dashboardBuild, chartsBuild]) {
+  for (const [outPath, meta] of Object.entries(build.metafile!.outputs)) {
+    if (meta.entryPoint) {
+      const name = meta.entryPoint.replace('src/dashboard/', '');
+      const hashed = outPath.replace('public/', '/');
+      manifest[name] = hashed;
+    }
   }
 }
 writeFileSync(join('public', 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));

@@ -13,6 +13,7 @@ const manifestHash = createHash('md5')
 function getShellHTML(): string {
   const cssHref = manifest['dashboard.css'] || '/assets/dashboard.css';
   const jsHref = manifest['dashboard.js'] || '/assets/dashboard.js';
+  const chartsHref = manifest['charts.js'] || '/assets/charts.js';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -98,7 +99,8 @@ function getShellHTML(): string {
     </a>
   </template>
 
-  <script src="${jsHref}"></script>
+  <script type="module" src="${chartsHref}"></script>
+  <script src="${jsHref}" defer></script>
 </body>
 </html>`;
 }
