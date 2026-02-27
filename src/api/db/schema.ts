@@ -261,6 +261,18 @@ export const probeTokens = pgTable('probe_tokens', {
   index('idx_probe_tokens_user').on(table.userId),
 ]);
 
+// --- Event Annotations ---
+
+export const eventAnnotations = pgTable('event_annotations', {
+  id: serial('id').primaryKey(),
+  eventId: integer('event_id').notNull().references(() => assessmentEvents.id, { onDelete: 'cascade' }),
+  authorId: text('author_id').notNull().references(() => user.id),
+  text: text('text').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_event_annotations_event').on(table.eventId),
+]);
+
 // --- Dismissal Events ---
 
 export const dismissalEvents = pgTable('dismissal_events', {
