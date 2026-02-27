@@ -34,7 +34,7 @@ It finishes your request first, then asks. If you know the material, it leaves y
 
 ### Pipeline
 
-1. **Detect** — hooks and LLM analysis identify concepts from file paths, imports, code patterns, and conversation
+1. **Detect** — LLM-level concept detection identifies what you're working with from conversation context
 2. **Decide** — Bayesian mastery tracking decides if a probe makes sense given your knowledge profile
 3. **Probe** — a question gets woven in naturally, scored on a 0–3 comprehension rubric
 4. **Teach** — low scores trigger a 4-phase Socratic tutor (assess, guide, correct, verify)
@@ -83,7 +83,7 @@ Sign in with the same account you used during `entendi login`.
 - Drizzle ORM + Neon PostgreSQL
 - Better Auth (email/password, API keys, orgs)
 - MCP (Model Context Protocol) for Claude Code tool integration
-- Claude Code Hooks (SessionStart, PostToolUse, UserPromptSubmit)
+- Claude Code Hooks (SessionStart, UserPromptSubmit)
 
 ## Development
 
@@ -91,14 +91,45 @@ Sign in with the same account you used during `entendi login`.
 git clone https://github.com/LemonThyme/entendi.git
 cd entendi
 npm install
-cp .env.example .env   # fill in your Neon DB URL and secrets
-npm run api:dev         # Local API server (port 3456)
-npm run build           # Build hooks, MCP server, plugin
-npm test                # Run tests
-npx wrangler deploy     # Deploy to Cloudflare Workers
+cp .env.example .env   # fill in DATABASE_URL and BETTER_AUTH_SECRET
+npm run build           # build hooks, MCP server, plugin, dashboard assets
+npm run api:dev         # local API server (port 3456)
+npm test                # run tests
 ```
 
-Debug logs go to `~/.entendi/debug.log`.
+### Plugin Development
+
+After making changes to hooks or MCP server:
+
+```bash
+npm run build                     # rebuild everything
+claude plugin install entendi     # reinstall (reads from dist/plugin/)
+```
+
+If the plugin cache is stale, clear it first:
+
+```bash
+rm -rf ~/.claude/plugins/cache/entendi
+claude plugin install entendi
+```
+
+### Devcontainer
+
+For isolated plugin testing (simulates a fresh user):
+
+1. Open the repo in VS Code/Cursor with the Dev Containers extension
+2. The container installs Node 22, Claude Code CLI, and the plugin automatically
+3. Run `.devcontainer/test-plugin.sh` to validate hooks and plugin structure
+
+### Deploy
+
+```bash
+npx wrangler deploy    # deploy API to Cloudflare Workers
+```
+
+### Debug
+
+All hooks, MCP tools, and API calls log to `~/.entendi/debug.log`.
 
 ## License
 
