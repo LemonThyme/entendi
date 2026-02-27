@@ -28,10 +28,10 @@
   function pMastery(mu) { return 1 / (1 + Math.exp(-mu)); }
 
   function masteryColor(pct) {
-    if (pct < 0) return "#e5e7eb";
-    if (pct < 30) return "#dc2626";
-    if (pct < 60) return "#d97706";
-    return "#16a34a";
+    if (pct < 0) return "#E0DCD6";
+    if (pct < 30) return "#B84233";
+    if (pct < 60) return "#B8860B";
+    return "#5B7B5E";
   }
 
   function confidenceLabel(sigma, count) {
@@ -157,47 +157,58 @@
     Promise.all([
       fetch("/api/concepts", { headers: getHeaders() }).then(function(r) { return r.json(); }),
       fetch("/api/mastery", { headers: getHeaders() }).then(function(r) { return r.json(); }),
-      fetch("/api/mcp/status", { headers: getHeaders() }).then(function(r) { return r.json(); }),
-      fetch("/api/mcp/zpd-frontier", { headers: getHeaders() }).then(function(r) { return r.json(); }),
     ]).then(function(results) {
-      renderStats(results[2]);
-      renderZpdFrontier(results[3]);
-      renderConcepts(results[0], results[1]);
+      allConcepts = results[0];
+      allMasteryMap = {};
+      for (var i = 0; i < results[1].length; i++) {
+        allMasteryMap[results[1][i].conceptId] = results[1][i];
+      }
+      renderOverviewHero(results[0], results[1]);
       loadActivity();
     });
   }
 
-  function renderZpdFrontier(data) {
-    var section = document.getElementById("zpd-section");
-    var container = document.getElementById("zpd-list");
-    container.textContent = "";
-    if (!data.frontier || data.frontier.length === 0) { section.style.display = "none"; return; }
-    section.style.display = "block";
 
-    var items = data.frontier.slice(0, 12);
-    items.forEach(function(item) {
-      var pct = Math.round(item.mastery * 100);
-      var dot = h("span", { className: "zpd-dot" });
-      dot.style.background = masteryColor(pct);
-      var chip = h("span", { className: "zpd-chip" }, [
-        dot,
-        h("span", null, item.conceptId),
-        h("span", { className: "zpd-mastery" }, pct + "%")
+  function renderOverviewHero(concepts, mastery) {
+    var merged = [];
+    for (var i = 0; i < mastery.length; i++) {
+      var m = mastery[i];
+      var pct = Math.round(pMastery(m.mu) * 100);
+      merged.push({ id: m.conceptId, pct: pct, lastAssessed: m.lastAssessed });
+    }
+    merged.sort(function(a, b) { return a.pct - b.pct; });
+
+    function renderPanel(containerId, title, items, barColor) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      container.textContent = "";
+      var panel = h("div", { className: "hero-panel" }, [
+        h("div", { className: "hero-panel-title" }, title)
       ]);
-      container.appendChild(chip);
-    });
-  }
+      if (items.length === 0) {
+        panel.appendChild(h("div", { className: "empty-state" }, "No data yet."));
+      } else {
+        items.forEach(function(item) {
+          var barFill = h("div", { className: "hero-concept-bar-fill" });
+          barFill.style.width = item.pct + "%";
+          barFill.style.background = barColor;
+          var row = h("div", { className: "hero-concept" }, [
+            h("div", { className: "hero-concept-name" }, item.id),
+            h("div", { className: "hero-concept-bar" }, [barFill]),
+            h("div", { className: "hero-concept-pct" }, item.pct + "%"),
+            h("div", { className: "hero-concept-meta" }, timeAgo(item.lastAssessed))
+          ]);
+          panel.appendChild(row);
+        });
+      }
+      container.appendChild(panel);
+    }
 
-  function renderStats(statusData) {
-    var container = document.getElementById("stats-row");
-    container.textContent = "";
-    if (!statusData.overview) return;
-    var o = statusData.overview;
+    var bottom3 = merged.slice(0, 3);
+    var top3 = merged.slice(-3).reverse();
 
-    container.appendChild(statCard(o.totalConcepts, "Total Concepts", ""));
-    container.appendChild(statCard(o.mastered, "Mastered", "green"));
-    container.appendChild(statCard(o.inProgress, "In Progress", "amber"));
-    container.appendChild(statCard(o.unknown, "Unassessed", "accent"));
+    renderPanel("panel-strongest", "Strongest", top3, "#5B7B5E");
+    renderPanel("panel-attention", "Needs Attention", bottom3, "#B84233");
   }
 
   var allConcepts = [], allMasteryMap = {};
@@ -329,83 +340,57 @@
       return;
     }
 
-    var table = h("table", { className: "activity-table" });
-    var thead = h("thead", null, [
-      h("tr", null, [
-        h("th", null, "Concept"),
-        h("th", null, "Type"),
-        h("th", null, "Score"),
-        h("th", null, "Mastery Change"),
-        h("th", null, "When")
-      ])
-    ]);
-    table.appendChild(thead);
-
-    var tbody = h("tbody");
     events.forEach(function(ev) {
       var conceptId = ev._conceptId || ev.conceptId;
       var pBefore = Math.round(pMastery(ev.muBefore) * 100);
       var pAfter = Math.round(pMastery(ev.muAfter) * 100);
       var delta = pAfter - pBefore;
       var deltaStr = (delta >= 0 ? "+" : "") + delta + "%";
-      var deltaColor = delta > 0 ? "var(--green)" : delta < 0 ? "var(--red)" : "var(--text-tertiary)";
+      var trendCls = delta > 0 ? "trend-up" : delta < 0 ? "trend-down" : "trend-flat";
 
       var typeLabel = ev.eventType === "probe" ? "Probe"
         : ev.eventType === "tutor_phase1" ? "Tutor P1"
         : ev.eventType === "tutor_phase4" ? "Tutor P4"
         : ev.eventType;
 
-      var row = h("tr", null, [
-        h("td", null, h("span", { className: "concept-name" }, conceptId)),
-        h("td", null, h("span", { className: "event-type" }, typeLabel)),
-        h("td", null, h("span", { className: "score-badge score-" + ev.rubricScore }, String(ev.rubricScore) + "/3")),
-        h("td", null, (function() {
-          var span = h("span", null, pBefore + "% \u2192 " + pAfter + "%  ");
-          var deltaSpan = h("span", null, deltaStr);
-          deltaSpan.style.color = deltaColor;
-          deltaSpan.style.fontWeight = "600";
-          span.appendChild(deltaSpan);
-          return span;
-        })()),
-        h("td", null, h("span", { className: "time-ago" }, timeAgo(ev.createdAt)))
+      var deltaSpan = h("span", { className: trendCls });
+      deltaSpan.style.fontWeight = "600";
+      deltaSpan.style.marginLeft = "6px";
+      deltaSpan.textContent = deltaStr;
+
+      var row = h("div", { style: "display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)" }, [
+        h("span", { style: "font-weight:600;min-width:120px" }, conceptId),
+        h("span", { className: "event-type", style: "font-size:0.75rem" }, typeLabel),
+        h("span", { className: "score-badge score-" + ev.rubricScore, style: "font-size:0.75rem" }, ev.rubricScore + "/3"),
+        (function() {
+          var masterySpan = h("span", { style: "font-size:0.8rem;color:var(--text-secondary)" }, pBefore + "% \u2192 " + pAfter + "%");
+          masterySpan.appendChild(deltaSpan);
+          return masterySpan;
+        })(),
+        h("span", { className: "time-ago", style: "margin-left:auto;font-size:0.75rem" }, timeAgo(ev.createdAt))
       ]);
-      tbody.appendChild(row);
+      area.appendChild(row);
     });
-    table.appendChild(tbody);
-    area.appendChild(table);
   }
 
   // --- Analytics Tab ---
 
   function renderAnalytics() {
-    renderAnalyticsStats();
+    if (typeof echarts !== "undefined" && !echarts._warmRegistered) {
+      echarts.registerTheme('warm', {
+        color: ['#C4704B', '#5B7B5E', '#B8860B', '#7A7268', '#B84233', '#9B9389'],
+        backgroundColor: 'transparent',
+        textStyle: { fontFamily: "'DM Sans', sans-serif", color: '#7A7268' },
+        categoryAxis: { axisLine: { lineStyle: { color: '#E0DCD6' } }, splitLine: { lineStyle: { color: '#E0DCD6' } } },
+        valueAxis: { axisLine: { lineStyle: { color: '#E0DCD6' } }, splitLine: { lineStyle: { color: '#E0DCD6' } } },
+      });
+      echarts._warmRegistered = true;
+    }
     renderActivityHeatmap();
     renderVelocityChart();
     renderDomainRadar();
   }
 
-  function renderAnalyticsStats() {
-    var container = document.getElementById("analytics-stats");
-    container.textContent = "";
-    for (var i = 0; i < 4; i++) {
-      container.appendChild(h("div", { className: "stat-card skeleton" }, [
-        h("div", { className: "stat-value" }, "\u2014"),
-        h("div", { className: "stat-label" }, "Loading...")
-      ]));
-    }
-
-    fetch("/api/analytics/velocity", { headers: getHeaders() })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        container.textContent = "";
-        var v7 = data.velocity["7d"] || {};
-        var v30 = data.velocity["30d"] || {};
-        container.appendChild(statCard(v7.assessments || 0, "Assessments (7d)", ""));
-        container.appendChild(statCard(v7.conceptsAssessed || 0, "Concepts (7d)", ""));
-        container.appendChild(statCard((v30.avgDelta >= 0 ? "+" : "") + ((v30.avgDelta || 0) * 100).toFixed(0) + "%", "Avg Delta (30d)", v30.avgDelta >= 0 ? "green" : "amber"));
-        container.appendChild(statCard(v30.assessments || 0, "Assessments (30d)", ""));
-      });
-  }
 
   function renderActivityHeatmap() {
     var container = document.getElementById("analytics-heatmap");
@@ -414,7 +399,7 @@
     fetch("/api/analytics/activity-heatmap?days=365", { headers: getHeaders() })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var chart = echarts.init(container);
+        var chart = echarts.init(container, 'warm');
         var heatmapData = (data.heatmap || []).map(function(d) {
           return [d.date, d.assessmentCount];
         });
@@ -430,13 +415,13 @@
             min: 0,
             max: Math.max.apply(null, heatmapData.map(function(d) { return d[1]; }).concat([1])),
             show: false,
-            inRange: { color: ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"] },
+            inRange: { color: ["#F6F4F1", "#EDDCD3", "#D4A583", "#C4704B", "#A85D3D"] },
           },
           calendar: {
             top: 20, left: 50, right: 20,
             cellSize: [13, 13],
             range: [year + "-01-01", year + "-12-31"],
-            itemStyle: { borderWidth: 2, borderColor: "#fff" },
+            itemStyle: { borderWidth: 2, borderColor: "#F6F4F1" },
             yearLabel: { show: false },
             dayLabel: { nameMap: "en", fontSize: 10 },
             monthLabel: { fontSize: 10 },
@@ -459,7 +444,7 @@
     fetch("/api/analytics/timeline", { headers: getHeaders() })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var chart = echarts.init(container);
+        var chart = echarts.init(container, 'warm');
         var timeline = data.timeline || [];
 
         chart.setOption({
@@ -472,7 +457,6 @@
             smooth: true,
             areaStyle: { opacity: 0.15 },
             lineStyle: { width: 2 },
-            itemStyle: { color: "#2563eb" },
           }],
           grid: { top: 30, right: 20, bottom: 30, left: 60 },
         });
@@ -509,15 +493,14 @@
               return Math.round(avg * 100);
             });
 
-            var chart = echarts.init(container);
+            var chart = echarts.init(container, 'warm');
             chart.setOption({
               radar: { indicator: indicators, shape: "circle" },
               series: [{
                 type: "radar",
                 data: [{ value: values, name: "Mastery" }],
                 areaStyle: { opacity: 0.15 },
-                lineStyle: { width: 2, color: "#2563eb" },
-                itemStyle: { color: "#2563eb" },
+                lineStyle: { width: 2 },
               }],
             });
 
@@ -632,7 +615,7 @@
         var c = data.concept;
         var m = data.mastery;
         detailContainer.appendChild(h("div", { className: "concept-detail-header" }, [
-          h("h2", null, c.id),
+          h("h2", { style: "font-family:var(--font-display)" }, c.id),
           c.domain ? h("span", { className: "domain-badge" }, c.domain) : null,
           m ? h("span", { className: "mastery-range-large" }, m.low + "\u2013" + m.high + "%") : null,
         ]));
@@ -653,7 +636,7 @@
         detailContainer.appendChild(chartPanel);
 
         if (data.timeline && data.timeline.length > 0 && typeof echarts !== "undefined") {
-          var chart = echarts.init(chartPanel);
+          var chart = echarts.init(chartPanel, 'warm');
           var timestamps = data.timeline.map(function(t) { return new Date(t.timestamp).toLocaleDateString(); });
           var values = data.timeline.map(function(t) { return t.mastery.value; });
           var lows = data.timeline.map(function(t) { return t.mastery.low; });
@@ -674,8 +657,8 @@
             yAxis: { type: "value", min: 0, max: 100, name: "Mastery %" },
             series: [
               { type: "line", data: lows, stack: "band", areaStyle: { opacity: 0 }, lineStyle: { opacity: 0 }, symbol: "none" },
-              { type: "line", data: highs.map(function(h, i) { return h - lows[i]; }), stack: "band", areaStyle: { opacity: 0.15, color: "#2563eb" }, lineStyle: { opacity: 0 }, symbol: "none" },
-              { type: "line", data: values, smooth: true, lineStyle: { width: 2, color: "#2563eb" }, itemStyle: { color: "#2563eb" }, symbol: "circle", symbolSize: 6 },
+              { type: "line", data: highs.map(function(h, i) { return h - lows[i]; }), stack: "band", areaStyle: { opacity: 0.15 }, lineStyle: { opacity: 0 }, symbol: "none" },
+              { type: "line", data: values, smooth: true, lineStyle: { width: 2 }, symbol: "circle", symbolSize: 6 },
             ],
             grid: { top: 30, right: 20, bottom: 30, left: 50 },
           });
@@ -799,7 +782,7 @@
     var deleteBtn = h("button", { className: "btn-sm", onclick: deleteAccount }, "Delete Account");
     deleteBtn.style.color = "var(--red)";
     deleteBtn.style.borderColor = "var(--red)";
-    deleteBtn.style.background = "white";
+    deleteBtn.style.background = "var(--bg-card)";
     deleteBtn.style.border = "1px solid var(--red)";
     deleteBtn.style.borderRadius = "6px";
     deleteBtn.style.padding = "0.4rem 0.8rem";
@@ -1263,7 +1246,7 @@
           revokeBtn.style.padding = "0.2rem 0.5rem";
           revokeBtn.style.color = "var(--red)";
           revokeBtn.style.border = "1px solid var(--border)";
-          revokeBtn.style.background = "white";
+          revokeBtn.style.background = "var(--bg-card)";
           revokeBtn.style.borderRadius = "4px";
           revokeBtn.style.cursor = "pointer";
 
@@ -1579,15 +1562,10 @@
   }
 
   function handleMasteryUpdate(data) {
-    // Update concept mastery in the grid if visible
+    // Update concept mastery in the local map
     if (allMasteryMap[data.conceptId]) {
-      // Update mu from mastery percentage back to mu (approximate)
       allMasteryMap[data.conceptId].mu = -Math.log(100 / data.masteryAfter - 1);
       allMasteryMap[data.conceptId].lastAssessed = data.createdAt;
-      // Re-render the current filter
-      var activeFilter = document.querySelector(".filter-btn.active");
-      var domain = activeFilter && activeFilter.textContent !== "All" ? activeFilter.textContent : null;
-      renderConceptList(domain);
     }
 
     // Flash notification

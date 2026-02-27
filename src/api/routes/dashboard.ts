@@ -23,7 +23,7 @@ function getShellHTML(): string {
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a2e'/%3E%3Cpath d='M 19.5 7 C 19.5 3.5 15.5 3.5 15.5 7 L 15.5 22' stroke='white' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='15.5' cy='27' r='2' fill='white'/%3E%3C/svg%3E"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="${cssHref}"/>
 </head>
 <body>
@@ -45,31 +45,10 @@ function getShellHTML(): string {
       </div>
 
       <div class="tab-content active" id="tab-overview">
-        <div class="stats-row" id="stats-row"></div>
-
-        <div class="section" id="zpd-section" style="display:none;">
-          <div class="section-header">
-            <div class="section-title">Ready to Learn</div>
-            <div class="section-subtitle">Concepts with mastered prerequisites</div>
-          </div>
-          <div class="zpd-list" id="zpd-list"></div>
+        <div style="display:flex;gap:16px;margin-bottom:32px;" id="hero-panels">
+          <div style="flex:1;" id="panel-strongest"></div>
+          <div style="flex:1;" id="panel-attention"></div>
         </div>
-
-        <div class="section">
-          <div class="section-header">
-            <div class="section-title">Knowledge Map</div>
-            <div class="section-subtitle" id="concept-count"></div>
-          </div>
-          <div class="filter-row" id="filter-row"></div>
-          <div class="concept-header">
-            <div>Concept</div>
-            <div>Mastery</div>
-            <div style="text-align:center">Confidence</div>
-            <div style="text-align:right">Probes</div>
-          </div>
-          <div class="concept-list" id="concept-list"></div>
-        </div>
-
         <div class="section">
           <div class="section-header">
             <div class="section-title">Recent Activity</div>
@@ -79,7 +58,6 @@ function getShellHTML(): string {
       </div>
 
       <div class="tab-content" id="tab-analytics">
-        <div class="stats-row" id="analytics-stats"></div>
         <div class="section">
           <div class="section-header">
             <div class="section-title">Activity</div>
@@ -173,21 +151,24 @@ function getLinkShellHTML(safeCode: string, linkJsHref: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Link Device - Entendi</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a2e'/%3E%3Cpath d='M 19.5 7 C 19.5 3.5 15.5 3.5 15.5 7 L 15.5 22' stroke='white' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='15.5' cy='27' r='2' fill='white'/%3E%3C/svg%3E"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
   <style>
     :root {
-      --bg: #fafafa; --bg-card: #ffffff; --border: #e5e7eb;
-      --text: #111827; --text-secondary: #6b7280; --text-tertiary: #9ca3af;
-      --accent: #2563eb; --green: #16a34a; --green-bg: #f0fdf4; --red: #dc2626;
+      --bg: #F6F4F1; --bg-card: #EDEAE5; --border: #E0DCD6;
+      --text: #1F1F1F; --text-secondary: #7A7268; --text-tertiary: #9B9389;
+      --accent: #C4704B; --green: #5B7B5E; --green-bg: #E8F0E9; --red: #B84233;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Helvetica, Arial, sans-serif;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
       background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased;
       display: flex; align-items: center; justify-content: center;
     }
     .link-container {
       max-width: 420px; padding: 2rem; background: var(--bg-card);
-      border: 1px solid var(--border); border-radius: 12px; text-align: center;
+      border: none; border-radius: 12px; text-align: center;
     }
     h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
     .subtitle { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
@@ -202,7 +183,7 @@ function getLinkShellHTML(safeCode: string, linkJsHref: string): string {
       background: var(--accent); color: white; font-size: 0.9rem; font-weight: 600;
       cursor: pointer;
     }
-    .btn-confirm:hover { background: #1d4ed8; }
+    .btn-confirm:hover { background: #A85D3D; }
     .btn-confirm:disabled { background: var(--border); cursor: not-allowed; }
     .status { margin-top: 1rem; font-size: 0.85rem; }
     .status.success { color: var(--green); }
