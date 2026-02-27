@@ -29,10 +29,13 @@ function buildSocialProviders(): Record<string, { clientId: string; clientSecret
 export function createAuth(db: Database, options?: { secret?: string; baseURL?: string }) {
   const socialProviders = buildSocialProviders();
 
+  const baseURL = options?.baseURL || process.env.BETTER_AUTH_URL || 'http://localhost:3456';
+
   return betterAuth({
     secret: options?.secret || process.env.BETTER_AUTH_SECRET,
-    baseURL: options?.baseURL || process.env.BETTER_AUTH_URL || 'http://localhost:3456',
+    baseURL,
     basePath: '/api/auth',
+    trustedOrigins: [baseURL, 'https://entendi.dev', 'https://entendi-api.tomaskorenblit.workers.dev'],
 
     database: drizzleAdapter(db, {
       provider: 'pg',
