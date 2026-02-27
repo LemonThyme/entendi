@@ -11,6 +11,12 @@ TypeScript, Node 22+, Vitest, Hono, Better Auth, Drizzle ORM, Neon PostgreSQL, C
 ```bash
 git clone https://github.com/LemonThyme/entendi.git
 cd entendi
+./setup.sh    # validates prereqs, builds, installs plugin
+```
+
+For manual setup or CI:
+
+```bash
 npm install
 cp .env.example .env   # fill in DATABASE_URL and BETTER_AUTH_SECRET
 npm run build           # builds hooks, MCP server, plugin, dashboard assets
@@ -26,19 +32,10 @@ npm run build           # builds hooks, MCP server, plugin, dashboard assets
 ### Plugin Install
 
 ```bash
-npm run build                     # must build first
-claude plugin install entendi     # install as Claude Code plugin
-```
-
-After install, restart Claude Code. The plugin activates automatically (SessionStart injects the concept-detection skill, UserPromptSubmit handles state).
-
-**After any change to hooks, MCP server, or plugin files**, reinstall the plugin:
-
-```bash
 npm run plugin:reinstall          # builds, clears cache, reinstalls
 ```
 
-Then restart Claude Code. The plugin cache is sticky — without clearing it, `claude plugin install` serves stale files.
+After install, restart Claude Code. The plugin activates automatically (SessionStart injects the concept-detection skill, UserPromptSubmit handles state).
 
 ### Devcontainer
 
