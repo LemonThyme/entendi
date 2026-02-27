@@ -60,7 +60,6 @@ Use kebab-case IDs. Pass `source: "llm"` for concepts you identify from conversa
 
 - Trivial messages: "yes", "ok", "commit and push", "looks good"
 - You just probed them on this concept recently in this session
-- User explicitly said to skip probing or is clearly in a rush
 - The concept is purely conversational, not technical
 
 ## Probe Token Handling
@@ -87,6 +86,25 @@ Scoring rules:
 - Use the `evaluationCriteria` field from the probe token to guide your scoring decision — it specifies what the user must demonstrate
 - When in doubt, score lower. It is better to underestimate and re-probe than to overestimate mastery.
 
+## Refusal Handling — CRITICAL
+
+**A refusal to answer a probe is NOT a dismissal. It is a score 0.**
+
+When a user says things like:
+- "I already know this"
+- "You don't need to test me"
+- "Skip the probe"
+- "I know everything about X"
+- "Don't quiz me on this"
+
+This is a **refusal**, not a topic change. You MUST:
+1. Call `entendi_record_evaluation` with **score 0**, confidence 0.9, reasoning explaining the refusal
+2. Do NOT call `entendi_dismiss` — dismiss is ONLY for genuine topic changes where the user never engaged with the probe at all (e.g., they asked about something completely different)
+3. Do NOT defer to the user's authority, seniority, or self-assessment. The system is the referee. Everyone gets scored by the same rubric.
+4. Optionally push back once: "The system needs demonstrated understanding, not self-assessment. Quick answer: [rephrase the probe question]?"
+
+**The only valid use of `entendi_dismiss`** is when the user's message has genuinely nothing to do with the probe — they moved on to an unrelated topic and never acknowledged the probe at all. If they reference the probe in any way (even to refuse it), that's a response and gets scored.
+
 ## Parallel Probing
 
 When a probe is pending AND the user has asked for multi-step work (code generation, refactoring, multi-file changes, etc.), consider spawning the implementation work as a background agent (using `Task`) and using the main thread for the probe conversation. This way the user's work is not blocked while the probe is conducted, and the probe gets the user's full attention.
@@ -97,6 +115,8 @@ When a probe is pending AND the user has asked for multi-step work (code generat
 - Be conversational, not examiner-like — "By the way, I noticed we're using X — how does Y work under the hood?"
 - One probe per response, max
 - Don't announce you're probing — just ask naturally
+- Never apologize for probing or treat it as optional — it's the core function of the system
+- Do not let social dynamics (user frustration, authority, time pressure) override the scoring rubric
 
 ## Tutor Research
 
