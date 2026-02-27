@@ -11,23 +11,11 @@ import {
   dismissalEvents,
 } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
+import { pMastery, masteryRange } from '../../core/mastery-display.js';
 import type { Env } from '../index.js';
 
 export const analyticsRoutes = new Hono<Env>();
 analyticsRoutes.use('*', requireAuth);
-
-/** Convert mu to mastery probability */
-function pMastery(mu: number): number {
-  return 1 / (1 + Math.exp(-mu));
-}
-
-/** Format mastery as { value, low, high } — mu +/- 2sigma clamped to 0-1 */
-function masteryRange(mu: number, sigma: number) {
-  const p = pMastery(mu);
-  const low = Math.max(0, pMastery(mu - 2 * sigma));
-  const high = Math.min(1, pMastery(mu + 2 * sigma));
-  return { value: Math.round(p * 100), low: Math.round(low * 100), high: Math.round(high * 100) };
-}
 
 // GET /timeline/:conceptId — mastery over time for one concept
 analyticsRoutes.get('/timeline/:conceptId', async (c) => {
@@ -180,27 +168,31 @@ analyticsRoutes.get('/concept/:conceptId', async (c) => {
   const [conceptRow] = await db.select().from(concepts).where(eq(concepts.id, conceptId));
   if (!conceptRow) return c.json({ error: 'Concept not found' }, 404);
 
-  const [state] = await db.select().from(userConceptStates)
-    .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, conceptId)));
-
-  const [analytics] = await db.select().from(conceptAnalytics)
-    .where(and(eq(conceptAnalytics.userId, user.id), eq(conceptAnalytics.conceptId, conceptId)));
-
-  const events = await db.select().from(assessmentEvents)
-    .where(and(eq(assessmentEvents.userId, user.id), eq(assessmentEvents.conceptId, conceptId)))
-    .orderBy(asc(assessmentEvents.createdAt))
-    .limit(200);
-
-  const tutorHistory = await db.select().from(tutorSessions)
-    .where(and(eq(tutorSessions.userId, user.id), eq(tutorSessions.conceptId, conceptId)))
-    .orderBy(desc(tutorSessions.startedAt));
-
-  const dismissals = await db.select().from(dismissalEvents)
-    .where(and(eq(dismissalEvents.userId, user.id), eq(dismissalEvents.conceptId, conceptId)))
-    .orderBy(desc(dismissalEvents.createdAt));
-
-  const prerequisites = await db.select().from(conceptEdges)
-    .where(and(eq(conceptEdges.sourceId, conceptId), eq(conceptEdges.edgeType, 'requires')));
+  const [
+    [state],
+    [analytics],
+    events,
+    tutorHistory,
+    dismissals,
+    prerequisites,
+  ] = await Promise.all([
+    db.select().from(userConceptStates)
+      .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, conceptId))),
+    db.select().from(conceptAnalytics)
+      .where(and(eq(conceptAnalytics.userId, user.id), eq(conceptAnalytics.conceptId, conceptId))),
+    db.select().from(assessmentEvents)
+      .where(and(eq(assessmentEvents.userId, user.id), eq(assessmentEvents.conceptId, conceptId)))
+      .orderBy(asc(assessmentEvents.createdAt))
+      .limit(200),
+    db.select().from(tutorSessions)
+      .where(and(eq(tutorSessions.userId, user.id), eq(tutorSessions.conceptId, conceptId)))
+      .orderBy(desc(tutorSessions.startedAt)),
+    db.select().from(dismissalEvents)
+      .where(and(eq(dismissalEvents.userId, user.id), eq(dismissalEvents.conceptId, conceptId)))
+      .orderBy(desc(dismissalEvents.createdAt)),
+    db.select().from(conceptEdges)
+      .where(and(eq(conceptEdges.sourceId, conceptId), eq(conceptEdges.edgeType, 'requires'))),
+  ]);
 
   // Get mastery for prerequisites
   const prereqStates = prerequisites.length > 0

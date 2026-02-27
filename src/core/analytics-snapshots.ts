@@ -90,7 +90,7 @@ export function buildConceptAnalyticsUpsert(input: ConceptAnalyticsInput) {
     peakMastery,
     currentStreak,
     longestStreak,
-    avgResponseWordCount: avgResponseWordCount || null,
+    avgResponseWordCount: avgResponseWordCount ?? null,
     avgIntegrityScore,
   };
 }
@@ -115,11 +115,13 @@ export async function updateAnalyticsSnapshots(
       target: [dailySnapshots.userId, dailySnapshots.date],
       set: {
         assessmentCount: sql`${dailySnapshots.assessmentCount} + 1`,
-        conceptsAssessed: sql`${dailySnapshots.conceptsAssessed} + 1`,
+        conceptsAssessed: sql`CASE WHEN ${dailySnapshots.domains} ? ${input.domain ?? ''} THEN ${dailySnapshots.conceptsAssessed} ELSE ${dailySnapshots.conceptsAssessed} + 1 END`,
         avgMasteryDelta: sql`(${dailySnapshots.avgMasteryDelta} * ${dailySnapshots.assessmentCount} + ${input.masteryDelta}) / (${dailySnapshots.assessmentCount} + 1)`,
         probeCount: sql`${dailySnapshots.probeCount} + ${dsValues.probeCount}`,
         tutorCount: sql`${dailySnapshots.tutorCount} + ${dsValues.tutorCount}`,
-        domains: sql`${dailySnapshots.domains} || ${JSON.stringify(dsValues.domains)}::jsonb`,
+        domains: input.domain
+          ? sql`jsonb_set(${dailySnapshots.domains}, ${`{${input.domain}}`}::text[], to_jsonb(COALESCE((${dailySnapshots.domains}->>${ input.domain})::int, 0) + 1))`
+          : sql`${dailySnapshots.domains}`,
         avgIntegrityScore: input.integrityScore !== undefined
           ? sql`CASE WHEN ${dailySnapshots.avgIntegrityScore} IS NULL THEN ${input.integrityScore}
                 ELSE (${dailySnapshots.avgIntegrityScore} * ${dailySnapshots.assessmentCount} + ${input.integrityScore}) / (${dailySnapshots.assessmentCount} + 1) END`

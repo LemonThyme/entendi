@@ -743,7 +743,10 @@
   // --- Integrity Tab ---
 
   function renderIntegrity() {
-    // Populated later
+    var trendEl = document.getElementById("integrity-trend");
+    var dismissEl = document.getElementById("integrity-dismissals");
+    if (trendEl) { trendEl.textContent = ""; trendEl.appendChild(h("div", { className: "empty-state" }, "Integrity analytics coming in v0.4b")); }
+    if (dismissEl) { dismissEl.textContent = ""; dismissEl.appendChild(h("div", { className: "empty-state" }, "Dismiss pattern analytics coming in v0.4b")); }
   }
 
   // --- Settings Tab ---
