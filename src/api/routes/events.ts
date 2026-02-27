@@ -33,14 +33,21 @@ eventRoutes.get('/', async (c) => {
     await stream.writeSSE({ event: 'connected', data: JSON.stringify({ retry: 3000 }) });
 
     let currentLastId = lastEventId;
+
+    // On first connect (no Last-Event-ID), skip to latest so we only stream new events
+    if (currentLastId === 0) {
+      const latest = await db.select({ maxId: sql<number>`coalesce(max(${assessmentEvents.id}), 0)` })
+        .from(assessmentEvents)
+        .where(inArray(assessmentEvents.userId, orgMemberIds));
+      currentLastId = latest[0]?.maxId ?? 0;
+    }
+
     const maxIterations = 8; // ~24s of connection (3s per iteration)
 
     for (let i = 0; i < maxIterations; i++) {
       const newEvents = await db.select().from(assessmentEvents)
         .where(
-          currentLastId > 0
-            ? and(gt(assessmentEvents.id, currentLastId), inArray(assessmentEvents.userId, orgMemberIds))
-            : inArray(assessmentEvents.userId, orgMemberIds),
+          and(gt(assessmentEvents.id, currentLastId), inArray(assessmentEvents.userId, orgMemberIds)),
         )
         .orderBy(assessmentEvents.id)
         .limit(20);
