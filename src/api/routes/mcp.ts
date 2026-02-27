@@ -15,6 +15,7 @@ import {
 } from '../../core/probabilistic-model.js';
 import { probeUrgency } from '../../core/probe-urgency.js';
 import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
+import { updateAnalyticsSnapshots } from '../../core/analytics-snapshots.js';
 import { selectProbeCandidate } from '../../core/probe-selection.js';
 import { resolveConcept } from '../lib/concept-pipeline.js';
 import { resolveConceptId } from '../lib/concept-normalize.js';
@@ -1093,6 +1094,24 @@ async function applyBayesianUpdateDb(
   }
 
   const newMastery = pMastery(newMu);
+
+  // 6b. Update analytics snapshots (on-write materialization)
+  const conceptDomain = conceptRow?.domain ?? null;
+  const masteryDelta = pMastery(newMu) - pMastery(muBefore);
+  const responseWordCount = input.responseFeatures
+    ? (input.responseFeatures as Record<string, unknown>).wordCount as number | undefined
+    : undefined;
+  await updateAnalyticsSnapshots(db, {
+    userId,
+    eventType,
+    conceptId,
+    domain: conceptDomain,
+    masteryDelta,
+    integrityScore: input.integrityScore,
+    rubricScore: score,
+    mastery: pMastery(newMu),
+    responseWordCount,
+  });
 
   // 7. Prerequisite propagation (Design Doc Section 5.5)
   // When mastery of concept c improves, boost dependents that REQUIRE c
