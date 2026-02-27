@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, smallint, boolean, timestamp, jsonb, primaryKey, index, serial } from 'drizzle-orm/pg-core';
+import { pgTable, text, real, integer, smallint, boolean, timestamp, jsonb, primaryKey, index, serial, date } from 'drizzle-orm/pg-core';
 
 // --- Auth (Better Auth) ---
 
@@ -383,3 +383,51 @@ export const emailPreferences = pgTable('email_preferences', {
   transactionalEnabled: boolean('transactional_enabled').notNull().default(true),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Analytics (materialized on-write) ---
+
+export const dailySnapshots = pgTable('daily_snapshots', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  date: date('date', { mode: 'string' }).notNull(),
+  assessmentCount: integer('assessment_count').notNull().default(0),
+  conceptsAssessed: integer('concepts_assessed').notNull().default(0),
+  avgMasteryDelta: real('avg_mastery_delta').notNull().default(0),
+  totalDismissals: integer('total_dismissals').notNull().default(0),
+  avgIntegrityScore: real('avg_integrity_score'),
+  probeCount: integer('probe_count').notNull().default(0),
+  tutorCount: integer('tutor_count').notNull().default(0),
+  domains: jsonb('domains').notNull().default({}),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.date] }),
+  index('idx_daily_snapshots_user_date').on(table.userId, table.date),
+]);
+
+export const zpdSnapshots = pgTable('zpd_snapshots', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  enteredAt: timestamp('entered_at', { withTimezone: true }).notNull().defaultNow(),
+  exitedAt: timestamp('exited_at', { withTimezone: true }),
+  masteryAtEntry: real('mastery_at_entry').notNull(),
+  masteryAtExit: real('mastery_at_exit'),
+}, (table) => [
+  index('idx_zpd_snapshots_user_concept').on(table.userId, table.conceptId),
+  index('idx_zpd_snapshots_user_entered').on(table.userId, table.enteredAt),
+]);
+
+export const conceptAnalytics = pgTable('concept_analytics', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  firstAssessedAt: timestamp('first_assessed_at', { withTimezone: true }).notNull().defaultNow(),
+  lastAssessedAt: timestamp('last_assessed_at', { withTimezone: true }).notNull().defaultNow(),
+  totalProbes: integer('total_probes').notNull().default(0),
+  totalTutorSessions: integer('total_tutor_sessions').notNull().default(0),
+  totalDismissals: integer('total_dismissals').notNull().default(0),
+  peakMastery: real('peak_mastery').notNull().default(0),
+  currentStreak: integer('current_streak').notNull().default(0),
+  longestStreak: integer('longest_streak').notNull().default(0),
+  avgResponseWordCount: real('avg_response_word_count'),
+  avgIntegrityScore: real('avg_integrity_score'),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.conceptId] }),
+]);
