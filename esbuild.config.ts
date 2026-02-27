@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync, writeFileSync } from 'fs';
+import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 
 const hookDir = join('src', 'hooks');
@@ -54,6 +54,9 @@ for (const out of outputs) {
 // --- Plugin assembly ---
 
 const pluginDir = join('dist', 'plugin');
+
+// Clean previous build to prevent stale files
+rmSync(pluginDir, { recursive: true, force: true });
 
 /** Recursively copy a directory, creating parents as needed. */
 function copyDir(src: string, dest: string): void {
