@@ -63,6 +63,9 @@
         var target = document.getElementById("tab-" + tab);
         if (target) target.classList.add("active");
 
+        if (tab === "analytics") renderAnalytics();
+        if (tab === "concepts") renderConceptsTab();
+        if (tab === "integrity") renderIntegrity();
         if (tab === "settings") renderSettings();
         if (tab === "organization") renderOrganization();
       });
@@ -371,6 +374,24 @@
     });
     table.appendChild(tbody);
     area.appendChild(table);
+  }
+
+  // --- Analytics Tab ---
+
+  function renderAnalytics() {
+    // Populated in Task 9
+  }
+
+  // --- Concepts Tab ---
+
+  function renderConceptsTab() {
+    // Populated in Task 10
+  }
+
+  // --- Integrity Tab ---
+
+  function renderIntegrity() {
+    // Populated later
   }
 
   // --- Settings Tab ---

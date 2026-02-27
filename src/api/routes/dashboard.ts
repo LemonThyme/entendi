@@ -37,6 +37,9 @@ function getShellHTML(): string {
       <div id="user-bar"></div>
       <div class="tabs" id="tabs">
         <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="analytics">Analytics</button>
+        <button class="tab-btn" data-tab="concepts">Concepts</button>
+        <button class="tab-btn" data-tab="integrity">Integrity</button>
         <button class="tab-btn" data-tab="organization">Organization</button>
         <button class="tab-btn" data-tab="settings">Settings</button>
       </div>
@@ -72,6 +75,63 @@ function getShellHTML(): string {
             <div class="section-title">Recent Activity</div>
           </div>
           <div id="activity-area"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-analytics">
+        <div class="stats-row" id="analytics-stats"></div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Activity</div>
+          </div>
+          <div class="chart-panel" id="analytics-heatmap" style="height:180px;"></div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Learning Velocity</div>
+            <div class="velocity-toggle" id="velocity-toggle"></div>
+          </div>
+          <div class="chart-panel" id="analytics-velocity" style="height:300px;"></div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Domain Strengths</div>
+          </div>
+          <div class="chart-panel" id="analytics-radar" style="height:350px;"></div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Review Needed</div>
+            <div class="section-subtitle">Concepts predicted to decay</div>
+          </div>
+          <div class="scroll-container" id="analytics-retention" style="max-height:300px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-concepts">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Your Concepts</div>
+            <div class="section-subtitle" id="concepts-count"></div>
+          </div>
+          <div class="filter-row" id="concepts-filter-row"></div>
+          <div class="scroll-container" id="concepts-list" style="max-height:600px;overflow-y:auto;"></div>
+        </div>
+        <div id="concept-detail" style="display:none;"></div>
+      </div>
+
+      <div class="tab-content" id="tab-integrity">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Integrity Trend</div>
+          </div>
+          <div class="chart-panel" id="integrity-trend" style="height:300px;"></div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Dismiss Patterns</div>
+          </div>
+          <div class="chart-panel" id="integrity-dismissals" style="height:250px;"></div>
         </div>
       </div>
 
