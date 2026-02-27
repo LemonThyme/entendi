@@ -115,8 +115,8 @@ export class EntendiApiClient {
     return this.request('POST', '/api/mcp/tutor/advance', input);
   }
 
-  async dismiss(input?: { reason?: 'user_declined' | 'topic_changed' | 'timeout' }) {
-    return this.request('POST', '/api/mcp/dismiss', input ?? {});
+  async dismiss(input: { reason: 'topic_change' | 'busy' | 'claimed_expertise'; note?: string }) {
+    return this.request('POST', '/api/mcp/dismiss', input);
   }
 
   async getStatus(conceptId?: string) {

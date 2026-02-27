@@ -201,15 +201,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   // --- Tool 5: entendi_dismiss ---
   mcpServer.tool(
     'entendi_dismiss',
-    'Cancel a pending probe, tutor offer, or abandon a tutor session.',
+    'Dismiss a pending probe or tutor session with a categorized reason. topic_change: no penalty. busy: re-queues probe for next session (auto-scores 0 after 3 deferrals). claimed_expertise: auto-scores 0 immediately.',
     {
-      reason: z.enum(['user_declined', 'topic_changed', 'timeout']).optional(),
+      reason: z.enum(['topic_change', 'busy', 'claimed_expertise']).describe('Why the probe is being dismissed'),
+      note: z.string().max(500).optional().describe('Optional context about the dismissal'),
     },
     async (args) => {
       mcpLog('tool:entendi_dismiss called', args);
       try {
         const result = await api.dismiss({
-          reason: args.reason as 'user_declined' | 'topic_changed' | 'timeout' | undefined,
+          reason: args.reason,
+          note: args.note,
         });
         mcpLog('tool:entendi_dismiss result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
