@@ -761,24 +761,114 @@ mcpRoutes.post('/tutor/advance', async (c) => {
 });
 
 // --- POST /dismiss ---
+const dismissBodySchema = z.object({
+  reason: z.enum(['topic_change', 'busy', 'claimed_expertise']).default('topic_change'),
+  note: z.string().max(500).optional(),
+});
+
 mcpRoutes.post('/dismiss', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
+
+  const rawBody = await c.req.json().catch(() => ({}));
+  const parsed = dismissBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid dismiss body', details: parsed.error.flatten() }, 400);
+  }
+  const { reason, note } = parsed.data;
 
   // Read pending action before clearing, to record dismissal
   const [action] = await db.select().from(pendingActions)
     .where(eq(pendingActions.userId, user.id));
 
   let dismissalRecorded = false;
+  let autoScored = false;
+  let requeued = false;
+
   if (action && action.actionType === 'awaiting_probe_response') {
-    const data = action.data as { conceptId?: string };
+    const data = action.data as { conceptId?: string; depth?: number };
     if (data.conceptId) {
-      await db.insert(dismissalEvents).values({
-        userId: user.id,
-        conceptId: data.conceptId,
-        probeTokenId: action.probeTokenId,
-      });
-      dismissalRecorded = true;
+      const conceptId = data.conceptId;
+
+      if (reason === 'busy') {
+        // Count prior busy dismissals for same user+concept
+        const [countResult] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(dismissalEvents)
+          .where(and(
+            eq(dismissalEvents.userId, user.id),
+            eq(dismissalEvents.conceptId, conceptId),
+            eq(dismissalEvents.reason, 'busy'),
+          ));
+        const priorBusyCount = countResult?.count ?? 0;
+
+        if (priorBusyCount >= 2) {
+          // 3rd+ busy deferral: auto-score 0
+          await applyBayesianUpdateDb(db, user.id, {
+            conceptId,
+            score: 0,
+            confidence: 1.0,
+            reasoning: 'Auto-scored 0 after 3 busy deferrals',
+            eventType: 'probe',
+            probeTokenId: action.probeTokenId ?? undefined,
+          });
+          await db.insert(dismissalEvents).values({
+            userId: user.id,
+            conceptId,
+            probeTokenId: action.probeTokenId,
+            reason,
+            note,
+            requeued: false,
+            resolvedAs: 'auto_scored_0',
+            resolvedAt: new Date(),
+          });
+          autoScored = true;
+        } else {
+          // Re-queue: record dismissal and create deferred probe pending action
+          await db.insert(dismissalEvents).values({
+            userId: user.id,
+            conceptId,
+            probeTokenId: action.probeTokenId,
+            reason,
+            note,
+            requeued: true,
+          });
+          requeued = true;
+          // Deferred probe will be picked up in next session
+          // (we create the pending action AFTER clearing the current one below)
+        }
+        dismissalRecorded = true;
+      } else if (reason === 'claimed_expertise') {
+        // Record dismissal + auto-score 0
+        await applyBayesianUpdateDb(db, user.id, {
+          conceptId,
+          score: 0,
+          confidence: 1.0,
+          reasoning: 'Auto-scored 0: user claimed expertise but dismissed probe',
+          eventType: 'probe',
+          probeTokenId: action.probeTokenId ?? undefined,
+        });
+        await db.insert(dismissalEvents).values({
+          userId: user.id,
+          conceptId,
+          probeTokenId: action.probeTokenId,
+          reason,
+          note,
+          resolvedAs: 'auto_scored_0',
+          resolvedAt: new Date(),
+        });
+        autoScored = true;
+        dismissalRecorded = true;
+      } else {
+        // topic_change: record dismissal, no penalty
+        await db.insert(dismissalEvents).values({
+          userId: user.id,
+          conceptId,
+          probeTokenId: action.probeTokenId,
+          reason,
+          note,
+        });
+        dismissalRecorded = true;
+      }
     }
   }
 
@@ -798,7 +888,23 @@ mcpRoutes.post('/dismiss', async (c) => {
   // Clear pending action
   await db.delete(pendingActions).where(eq(pendingActions.userId, user.id));
 
-  return c.json({ acknowledged: true, dismissalRecorded });
+  // If busy+requeued, create deferred_probe pending action for next session
+  if (requeued && action) {
+    const data = action.data as { conceptId?: string; depth?: number };
+    await db.insert(pendingActions).values({
+      userId: user.id,
+      actionType: 'deferred_probe',
+      data: { conceptId: data.conceptId, depth: data.depth ?? 1 },
+    }).onConflictDoUpdate({
+      target: pendingActions.userId,
+      set: {
+        actionType: 'deferred_probe',
+        data: { conceptId: data.conceptId, depth: data.depth ?? 1 },
+      },
+    });
+  }
+
+  return c.json({ acknowledged: true, dismissalRecorded, autoScored, requeued });
 });
 
 // --- GET /status ---
