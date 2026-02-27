@@ -372,8 +372,10 @@
       masteryText.appendChild(deltaSpan);
       masteryCell.appendChild(masteryText);
 
+      var nameLink = h("span", { className: "concept-name", style: "cursor:pointer;text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px", onclick: (function(id) { return function(e) { e.stopPropagation(); navigateToConcept(id); }; })(conceptId) }, displayName);
+
       var row = h("tr", {}, [
-        h("td", { className: "concept-name" }, displayName),
+        h("td", {}, nameLink),
         h("td", { className: "event-type" }, typeLabel),
         h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
         masteryCell,
@@ -525,7 +527,20 @@
 
   var currentConceptDetail = null;
 
-  function renderConceptsTab() {
+  function navigateToConcept(conceptId) {
+    // Switch to concepts tab and open detail
+    var btns = document.querySelectorAll(".tab-btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.remove("active");
+      if (btns[i].getAttribute("data-tab") === "concepts") btns[i].classList.add("active");
+    }
+    document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
+    var target = document.getElementById("tab-concepts");
+    if (target) target.classList.add("active");
+    renderConceptsTab(conceptId);
+  }
+
+  function renderConceptsTab(autoOpenConceptId) {
     var listContainer = document.getElementById("concepts-list");
     var detailContainer = document.getElementById("concept-detail");
     var countEl = document.getElementById("concepts-count");
@@ -553,19 +568,20 @@
 
       countEl.textContent = userConcepts.length + " concepts assessed";
 
-      // Header row
-      var header = h("div", { className: "concept-header" }, [
-        h("div", null, "Concept"),
-        h("div", null, "Mastery"),
-        h("div", { style: "text-align:center" }, "Confidence"),
-        h("div", { style: "text-align:right" }, "Assessments"),
-      ]);
-      listContainer.appendChild(header);
+      var table = h("table", { className: "activity-table" });
+      var thead = h("thead", {}, h("tr", {}, [
+        h("th", {}, "Concept"),
+        h("th", {}, "Mastery"),
+        h("th", { style: "text-align:center" }, "Confidence"),
+        h("th", { style: "text-align:right" }, "Assessments")
+      ]));
+      table.appendChild(thead);
 
       userConcepts.sort(function(a, b) {
         return (b.state.lastAssessed || "").localeCompare(a.state.lastAssessed || "");
       });
 
+      var tbody = h("tbody", {});
       userConcepts.forEach(function(item) {
         var s = item.state;
         var c = item.concept;
@@ -573,28 +589,34 @@
         var low = Math.round(pMastery(s.mu - 2 * s.sigma) * 100);
         var high = Math.min(100, Math.round(pMastery(s.mu + 2 * s.sigma) * 100));
         var confidence = s.sigma < 0.3 ? "High" : s.sigma < 0.8 ? "Med" : "Low";
+        var displayName = c.id.replace(/-/g, " ").replace(/\//g, " \u203A ");
 
-        var row = h("div", { className: "concept-row", onclick: function() { openConceptDetail(s.conceptId); } }, [
-          h("div", { className: "concept-name" }, [
-            h("span", null, c.id),
-            c.domain ? h("span", { className: "domain-badge" }, c.domain) : null,
-          ]),
-          h("div", { className: "mastery-cell" }, [
-            h("div", { className: "mastery-bar-container" }, [
-              (function() {
-                var bar = h("div", { className: "mastery-bar" });
-                bar.style.width = p + "%";
-                bar.style.background = masteryColor(p);
-                return bar;
-              })()
-            ]),
-            h("span", { className: "mastery-range" }, low + "\u2013" + high + "%"),
-          ]),
-          h("div", { style: "text-align:center" }, h("span", { className: "confidence-badge confidence-" + confidence.toLowerCase() }, confidence)),
-          h("div", { style: "text-align:right" }, String(s.assessmentCount)),
+        var masteryCell = h("td", {});
+        var barContainer = h("div", { className: "mastery-bar-container", style: "display:inline-block;width:80px;vertical-align:middle" });
+        var bar = h("div", { className: "mastery-bar" });
+        bar.style.width = p + "%";
+        bar.style.background = masteryColor(p);
+        barContainer.appendChild(bar);
+        masteryCell.appendChild(barContainer);
+        masteryCell.appendChild(h("span", { className: "mastery-range" }, low + "\u2013" + high + "%"));
+
+        var nameCell = h("td", {});
+        var nameLink = h("span", { className: "concept-name", style: "cursor:pointer" }, displayName);
+        nameCell.appendChild(nameLink);
+        if (c.domain) nameCell.appendChild(h("span", { className: "domain-badge" }, c.domain));
+
+        var row = h("tr", { style: "cursor:pointer", onclick: function() { openConceptDetail(s.conceptId); } }, [
+          nameCell,
+          masteryCell,
+          h("td", { style: "text-align:center" }, h("span", { className: "confidence-badge confidence-" + confidence.toLowerCase() }, confidence)),
+          h("td", { style: "text-align:right" }, String(s.assessmentCount))
         ]);
-        listContainer.appendChild(row);
+        tbody.appendChild(row);
       });
+      table.appendChild(tbody);
+      listContainer.appendChild(table);
+
+      if (autoOpenConceptId) openConceptDetail(autoOpenConceptId);
     });
   }
 

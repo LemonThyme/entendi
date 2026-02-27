@@ -402,9 +402,8 @@ body {
 .confidence-badge.confidence-med { background: var(--amber-bg); color: var(--amber); }
 .confidence-badge.confidence-low { background: var(--red-bg); color: var(--red); }
 
-/* --- Concept rows (clickable in Concepts tab) --- */
-#concepts-list .concept-row { cursor: pointer; transition: background 0.15s; }
-#concepts-list .concept-row:hover { background: var(--bg); }
+/* --- Concept name links --- */
+.activity-table .concept-name:hover { text-decoration-color: var(--accent) !important; color: var(--accent); }
 
 /* --- Domain badges --- */
 .domain-badge {
