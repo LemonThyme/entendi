@@ -434,6 +434,12 @@ dashboardRoutes.get('/contact', (c) => {
   return c.html(publicShell('Contact \u2014 Entendi', 'contact', content));
 });
 
+dashboardRoutes.get('/login', (c) => {
+  const user = c.get('user');
+  if (user) return c.redirect('/');
+  return c.html(getShellHTML());
+});
+
 dashboardRoutes.get('/link', (c) => {
   const code = c.req.query('code') || '';
   const safeCode = code.replace(/[^A-Za-z0-9]/g, '').slice(0, 8);

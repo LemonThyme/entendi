@@ -13,6 +13,7 @@ function nav(active: 'home' | 'press' | 'contact'): string {
     ${link('/press', 'press', 'press')}
     <span class="nav-sep">|</span>
     ${link('/contact', 'contact', 'contact')}
+    <a href="/login" class="nav-link nav-signin">sign in</a>
   </nav>`;
 }
 
@@ -51,6 +52,7 @@ export function publicShell(title: string, active: 'home' | 'press' | 'contact',
     .nav-link:hover { color: var(--text); }
     .nav-link.active { color: var(--text); font-weight: 500; }
     .nav-sep { color: var(--border); user-select: none; }
+    .nav-signin { margin-left: auto; }
     .page-body {
       max-width: 700px; margin: 0 auto; padding: 0 2rem;
     }
