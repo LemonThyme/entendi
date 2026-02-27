@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Test the entendi plugin installation and hook behavior.
-# Run inside the devcontainer after setup.
+# Test the entendi plugin build output and hook behavior.
+# Works both inside the devcontainer and locally after `npm run build`.
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -16,22 +16,25 @@ FAILURES=0
 echo "=== Entendi Plugin Test Suite ==="
 echo ""
 
-# --- 1. Plugin installed ---
-PLUGIN_DIR=$(claude plugin list 2>/dev/null | grep -o '/[^ ]*entendi[^ ]*' | head -1 || true)
-if [ -z "$PLUGIN_DIR" ]; then
-  # Fallback: find it in cache
-  PLUGIN_DIR=$(find ~/.claude/plugins/cache -name "plugin.json" -path "*/entendi/*" -exec dirname {} \; 2>/dev/null | head -1 | sed 's|/.claude-plugin||' || true)
+# Determine plugin directory: installed cache or built dist/plugin
+PLUGIN_DIR=""
+# 1. Try installed plugin cache
+PLUGIN_DIR=$(find ~/.claude/plugins/cache -name "plugin.json" -path "*/entendi/*" -exec dirname {} \; 2>/dev/null | head -1 | sed 's|/.claude-plugin||' || true)
+# 2. Fall back to dist/plugin (CI or local build)
+if [ -z "$PLUGIN_DIR" ] || [ ! -d "$PLUGIN_DIR" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  PLUGIN_DIR="$REPO_ROOT/dist/plugin"
 fi
 
-if [ -n "$PLUGIN_DIR" ] && [ -d "$PLUGIN_DIR" ]; then
-  pass "Plugin installed at $PLUGIN_DIR"
+if [ -d "$PLUGIN_DIR" ]; then
+  pass "Plugin found at $PLUGIN_DIR"
 else
-  fail "Plugin not found"
-  echo "  Run: claude plugin install entendi"
+  fail "Plugin not found (run npm run build first)"
   exit 1
 fi
 
-# --- 2. No PostToolUse in hooks.json ---
+# --- 1. No PostToolUse in hooks.json ---
 HOOKS_JSON="$PLUGIN_DIR/hooks/hooks.json"
 if [ -f "$HOOKS_JSON" ]; then
   if grep -q "PostToolUse" "$HOOKS_JSON"; then
@@ -43,32 +46,28 @@ if [ -f "$HOOKS_JSON" ]; then
   if grep -q "UserPromptSubmit" "$HOOKS_JSON"; then
     pass "UserPromptSubmit hook registered"
   else
-    fail "UserPromptSubmit hook missing from hooks.json"
+    fail "UserPromptSubmit hook missing"
   fi
 
   if grep -q "SessionStart" "$HOOKS_JSON"; then
     pass "SessionStart hook registered"
   else
-    fail "SessionStart hook missing from hooks.json"
+    fail "SessionStart hook missing"
   fi
 else
-  fail "hooks.json not found at $HOOKS_JSON"
+  fail "hooks.json not found"
 fi
 
-# --- 3. No post-tool-use artifacts ---
-if [ -f "$PLUGIN_DIR/hooks/post-tool-use" ]; then
-  fail "post-tool-use bash script still present"
-else
-  pass "No post-tool-use bash script"
-fi
+# --- 2. No post-tool-use artifacts ---
+for f in post-tool-use post-tool-use.js; do
+  if [ -f "$PLUGIN_DIR/hooks/$f" ]; then
+    fail "$f still present"
+  else
+    pass "No $f"
+  fi
+done
 
-if [ -f "$PLUGIN_DIR/hooks/post-tool-use.js" ]; then
-  fail "post-tool-use.js still present"
-else
-  pass "No post-tool-use.js"
-fi
-
-# --- 4. Required files exist ---
+# --- 3. Required files exist ---
 for file in \
   "hooks/user-prompt-submit" \
   "hooks/user-prompt-submit.js" \
@@ -80,41 +79,56 @@ for file in \
   if [ -f "$PLUGIN_DIR/$file" ]; then
     pass "File exists: $file"
   else
-    fail "Missing file: $file"
+    fail "Missing: $file"
   fi
 done
 
-# --- 5. user-prompt-submit.js runs without error ---
+# --- 4. user-prompt-submit.js runs without error ---
 echo '{"session_id":"test","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"hello world"}' \
   | node "$PLUGIN_DIR/hooks/user-prompt-submit.js" 2>/dev/null
 UPS_EXIT=$?
 if [ $UPS_EXIT -eq 0 ]; then
-  pass "user-prompt-submit.js runs cleanly (exit $UPS_EXIT)"
+  pass "user-prompt-submit.js runs cleanly"
 else
   fail "user-prompt-submit.js failed (exit $UPS_EXIT)"
 fi
 
-# --- 6. Login detection works ---
+# --- 5. Login detection ---
 LOGIN_OUTPUT=$(echo '{"session_id":"test","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"entendi login"}' \
   | node "$PLUGIN_DIR/hooks/user-prompt-submit.js" 2>/dev/null || true)
 if echo "$LOGIN_OUTPUT" | grep -q "entendi_login"; then
-  pass "Login pattern detected: 'entendi login'"
+  pass "Login detection: 'entendi login'"
 else
-  fail "Login pattern not detected for 'entendi login'"
+  fail "Login detection failed"
   echo -e "  ${DIM}Output: $LOGIN_OUTPUT${RESET}"
 fi
 
-# --- 7. MCP server starts (and exits cleanly when no stdin) ---
-timeout 3 node "$PLUGIN_DIR/mcp/server.js" 2>/dev/null &
-MCP_PID=$!
-sleep 1
-if kill -0 $MCP_PID 2>/dev/null; then
-  kill $MCP_PID 2>/dev/null || true
-  pass "MCP server starts without crash"
+# --- 6. Teach-me detection ---
+TEACH_OUTPUT=$(echo '{"session_id":"test","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"teach me about Redis"}' \
+  | node "$PLUGIN_DIR/hooks/user-prompt-submit.js" 2>/dev/null || true)
+if echo "$TEACH_OUTPUT" | grep -q "entendi_start_tutor"; then
+  pass "Teach-me detection: 'teach me about Redis'"
 else
-  # Process exited — check if it was clean
-  wait $MCP_PID 2>/dev/null || true
-  pass "MCP server started and exited (no API key — expected)"
+  fail "Teach-me detection failed"
+  echo -e "  ${DIM}Output: $TEACH_OUTPUT${RESET}"
+fi
+
+# --- 7. Normal message produces no output ---
+NORMAL_OUTPUT=$(echo '{"session_id":"test","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"fix the bug in line 42"}' \
+  | node "$PLUGIN_DIR/hooks/user-prompt-submit.js" 2>/dev/null || true)
+if [ -z "$NORMAL_OUTPUT" ]; then
+  pass "Normal message: no output (silent)"
+else
+  fail "Normal message produced unexpected output"
+  echo -e "  ${DIM}Output: $NORMAL_OUTPUT${RESET}"
+fi
+
+# --- 8. Session-start outputs skill ---
+SKILL_OUTPUT=$(bash "$PLUGIN_DIR/hooks/session-start" 2>/dev/null || true)
+if echo "$SKILL_OUTPUT" | grep -q "concept-detection"; then
+  pass "Session-start injects concept-detection skill"
+else
+  fail "Session-start skill injection failed"
 fi
 
 # --- Summary ---
