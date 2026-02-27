@@ -1968,6 +1968,311 @@
       });
   }
 
+  // --- Event Detail Slide-over Panel ---
+
+  var activeEventPanel = null;
+
+  function closeEventPanel() {
+    if (!activeEventPanel) return;
+    var backdrop = activeEventPanel.backdrop;
+    var panel = activeEventPanel.panel;
+    panel.classList.remove("open");
+    backdrop.classList.remove("open");
+    document.removeEventListener("keydown", activeEventPanel.escHandler);
+    setTimeout(function() { backdrop.remove(); }, 250);
+    activeEventPanel = null;
+  }
+
+  /**
+   * Opens the event detail slide-over panel.
+   * @param {Object} eventData - Full event detail object (see design doc shape)
+   * @param {Object} options
+   * @param {string[]} [options.eventIds] - List of event IDs for prev/next navigation
+   * @param {number} [options.currentIndex] - Current index in eventIds
+   * @param {function} [options.fetchEvent] - fn(eventId) → Promise<eventData>
+   * @param {boolean} [options.isAdmin] - Show annotations section
+   */
+  function openEventPanel(eventData, options) {
+    options = options || {};
+    closeEventPanel();
+
+    var backdrop = h("div", { className: "event-panel-backdrop" });
+    var panel = h("div", { className: "event-panel" });
+
+    // ESC handler
+    function escHandler(e) { if (e.key === "Escape") closeEventPanel(); }
+    document.addEventListener("keydown", escHandler);
+
+    // Backdrop click
+    backdrop.addEventListener("click", function(e) {
+      if (e.target === backdrop) closeEventPanel();
+    });
+
+    // Track state
+    activeEventPanel = { backdrop: backdrop, panel: panel, escHandler: escHandler };
+
+    // --- Header: close + nav ---
+    var eventIds = options.eventIds || [];
+    var currentIdx = typeof options.currentIndex === "number" ? options.currentIndex : -1;
+
+    var prevBtn = h("button", {
+      className: "event-panel-nav-btn",
+      title: "Previous event",
+      onclick: function() { navigatePanel(-1); }
+    }, "\u2039");
+    var nextBtn = h("button", {
+      className: "event-panel-nav-btn",
+      title: "Next event",
+      onclick: function() { navigatePanel(1); }
+    }, "\u203A");
+
+    function updateNavButtons() {
+      prevBtn.disabled = currentIdx <= 0;
+      nextBtn.disabled = currentIdx < 0 || currentIdx >= eventIds.length - 1;
+    }
+    updateNavButtons();
+
+    function navigatePanel(dir) {
+      var newIdx = currentIdx + dir;
+      if (newIdx < 0 || newIdx >= eventIds.length) return;
+      if (!options.fetchEvent) return;
+      currentIdx = newIdx;
+      updateNavButtons();
+      options.fetchEvent(eventIds[newIdx]).then(function(newData) {
+        options.currentIndex = newIdx;
+        renderPanelContent(newData);
+      });
+    }
+
+    var closeBtn = h("button", { className: "event-panel-close", title: "Close", onclick: closeEventPanel }, "\u00D7");
+
+    var navGroup = h("div", { className: "event-panel-nav" }, [prevBtn, nextBtn]);
+    var header = h("div", { className: "event-panel-header" }, [navGroup, closeBtn]);
+
+    var body = h("div", { className: "event-panel-body" });
+    panel.appendChild(header);
+    panel.appendChild(body);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+
+    // Trigger animation
+    requestAnimationFrame(function() {
+      backdrop.classList.add("open");
+      panel.classList.add("open");
+    });
+
+    renderPanelContent(eventData);
+
+    function renderPanelContent(data) {
+      body.textContent = "";
+
+      // Concept name + domain
+      var conceptName = (data.conceptName || data.conceptId || "").replace(/-/g, " ").replace(/\//g, " \u203A ");
+      var conceptLink = h("span", {
+        className: "event-panel-concept-name",
+        onclick: function() { closeEventPanel(); navigateToConcept(data.conceptId); }
+      }, conceptName);
+
+      var conceptRow = h("div", { className: "event-panel-concept" }, [conceptLink]);
+      if (data.domain) {
+        var domainBadge = h("span", {
+          className: "domain-badge event-panel-link",
+          onclick: function() {
+            closeEventPanel();
+            // Navigate to concepts tab filtered by domain
+            var btns = document.querySelectorAll(".tab-btn");
+            for (var i = 0; i < btns.length; i++) {
+              btns[i].classList.remove("active");
+              if (btns[i].getAttribute("data-tab") === "concepts") btns[i].classList.add("active");
+            }
+            document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
+            var target = document.getElementById("tab-concepts");
+            if (target) target.classList.add("active");
+            renderConceptsTab();
+            // After render, click the domain filter
+            setTimeout(function() {
+              var filterBtns = document.querySelectorAll(".filter-btn");
+              for (var j = 0; j < filterBtns.length; j++) {
+                if (filterBtns[j].textContent === data.domain) { filterBtns[j].click(); break; }
+              }
+            }, 200);
+          }
+        }, data.domain);
+        conceptRow.appendChild(domainBadge);
+      }
+      body.appendChild(conceptRow);
+
+      // Date + event type
+      var typeLabel = data.eventType === "probe" ? "Probe"
+        : data.eventType === "tutor_phase1" ? "Tutor P1"
+        : data.eventType === "tutor_phase4" ? "Tutor P4"
+        : data.eventType || "\u2014";
+      var dateStr = data.createdAt ? new Date(data.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "\u2014";
+      body.appendChild(h("div", { className: "event-panel-meta" }, typeLabel + "  \u00B7  " + dateStr));
+
+      // Score row: rubric, mastery delta, integrity
+      var rubricScore = data.rubricScore !== undefined && data.rubricScore !== null ? data.rubricScore : "\u2014";
+      var rubricEl = h("div", { className: "event-panel-score-item" }, [
+        h("div", { className: "event-panel-score-value score-badge score-" + rubricScore }, rubricScore + "/3"),
+        h("div", { className: "event-panel-score-label" }, "Score")
+      ]);
+
+      var masteryDelta = "";
+      var deltaCls = "";
+      if (data.muBefore !== undefined && data.muAfter !== undefined) {
+        var pBefore = Math.round(pMastery(data.muBefore) * 100);
+        var pAfter = Math.round(pMastery(data.muAfter) * 100);
+        var delta = pAfter - pBefore;
+        masteryDelta = pBefore + "% \u2192 " + pAfter + "%";
+        deltaCls = delta > 0 ? "trend-up" : delta < 0 ? "trend-down" : "trend-flat";
+      }
+      var masteryEl = h("div", { className: "event-panel-score-item event-panel-link", onclick: function() {
+        closeEventPanel();
+        navigateToConcept(data.conceptId);
+      }}, [
+        h("div", { className: "event-panel-score-value " + deltaCls, style: "font-size:0.85rem" }, masteryDelta || "\u2014"),
+        h("div", { className: "event-panel-score-label" }, "Mastery")
+      ]);
+
+      var integrityPct = data.integrityScore !== undefined && data.integrityScore !== null
+        ? (data.integrityScore * 100).toFixed(0) + "%" : "\u2014";
+      var integrityColor = data.integrityScore !== null && data.integrityScore !== undefined
+        ? (data.integrityScore < 0.5 ? "color:var(--red)" : data.integrityScore < 0.8 ? "color:var(--amber)" : "color:var(--green)")
+        : "";
+      var integrityEl = h("div", { className: "event-panel-score-item event-panel-link", onclick: function() {
+        closeEventPanel();
+        // Navigate to integrity tab
+        var btns = document.querySelectorAll(".tab-btn");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].classList.remove("active");
+          if (btns[i].getAttribute("data-tab") === "integrity") btns[i].classList.add("active");
+        }
+        document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
+        var target = document.getElementById("tab-integrity");
+        if (target) target.classList.add("active");
+        renderIntegrity();
+      }}, [
+        h("div", { className: "event-panel-score-value", style: integrityColor }, integrityPct),
+        h("div", { className: "event-panel-score-label" }, "Integrity")
+      ]);
+
+      body.appendChild(h("div", { className: "event-panel-scores" }, [rubricEl, masteryEl, integrityEl]));
+
+      // Evaluation criteria
+      if (data.evaluationCriteria) {
+        body.appendChild(h("div", { className: "event-panel-section-label" }, "Evaluation Criteria"));
+        body.appendChild(h("div", { className: "event-panel-criteria", title: data.evaluationCriteria }, data.evaluationCriteria));
+      }
+
+      // Response text (expandable)
+      if (data.responseText) {
+        body.appendChild(h("div", { className: "event-panel-section-label" }, "Response"));
+        var responseEl = h("div", { className: "event-panel-response", onclick: function() {
+          if (responseEl.classList.contains("expanded")) return;
+          responseEl.classList.add("expanded");
+        }}, data.responseText);
+        body.appendChild(responseEl);
+      }
+
+      // Signals chips
+      var features = data.responseFeatures;
+      if (features && typeof features === "object") {
+        var signalContainer = h("div", { className: "event-panel-signals" });
+        if (features.charsPerSecond !== undefined) {
+          signalContainer.appendChild(h("span", { className: "event-panel-signal" }, [
+            h("span", null, "Speed: "),
+            h("span", { className: "event-panel-signal-value" }, features.charsPerSecond.toFixed(1) + " c/s")
+          ]));
+        }
+        if (features.wordCount !== undefined) {
+          signalContainer.appendChild(h("span", { className: "event-panel-signal" }, [
+            h("span", null, "Words: "),
+            h("span", { className: "event-panel-signal-value" }, String(features.wordCount))
+          ]));
+        }
+        if (features.formattingScore !== undefined) {
+          signalContainer.appendChild(h("span", { className: "event-panel-signal" }, [
+            h("span", null, "Fmt: "),
+            h("span", { className: "event-panel-signal-value" }, String(features.formattingScore))
+          ]));
+        }
+        body.appendChild(signalContainer);
+      }
+
+      // Annotations (admin only)
+      if (options.isAdmin) {
+        body.appendChild(h("div", { className: "event-panel-section-label" }, "Annotations"));
+        var annotationsContainer = h("div", { className: "event-panel-annotations" });
+
+        var annotations = data.annotations || [];
+        if (annotations.length === 0) {
+          annotationsContainer.appendChild(h("div", { style: "font-size:0.8rem;color:var(--text-tertiary)" }, "No annotations yet."));
+        } else {
+          annotations.forEach(function(ann) {
+            var deleteBtn = null;
+            if (currentUser && ann.authorId === currentUser.id) {
+              deleteBtn = h("button", { className: "event-panel-annotation-delete", onclick: function() {
+                fetch("/api/org/annotations/" + ann.id, { method: "DELETE", headers: getHeaders() })
+                  .then(function(r) {
+                    if (r.ok) {
+                      // Refresh annotation list
+                      data.annotations = data.annotations.filter(function(a) { return a.id !== ann.id; });
+                      renderPanelContent(data);
+                    }
+                  });
+              }}, "\u00D7");
+            }
+            annotationsContainer.appendChild(h("div", { className: "event-panel-annotation" }, [
+              h("div", { className: "event-panel-annotation-header" }, [
+                h("span", null, [
+                  h("span", { className: "event-panel-annotation-author" }, ann.authorName || "Admin"),
+                  h("span", { className: "event-panel-annotation-time" }, "  \u00B7  " + timeAgo(ann.createdAt))
+                ]),
+                deleteBtn
+              ]),
+              h("div", { className: "event-panel-annotation-text" }, ann.text)
+            ]));
+          });
+        }
+
+        // Add annotation form
+        var textarea = h("textarea", { placeholder: "Add annotation\u2026", rows: "2" });
+        var submitBtn = h("button", { className: "btn-sm primary", onclick: function() {
+          var text = textarea.value.trim();
+          if (!text || !data.id) return;
+          submitBtn.disabled = true;
+          fetch("/api/org/events/" + data.id + "/annotations", {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify({ text: text })
+          })
+            .then(function(r) { return r.json(); })
+            .then(function(newAnn) {
+              if (!data.annotations) data.annotations = [];
+              data.annotations.push(newAnn);
+              renderPanelContent(data);
+            })
+            .catch(function() { submitBtn.disabled = false; });
+        }}, "Add");
+        annotationsContainer.appendChild(h("div", { className: "event-panel-add-annotation" }, [textarea, submitBtn]));
+
+        body.appendChild(annotationsContainer);
+      }
+    }
+  }
+
+  // Fetch a single event detail for the current user
+  function fetchEventDetail(eventId) {
+    return fetch("/api/events/" + eventId, { headers: getHeaders() })
+      .then(function(r) { return r.json(); });
+  }
+
+  // Fetch a single event detail via org endpoint (admin)
+  function fetchOrgEventDetail(eventId) {
+    return fetch("/api/org/events/" + eventId, { headers: getHeaders() })
+      .then(function(r) { return r.json(); });
+  }
+
   // --- Real-time updates via SSE ---
 
   var eventSource = null;
