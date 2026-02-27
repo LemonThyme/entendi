@@ -15,7 +15,7 @@ warn()  { printf "${YELLOW}!${NC} %s\n" "$1"; }
 fail()  { printf "${RED}✗ %s${NC}\n" "$1"; exit 1; }
 
 echo ""
-echo "  ${BOLD}Entendi Setup${NC}"
+printf "  ${BOLD}Entendi Setup${NC}\n"
 echo ""
 
 # ── 1. Check Node >= 22 ──────────────────────────────────────────────
@@ -37,7 +37,7 @@ if [ ! -f .env ]; then
     cp .env.example .env
     warn "Created .env from .env.example"
     echo ""
-    echo "  ${BOLD}Action required:${NC} Open .env and fill in:"
+    printf "  ${BOLD}Action required:${NC} Open .env and fill in:\n"
     echo "    DATABASE_URL       — your Neon PostgreSQL connection string"
     echo "    BETTER_AUTH_SECRET — run: openssl rand -base64 32"
     echo ""
@@ -64,20 +64,21 @@ if [ -z "${BETTER_AUTH_SECRET:-}" ] || [[ "$BETTER_AUTH_SECRET" == *"generate-wi
 fi
 ok "Required env vars set"
 
-# ── 4. npm install ───────────────────────────────────────────────────
+# ── 4. Clean stale artifacts ──────────────────────────────────────────
+info "Cleaning stale build artifacts..."
+rm -rf dist
+rm -rf ~/.claude/plugins/cache/entendi
+ok "Build output and plugin cache cleared"
+
+# ── 5. npm install ───────────────────────────────────────────────────
 info "Installing dependencies..."
 npm install --no-fund --no-audit
 ok "Dependencies installed"
 
-# ── 5. Build ─────────────────────────────────────────────────────────
+# ── 6. Build ─────────────────────────────────────────────────────────
 info "Building hooks, MCP server, plugin, and dashboard..."
 npm run build
 ok "Build complete"
-
-# ── 6. Clear plugin cache ────────────────────────────────────────────
-info "Clearing plugin cache..."
-rm -rf ~/.claude/plugins/cache/entendi
-ok "Plugin cache cleared"
 
 # ── 7. Install plugin ───────────────────────────────────────────────
 info "Installing Claude Code plugin..."
@@ -92,10 +93,10 @@ fi
 
 # ── Done ─────────────────────────────────────────────────────────────
 echo ""
-echo "  ${GREEN}${BOLD}Setup complete!${NC}"
+printf "  ${GREEN}${BOLD}Setup complete!${NC}\n"
 echo ""
 echo "  Next steps:"
 echo "    1. Start Claude Code:  claude"
-echo "    2. Link your account:  say \"entendi login\""
+echo '    2. Link your account:  say "entendi login"'
 echo "    3. Start coding — Entendi activates automatically"
 echo ""
