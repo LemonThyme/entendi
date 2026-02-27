@@ -208,18 +208,30 @@ analyticsRoutes.get('/concept/:conceptId', async (c) => {
     concept: { id: conceptRow.id, domain: conceptRow.domain, specificity: conceptRow.specificity, description: conceptRow.description },
     mastery: state ? masteryRange(state.mu, state.sigma) : null,
     analytics: analytics ?? null,
-    timeline: events.map((ev, i) => {
-      const estimatedSigma = 1.5 / Math.sqrt(1 + i * 0.5);
-      return {
-        eventId: ev.id,
-        timestamp: ev.createdAt,
-        mastery: masteryRange(ev.muAfter, estimatedSigma),
-        eventType: ev.eventType,
-        rubricScore: ev.rubricScore,
-        integrityScore: ev.integrityScore,
-        responseText: ev.responseText,
-      };
-    }),
+    timeline: [
+      ...events.map((ev, i) => {
+        const estimatedSigma = 1.5 / Math.sqrt(1 + i * 0.5);
+        return {
+          type: 'assessment' as const,
+          eventId: ev.id,
+          timestamp: ev.createdAt,
+          mastery: masteryRange(ev.muAfter, estimatedSigma),
+          eventType: ev.eventType,
+          rubricScore: ev.rubricScore,
+          integrityScore: ev.integrityScore,
+          responseText: ev.responseText,
+        };
+      }),
+      ...dismissals.map(d => ({
+        type: 'dismissal' as const,
+        eventId: d.id,
+        timestamp: d.createdAt,
+        reason: d.reason,
+        note: d.note,
+        requeued: d.requeued,
+        resolvedAs: d.resolvedAs,
+      })),
+    ].sort((a, b) => new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime()),
     tutorSessions: tutorHistory,
     dismissals,
     prerequisites: prerequisites.map(p => {

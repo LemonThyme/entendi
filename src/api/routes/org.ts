@@ -120,25 +120,47 @@ orgRoutes.get('/members/:userId/history', async (c) => {
     return c.json({ error: 'User not in organization' }, 403);
   }
 
-  const events = await db.select({
-    id: assessmentEvents.id,
-    conceptId: assessmentEvents.conceptId,
-    eventType: assessmentEvents.eventType,
-    rubricScore: assessmentEvents.rubricScore,
-    muBefore: assessmentEvents.muBefore,
-    muAfter: assessmentEvents.muAfter,
-    evaluatorConfidence: assessmentEvents.evaluatorConfidence,
-    integrityScore: assessmentEvents.integrityScore,
-    responseText: assessmentEvents.responseText,
-    evaluationCriteria: assessmentEvents.evaluationCriteria,
-    responseFeatures: assessmentEvents.responseFeatures,
-    createdAt: assessmentEvents.createdAt,
-  }).from(assessmentEvents)
-    .where(eq(assessmentEvents.userId, targetUserId))
-    .orderBy(desc(assessmentEvents.createdAt))
-    .limit(20);
+  const [events, dismissals] = await Promise.all([
+    db.select({
+      id: assessmentEvents.id,
+      conceptId: assessmentEvents.conceptId,
+      eventType: assessmentEvents.eventType,
+      rubricScore: assessmentEvents.rubricScore,
+      muBefore: assessmentEvents.muBefore,
+      muAfter: assessmentEvents.muAfter,
+      evaluatorConfidence: assessmentEvents.evaluatorConfidence,
+      integrityScore: assessmentEvents.integrityScore,
+      responseText: assessmentEvents.responseText,
+      evaluationCriteria: assessmentEvents.evaluationCriteria,
+      responseFeatures: assessmentEvents.responseFeatures,
+      createdAt: assessmentEvents.createdAt,
+    }).from(assessmentEvents)
+      .where(eq(assessmentEvents.userId, targetUserId))
+      .orderBy(desc(assessmentEvents.createdAt))
+      .limit(20),
+    db.select({
+      id: dismissalEvents.id,
+      conceptId: dismissalEvents.conceptId,
+      reason: dismissalEvents.reason,
+      note: dismissalEvents.note,
+      requeued: dismissalEvents.requeued,
+      resolvedAt: dismissalEvents.resolvedAt,
+      resolvedAs: dismissalEvents.resolvedAs,
+      createdAt: dismissalEvents.createdAt,
+    }).from(dismissalEvents)
+      .where(eq(dismissalEvents.userId, targetUserId))
+      .orderBy(desc(dismissalEvents.createdAt))
+      .limit(20),
+  ]);
 
-  return c.json(events);
+  // Interleave and sort by date descending
+  const history = [
+    ...events.map(e => ({ type: 'assessment' as const, ...e })),
+    ...dismissals.map(d => ({ type: 'dismissal' as const, ...d })),
+  ].sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+    .slice(0, 20);
+
+  return c.json(history);
 });
 
 // GET /members/:userId/integrity — integrity stats for an org member
