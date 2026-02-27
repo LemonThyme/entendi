@@ -11,6 +11,7 @@ import { deviceCodeRoutes } from './routes/device-code.js';
 import { billingRoutes } from './routes/billing.js';
 import { preferencesRoutes } from './routes/preferences.js';
 import { eventRoutes } from './routes/events.js';
+import { eventDetailRoutes } from './routes/events-detail.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { createDb, type Database } from './db/connection.js';
 import { createAuth, type Auth } from './lib/auth.js';
@@ -122,6 +123,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/billing', billingRoutes);
   app.route('/api/preferences', preferencesRoutes);
   app.route('/api/events', eventRoutes);
+  app.route('/api/events', eventDetailRoutes);
   app.route('/api/analytics', analyticsRoutes);
 
   // Cache static assets with immutable headers
