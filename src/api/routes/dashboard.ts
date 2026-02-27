@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { createHash } from 'crypto';
+import { desc } from 'drizzle-orm';
 import { manifest } from '../../dashboard/manifest.js';
+import { pressMentions } from '../db/schema.js';
+import { daysSinceLaunch, publicShell } from './public-html.js';
 import type { Env } from '../index.js';
 
 export const dashboardRoutes = new Hono<Env>();
@@ -215,7 +218,96 @@ function getLinkShellHTML(safeCode: string, linkJsHref: string): string {
 </html>`;
 }
 
+function getLandingHTML(): string {
+  return publicShell('Entendi — Comprehension accountability for AI-assisted work', 'home', `
+  <style>
+    .landing { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 120px); text-align: center; }
+    .landing h1 { font-family: var(--font-display); font-size: 2.25rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; max-width: 600px; margin-bottom: 1.5rem; }
+    .landing .subtitle { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; max-width: 480px; margin-bottom: 2rem; }
+    .landing .bullets { list-style: none; text-align: left; max-width: 420px; margin-bottom: 2rem; }
+    .landing .bullets li { color: var(--text-secondary); font-size: 0.875rem; line-height: 1.5; padding: 0.35rem 0; padding-left: 1.25rem; position: relative; }
+    .landing .bullets li::before { content: '\\2014'; position: absolute; left: 0; color: var(--accent); }
+    .demo-placeholder {
+      width: 100%; max-width: 480px; height: 240px; background: var(--bg-card);
+      border: 1px dashed var(--border); border-radius: 8px; margin-bottom: 2rem;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-tertiary); font-size: 0.8rem;
+    }
+    .waitlist-form { display: flex; gap: 0.5rem; max-width: 400px; width: 100%; }
+    .waitlist-form input {
+      flex: 1; padding: 0.6rem 0.85rem; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.85rem; font-family: var(--font-body); outline: none; background: white;
+    }
+    .waitlist-form input:focus { border-color: var(--accent); }
+    .waitlist-form button {
+      padding: 0.6rem 1.25rem; border: none; border-radius: 6px; background: var(--accent);
+      color: white; font-size: 0.85rem; font-weight: 600; font-family: var(--font-body);
+      cursor: pointer; white-space: nowrap;
+    }
+    .waitlist-form button:hover { background: var(--accent-hover); }
+    .waitlist-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .waitlist-msg { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.2em; }
+    .waitlist-msg.success { color: var(--green); }
+    .waitlist-msg.error { color: var(--red); }
+  </style>
+  <div class="landing">
+    <h1>Know what you know.</h1>
+    <p class="subtitle">Entendi is a comprehension accountability layer for AI-assisted work. It watches how you learn with AI and makes sure you actually understand what you're building.</p>
+    <ul class="bullets">
+      <li>Observes concepts as you work with AI tools</li>
+      <li>Probes your understanding with Socratic questions</li>
+      <li>Builds a Bayesian knowledge graph of what you actually know</li>
+    </ul>
+    <div class="demo-placeholder">demo gif coming soon</div>
+    <form class="waitlist-form" id="waitlist-form">
+      <input type="email" placeholder="you@example.com" required id="waitlist-email"/>
+      <button type="submit">Join the waitlist</button>
+    </form>
+    <div class="waitlist-msg" id="waitlist-msg"></div>
+  </div>
+  <script>
+    document.getElementById('waitlist-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      const msg = document.getElementById('waitlist-msg');
+      const email = document.getElementById('waitlist-email').value;
+      btn.disabled = true;
+      msg.textContent = '';
+      msg.className = 'waitlist-msg';
+      try {
+        const res = await fetch('/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (res.ok) {
+          msg.textContent = "You're on the list. We'll be in touch.";
+          msg.className = 'waitlist-msg success';
+          document.getElementById('waitlist-email').value = '';
+        } else if (res.status === 409) {
+          msg.textContent = "You're already on the list!";
+          msg.className = 'waitlist-msg success';
+        } else {
+          const body = await res.json();
+          msg.textContent = body.error || 'Something went wrong.';
+          msg.className = 'waitlist-msg error';
+        }
+      } catch {
+        msg.textContent = 'Network error. Try again.';
+        msg.className = 'waitlist-msg error';
+      }
+      btn.disabled = false;
+    });
+  </script>`);
+}
+
 dashboardRoutes.get('/', (c) => {
+  const user = c.get('user');
+
+  if (!user) {
+    return c.html(getLandingHTML());
+  }
+
   const etag = `"${manifestHash}"`;
   if (c.req.header('If-None-Match') === etag) {
     return c.body(null, 304);
