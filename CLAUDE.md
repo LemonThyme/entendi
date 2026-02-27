@@ -32,6 +32,14 @@ claude plugin install entendi     # install as Claude Code plugin
 
 After install, restart Claude Code. The plugin activates automatically (SessionStart injects the concept-detection skill, UserPromptSubmit handles state).
 
+**After any change to hooks, MCP server, or plugin files**, reinstall the plugin:
+
+```bash
+npm run plugin:reinstall          # builds, clears cache, reinstalls
+```
+
+Then restart Claude Code. The plugin cache is sticky — without clearing it, `claude plugin install` serves stale files.
+
 ### Devcontainer
 
 Open the repo in VS Code/Cursor with the Dev Containers extension for isolated plugin testing. Run `.devcontainer/test-plugin.sh` to validate hook behavior.
@@ -39,10 +47,11 @@ Open the repo in VS Code/Cursor with the Dev Containers extension for isolated p
 ## Key Commands
 
 ```bash
-npm run api:dev        # Local API server (port 3456)
-npm run build          # Build hooks, MCP, plugin, dashboard
-npm test               # Run tests
-npx wrangler deploy    # Deploy to Cloudflare Workers
+npm run api:dev           # Local API server (port 3456)
+npm run build             # Build hooks, MCP, plugin, dashboard
+npm run plugin:reinstall  # Build + clear cache + reinstall plugin
+npm test                  # Run tests
+npx wrangler deploy       # Deploy to Cloudflare Workers
 ```
 
 ## Architecture
