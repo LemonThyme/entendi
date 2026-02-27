@@ -813,8 +813,21 @@
           ]);
           table.appendChild(thead);
           var tbody = h("tbody");
-          var historyEventIds = data.timeline.filter(function(t) { return t.eventId; }).map(function(t) { return t.eventId; });
+          var historyEventIds = data.timeline.filter(function(t) { return t.eventId && t.type !== "dismissal"; }).map(function(t) { return t.eventId; });
           data.timeline.forEach(function(ev, idx) {
+            if (ev.type === "dismissal") {
+              var dRow = h("tr", { className: "dismissal-row", style: "cursor:pointer", onclick: (function(evRef) { return function() {
+                openEventPanel(evRef, { isDismissal: true });
+              }; })(ev) }, [
+                h("td", { style: "font-style:normal" }, reasonBadge(ev.reason)),
+                h("td", null, "\u2014"),
+                h("td", { style: "font-style:normal;color:var(--text-tertiary)" }, "\u2014"),
+                h("td", { style: "font-style:normal;color:var(--text-tertiary)" }, "\u2014"),
+                h("td", { style: "font-style:normal" }, timeAgo(ev.timestamp)),
+              ]);
+              tbody.appendChild(dRow);
+              return;
+            }
             var row = h("tr", { style: ev.eventId ? "cursor:pointer" : "", onclick: ev.eventId ? (function(evRef, i) { return function() {
               fetchEventDetail(evRef.eventId).then(function(eventData) {
                 openEventPanel(eventData, {
@@ -1798,9 +1811,24 @@
         ])));
 
         var tbody = h("tbody", {});
-        var memberEventIds = events.filter(function(e) { return e.id; }).map(function(e) { return e.id; });
+        var memberEventIds = events.filter(function(e) { return e.id && e.type === "assessment"; }).map(function(e) { return e.id; });
         events.forEach(function(ev) {
           var displayName = ev.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+
+          if (ev.type === "dismissal") {
+            var row = h("tr", { className: "dismissal-row", style: "cursor:pointer", onclick: (function(evRef) { return function() {
+              openEventPanel(evRef, { isAdmin: true, isDismissal: true });
+            }; })(ev) }, [
+              h("td", {}, h("span", { className: "concept-name", style: "font-style:normal" }, displayName)),
+              h("td", {}, reasonBadge(ev.reason)),
+              h("td", {}, "\u2014"),
+              h("td", { style: "font-style:normal;color:var(--text-tertiary)" }, ev.note || "\u2014"),
+              h("td", { className: "time-ago", style: "text-align:right;font-style:normal" }, timeAgo(ev.createdAt))
+            ]);
+            tbody.appendChild(row);
+            return;
+          }
+
           var pBefore = Math.round(pMastery(ev.muBefore) * 100);
           var pAfter = Math.round(pMastery(ev.muAfter) * 100);
           var delta = pAfter - pBefore;
@@ -2257,6 +2285,44 @@
 
     function renderPanelContent(data) {
       body.textContent = "";
+
+      // Dismissal-specific panel content
+      if (options.isDismissal || data.type === "dismissal" || data.reason) {
+        var dConceptName = (data.conceptName || data.conceptId || "").replace(/-/g, " ").replace(/\//g, " \u203A ");
+        var dConceptLink = h("span", {
+          className: "event-panel-concept-name",
+          onclick: function() { closeEventPanel(); if (data.conceptId) navigateToConcept(data.conceptId); }
+        }, dConceptName);
+        body.appendChild(h("div", { className: "event-panel-concept" }, [dConceptLink]));
+
+        var dDateStr = (data.createdAt || data.timestamp)
+          ? new Date(data.createdAt || data.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
+          : "\u2014";
+        body.appendChild(h("div", { className: "event-panel-meta" }, "Dismissal  \u00B7  " + dDateStr));
+
+        // Reason badge (large)
+        body.appendChild(h("div", { className: "event-panel-section-label" }, "Reason"));
+        body.appendChild(h("div", { style: "margin-bottom:0.75rem" }, reasonBadge(data.reason)));
+
+        // Note
+        if (data.note) {
+          body.appendChild(h("div", { className: "event-panel-section-label" }, "Note"));
+          body.appendChild(h("div", { className: "event-panel-response" }, data.note));
+        }
+
+        // Re-queue status
+        body.appendChild(h("div", { className: "event-panel-section-label" }, "Re-queue Status"));
+        var requeueText = data.requeued ? "Re-queued for next session" : "Not re-queued";
+        body.appendChild(h("div", { style: "font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem" }, requeueText));
+
+        // Resolution
+        if (data.resolvedAs) {
+          body.appendChild(h("div", { className: "event-panel-section-label" }, "Resolution"));
+          body.appendChild(h("div", { style: "font-size:0.8rem;color:var(--text-secondary)" }, resolutionLabel(data.resolvedAs, data.resolvedAt)));
+        }
+
+        return;
+      }
 
       // Concept name + domain
       var conceptName = (data.conceptName || data.conceptId || "").replace(/-/g, " ").replace(/\//g, " \u203A ");
