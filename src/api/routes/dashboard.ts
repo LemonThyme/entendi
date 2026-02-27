@@ -317,6 +317,48 @@ dashboardRoutes.get('/', (c) => {
   return c.html(getShellHTML());
 });
 
+dashboardRoutes.get('/press', async (c) => {
+  const db = c.get('db');
+  const rows = await db.select().from(pressMentions).orderBy(desc(pressMentions.createdAt));
+
+  let content: string;
+  if (rows.length === 0) {
+    const days = daysSinceLaunch();
+    content = `
+      <style>
+        .press-empty { margin-top: 8rem; text-align: center; }
+        .press-empty h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
+        .press-empty p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; max-width: 400px; margin: 0 auto; }
+      </style>
+      <div class="press-empty">
+        <h2>Press</h2>
+        <p>We've been live for ${days} day${days !== 1 ? 's' : ''}. We're sure the press will come.</p>
+      </div>`;
+  } else {
+    const items = rows.map(r => `
+      <li class="press-item">
+        <a href="${r.url}" target="_blank" rel="noopener">${r.title}</a>
+        <span class="press-meta">${r.source}${r.publishedAt ? ` \u00b7 ${r.publishedAt}` : ''}</span>
+      </li>`).join('');
+    content = `
+      <style>
+        .press-page { margin-top: 4rem; }
+        .press-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        .press-list { list-style: none; }
+        .press-item { padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+        .press-item a { color: var(--text); text-decoration: none; font-weight: 500; font-size: 0.9rem; }
+        .press-item a:hover { color: var(--accent); }
+        .press-meta { display: block; color: var(--text-tertiary); font-size: 0.8rem; margin-top: 0.25rem; }
+      </style>
+      <div class="press-page">
+        <h2>Press</h2>
+        <ul class="press-list">${items}</ul>
+      </div>`;
+  }
+
+  return c.html(publicShell('Press \u2014 Entendi', 'press', content));
+});
+
 dashboardRoutes.get('/link', (c) => {
   const code = c.req.query('code') || '';
   const safeCode = code.replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
