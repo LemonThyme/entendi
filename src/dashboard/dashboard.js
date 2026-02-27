@@ -340,8 +340,20 @@
       return;
     }
 
+    var table = h("table", { className: "activity-table" });
+    var thead = h("thead", {}, h("tr", {}, [
+      h("th", {}, "Concept"),
+      h("th", {}, "Type"),
+      h("th", {}, "Score"),
+      h("th", {}, "Mastery"),
+      h("th", { style: "text-align:right" }, "When")
+    ]));
+    table.appendChild(thead);
+
+    var tbody = h("tbody", {});
     events.forEach(function(ev) {
       var conceptId = ev._conceptId || ev.conceptId;
+      var displayName = conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
       var pBefore = Math.round(pMastery(ev.muBefore) * 100);
       var pAfter = Math.round(pMastery(ev.muAfter) * 100);
       var delta = pAfter - pBefore;
@@ -353,24 +365,24 @@
         : ev.eventType === "tutor_phase4" ? "Tutor P4"
         : ev.eventType;
 
-      var deltaSpan = h("span", { className: trendCls });
-      deltaSpan.style.fontWeight = "600";
-      deltaSpan.style.marginLeft = "6px";
-      deltaSpan.textContent = deltaStr;
+      var deltaSpan = h("span", { className: trendCls, style: "font-weight:600;margin-left:6px" }, deltaStr);
 
-      var row = h("div", { style: "display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)" }, [
-        h("span", { style: "font-weight:600;min-width:120px" }, conceptId),
-        h("span", { className: "event-type", style: "font-size:0.75rem" }, typeLabel),
-        h("span", { className: "score-badge score-" + ev.rubricScore, style: "font-size:0.75rem" }, ev.rubricScore + "/3"),
-        (function() {
-          var masterySpan = h("span", { style: "font-size:0.8rem;color:var(--text-secondary)" }, pBefore + "% \u2192 " + pAfter + "%");
-          masterySpan.appendChild(deltaSpan);
-          return masterySpan;
-        })(),
-        h("span", { className: "time-ago", style: "margin-left:auto;font-size:0.75rem" }, timeAgo(ev.createdAt))
+      var masteryCell = h("td", {});
+      var masteryText = h("span", { style: "color:var(--text-secondary)" }, pBefore + "% \u2192 " + pAfter + "%");
+      masteryText.appendChild(deltaSpan);
+      masteryCell.appendChild(masteryText);
+
+      var row = h("tr", {}, [
+        h("td", { className: "concept-name" }, displayName),
+        h("td", { className: "event-type" }, typeLabel),
+        h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
+        masteryCell,
+        h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
       ]);
-      area.appendChild(row);
+      tbody.appendChild(row);
     });
+    table.appendChild(tbody);
+    area.appendChild(table);
   }
 
   // --- Analytics Tab ---
