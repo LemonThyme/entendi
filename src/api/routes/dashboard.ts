@@ -107,9 +107,9 @@ function getShellHTML(): string {
         </div>
         <div class="section">
           <div class="section-header">
-            <div class="section-title">Dismiss Patterns</div>
+            <div class="section-title">Flagged Responses</div>
           </div>
-          <div class="chart-panel" id="integrity-dismissals" style="height:250px;"></div>
+          <div id="integrity-dismissals"></div>
         </div>
       </div>
 

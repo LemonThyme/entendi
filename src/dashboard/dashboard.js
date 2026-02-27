@@ -219,8 +219,10 @@
           var barFill = h("div", { className: "hero-concept-bar-fill" });
           barFill.style.width = item.pct + "%";
           barFill.style.background = barColor;
+          var displayName = item.id.replace(/-/g, " ").replace(/\//g, " \u203A ");
+          var nameEl = h("div", { className: "hero-concept-name", style: "cursor:pointer", onclick: (function(id) { return function() { navigateToConcept(id); }; })(item.id) }, displayName);
           var row = h("div", { className: "hero-concept" }, [
-            h("div", { className: "hero-concept-name" }, item.id),
+            nameEl,
             h("div", { className: "hero-concept-bar" }, [barFill]),
             h("div", { className: "hero-concept-pct" }, item.pct + "%"),
             h("div", { className: "hero-concept-meta" }, timeAgo(item.lastAssessed))
@@ -703,7 +705,21 @@
     }, "\u2190 Back to concepts"));
 
     // Skeleton
-    detailContainer.appendChild(h("div", { className: "skeleton", style: "height:300px;margin:1rem 0" }, ""));
+    var detailSkel = h("div", { style: "margin:1rem 0" }, [
+      h("div", { style: "display:flex;gap:1rem;margin-bottom:1.5rem" }, [
+        h("div", { className: "skeleton", style: "width:200px;height:28px" }),
+        h("div", { className: "skeleton", style: "width:60px;height:28px" }),
+        h("div", { className: "skeleton", style: "width:80px;height:28px" })
+      ]),
+      h("div", { className: "stats-row" }, [
+        h("div", { className: "stat-card skeleton", style: "height:70px" }),
+        h("div", { className: "stat-card skeleton", style: "height:70px" }),
+        h("div", { className: "stat-card skeleton", style: "height:70px" }),
+        h("div", { className: "stat-card skeleton", style: "height:70px" })
+      ]),
+      h("div", { className: "skeleton", style: "height:300px;border-radius:8px;margin-top:1rem" })
+    ]);
+    detailContainer.appendChild(detailSkel);
 
     fetch("/api/analytics/concept/" + encodeURIComponent(conceptId), { headers: getHeaders() })
       .then(function(r) { return r.json(); })
@@ -714,8 +730,9 @@
         // Concept header
         var c = data.concept;
         var m = data.mastery;
+        var detailName = c.id.replace(/-/g, " ").replace(/\//g, " \u203A ");
         detailContainer.appendChild(h("div", { className: "concept-detail-header" }, [
-          h("h2", { style: "font-family:var(--font-display)" }, c.id),
+          h("h2", { style: "font-family:var(--font-display)" }, detailName),
           c.domain ? h("span", { className: "domain-badge" }, c.domain) : null,
           m ? h("span", { className: "mastery-range-large" }, m.low + "\u2013" + m.high + "%") : null,
         ]));
@@ -828,8 +845,103 @@
   function renderIntegrity() {
     var trendEl = document.getElementById("integrity-trend");
     var dismissEl = document.getElementById("integrity-dismissals");
-    if (trendEl) { trendEl.textContent = ""; trendEl.appendChild(h("div", { className: "empty-state" }, "Integrity analytics coming in v0.4b")); }
-    if (dismissEl) { dismissEl.textContent = ""; dismissEl.appendChild(h("div", { className: "empty-state" }, "Dismiss pattern analytics coming in v0.4b")); }
+    if (!trendEl || !dismissEl) return;
+    trendEl.textContent = "";
+    dismissEl.textContent = "";
+
+    // Fetch all assessed concepts, then their history for integrity data
+    var assessed = Object.keys(allMasteryMap).filter(function(id) { return allMasteryMap[id].lastAssessed; });
+    if (assessed.length === 0) {
+      trendEl.appendChild(h("div", { className: "empty-state" }, "No assessments yet."));
+      dismissEl.appendChild(h("div", { className: "empty-state" }, "No data yet."));
+      return;
+    }
+
+    var topConcepts = assessed
+      .sort(function(a, b) {
+        return new Date(allMasteryMap[b].lastAssessed).getTime() - new Date(allMasteryMap[a].lastAssessed).getTime();
+      })
+      .slice(0, 10);
+
+    Promise.all(topConcepts.map(function(conceptId) {
+      return fetch("/api/mastery/" + encodeURIComponent(conceptId) + "/history", { headers: getHeaders() })
+        .then(function(r) { return r.json(); })
+        .then(function(events) { return events.map(function(e) { e._conceptId = conceptId; return e; }); });
+    })).then(function(results) {
+      var allEvents = [].concat.apply([], results);
+      allEvents.sort(function(a, b) { return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); });
+
+      // Integrity trend chart
+      var withIntegrity = allEvents.filter(function(e) { return e.integrityScore !== null && e.integrityScore !== undefined; });
+      if (withIntegrity.length > 0 && typeof echarts !== "undefined") {
+        var chart = echarts.init(trendEl, 'warm');
+        chart.setOption({
+          tooltip: {
+            trigger: "axis",
+            formatter: function(params) {
+              var ev = withIntegrity[params[0].dataIndex];
+              var name = (ev._conceptId || "").replace(/-/g, " ");
+              return name + "<br/>Integrity: " + (ev.integrityScore * 100).toFixed(0) + "%"
+                + "<br/>Score: " + ev.rubricScore + "/3"
+                + "<br/>" + timeAgo(ev.createdAt);
+            }
+          },
+          xAxis: { type: "category", data: withIntegrity.map(function(e, i) { return i + 1; }), name: "Assessment #" },
+          yAxis: { type: "value", min: 0, max: 1, name: "Integrity Score", axisLabel: { formatter: function(v) { return (v * 100) + "%"; } } },
+          series: [{
+            type: "line",
+            data: withIntegrity.map(function(e) { return e.integrityScore; }),
+            smooth: true,
+            markLine: { data: [{ yAxis: 0.5, label: { formatter: "Threshold" }, lineStyle: { color: "#B84233", type: "dashed" } }], silent: true },
+            areaStyle: { opacity: 0.1 },
+            lineStyle: { width: 2 },
+          }],
+          grid: { top: 30, right: 20, bottom: 40, left: 60 },
+        });
+        window.addEventListener("resize", function() { chart.resize(); });
+
+        // Stats above the chart
+        var avg = withIntegrity.reduce(function(s, e) { return s + e.integrityScore; }, 0) / withIntegrity.length;
+        var flagged = withIntegrity.filter(function(e) { return e.integrityScore < 0.5; });
+        var statsRow = h("div", { className: "stats-row", style: "margin-bottom:1rem" });
+        statsRow.appendChild(statCard((avg * 100).toFixed(0) + "%", "Avg Integrity", avg >= 0.8 ? "green" : avg >= 0.5 ? "amber" : ""));
+        statsRow.appendChild(statCard(String(flagged.length), "Flagged", flagged.length > 0 ? "" : "green"));
+        statsRow.appendChild(statCard(String(withIntegrity.length), "Total Assessed", ""));
+        statsRow.appendChild(statCard((withIntegrity.length > 0 ? ((1 - flagged.length / withIntegrity.length) * 100).toFixed(0) : "0") + "%", "Clean Rate", "green"));
+        trendEl.parentNode.insertBefore(statsRow, trendEl);
+      } else {
+        trendEl.appendChild(h("div", { className: "empty-state" }, "No integrity data recorded yet."));
+      }
+
+      // Dismiss patterns — show flagged events table
+      var flaggedEvents = allEvents.filter(function(e) { return e.integrityScore !== null && e.integrityScore < 0.5; });
+      if (flaggedEvents.length > 0) {
+        flaggedEvents.sort(function(a, b) { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); });
+        var table = h("table", { className: "activity-table" });
+        table.appendChild(h("thead", {}, h("tr", {}, [
+          h("th", {}, "Concept"),
+          h("th", {}, "Type"),
+          h("th", {}, "Score"),
+          h("th", {}, "Integrity"),
+          h("th", { style: "text-align:right" }, "When")
+        ])));
+        var tbody = h("tbody", {});
+        flaggedEvents.slice(0, 15).forEach(function(ev) {
+          var name = (ev._conceptId || ev.conceptId || "").replace(/-/g, " ");
+          tbody.appendChild(h("tr", {}, [
+            h("td", { className: "concept-name" }, name),
+            h("td", { className: "event-type" }, ev.eventType === "probe" ? "Probe" : ev.eventType),
+            h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
+            h("td", {}, h("span", { style: "color:" + (ev.integrityScore < 0.3 ? "var(--red)" : "var(--amber)") + ";font-weight:600" }, (ev.integrityScore * 100).toFixed(0) + "%")),
+            h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
+          ]));
+        });
+        table.appendChild(tbody);
+        dismissEl.appendChild(table);
+      } else {
+        dismissEl.appendChild(h("div", { className: "empty-state" }, "No flagged responses. All clear."));
+      }
+    });
   }
 
   // --- Settings Tab ---
