@@ -1433,10 +1433,23 @@
     ]);
     area.appendChild(integritySection);
 
+    var dismissalsSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Dismissals"),
+        h("div", { className: "section-subtitle" }, "Track probe dismissal patterns across your organization")
+      ]),
+      h("div", { className: "stats-row", id: "dismissal-stats" }),
+      h("div", { id: "dismissals-filters-area" }),
+      h("div", { id: "dismissals-table-area" })
+    ]);
+    area.appendChild(dismissalsSection);
+
     loadPendingInvites(org.id);
     loadMembers(org.id);
     loadRankings(org.id);
     loadIntegrityStats();
+    loadDismissalStats();
+    loadOrgDismissals(1, null);
   }
 
   function inviteMember(orgId) {
@@ -2026,6 +2039,124 @@
           }
           area.appendChild(paginationRow);
         }
+      });
+  }
+
+  // --- Dismissal Helpers ---
+
+  function reasonBadge(reason) {
+    var labels = { topic_change: "topic change", busy: "busy", claimed_expertise: "claimed expertise" };
+    return h("span", { className: "reason-badge reason-" + reason }, labels[reason] || reason);
+  }
+
+  function resolutionLabel(resolvedAs, resolvedAt) {
+    if (!resolvedAs) return null;
+    var labels = { answered: "Answered", expired: "Expired", auto_scored_0: "Auto-scored 0" };
+    var text = labels[resolvedAs] || resolvedAs;
+    if (resolvedAt) text += " " + timeAgo(resolvedAt);
+    return text;
+  }
+
+  function loadDismissalStats() {
+    var container = document.getElementById("dismissal-stats");
+    if (!container) return;
+    container.textContent = "";
+
+    fetch("/api/org/dismissals/stats", { headers: getHeaders() })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        container.textContent = "";
+        container.appendChild(statCard(String(data.totalDismissals), "Total Dismissals", ""));
+        container.appendChild(statCard(String(data.byReason.topic_change || 0), "Topic Change", ""));
+        container.appendChild(statCard(String(data.byReason.busy || 0), "Busy", "amber"));
+        container.appendChild(statCard(String(data.byReason.claimed_expertise || 0), "Claimed Expertise", "accent"));
+      });
+  }
+
+  function loadOrgDismissals(page, reasonFilter) {
+    var area = document.getElementById("dismissals-table-area");
+    var filtersArea = document.getElementById("dismissals-filters-area");
+    if (!area) return;
+
+    // Render filters (once)
+    if (filtersArea && filtersArea.children.length === 0) {
+      var filterRow = h("div", { className: "dismissal-filters" });
+      var reasonSelect = h("select", { onchange: function() { loadOrgDismissals(1, reasonSelect.value || null); } }, [
+        h("option", { value: "" }, "All reasons"),
+        h("option", { value: "topic_change" }, "Topic change"),
+        h("option", { value: "busy" }, "Busy"),
+        h("option", { value: "claimed_expertise" }, "Claimed expertise")
+      ]);
+      filterRow.appendChild(reasonSelect);
+      filtersArea.appendChild(filterRow);
+    }
+
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:120px" }, ""));
+
+    var url = "/api/org/dismissals?page=" + page + "&limit=15";
+    if (reasonFilter) url += "&reason=" + encodeURIComponent(reasonFilter);
+
+    fetch(url, { headers: getHeaders() })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        area.textContent = "";
+        if (!data || !data.items || data.items.length === 0) {
+          area.appendChild(h("div", { className: "empty-state" }, "No dismissals recorded yet."));
+          return;
+        }
+
+        var table = h("table", { className: "activity-table" });
+        table.appendChild(h("thead", {}, h("tr", {}, [
+          h("th", {}, "Member"),
+          h("th", {}, "Concept"),
+          h("th", {}, "Reason"),
+          h("th", {}, "Note"),
+          h("th", {}, "Status"),
+          h("th", { style: "text-align:right" }, "When")
+        ])));
+
+        var tbody = h("tbody", {});
+        data.items.forEach(function(item) {
+          var statusText = "\u2014";
+          if (item.requeued && !item.resolvedAs) statusText = "Re-queued";
+          else if (item.resolvedAs) statusText = resolutionLabel(item.resolvedAs, item.resolvedAt);
+
+          var conceptDisplay = item.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+
+          var row = h("tr", { className: "dismissal-row" }, [
+            h("td", {}, item.userName || "Unknown"),
+            h("td", {}, h("span", { className: "concept-name", style: "font-style:normal" }, conceptDisplay)),
+            h("td", {}, reasonBadge(item.reason)),
+            h("td", { style: "max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", title: item.note || "" }, item.note || "\u2014"),
+            h("td", { style: "font-style:normal" }, statusText),
+            h("td", { className: "time-ago", style: "text-align:right;font-style:normal" }, timeAgo(item.createdAt))
+          ]);
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        area.appendChild(table);
+
+        // Pagination
+        if (data.total > 15) {
+          var totalPages = Math.ceil(data.total / 15);
+          var paginationRow = h("div", { style: "display:flex;gap:0.5rem;justify-content:center;margin-top:0.75rem" });
+          for (var p = 1; p <= Math.min(totalPages, 5); p++) {
+            (function(pageNum) {
+              var btn = h("button", {
+                className: "filter-btn" + (pageNum === page ? " active" : ""),
+                onclick: function() { loadOrgDismissals(pageNum, reasonFilter); }
+              }, String(pageNum));
+              paginationRow.appendChild(btn);
+            })(p);
+          }
+          area.appendChild(paginationRow);
+        }
+      })
+      .catch(function() {
+        area.textContent = "";
+        area.appendChild(h("div", { className: "empty-state" }, "Failed to load dismissals."));
       });
   }
 

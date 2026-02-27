@@ -601,6 +601,29 @@ body {
 }
 .event-panel-add-annotation textarea:focus { border-color: var(--accent); }
 
+/* Dismissal reason badges */
+.reason-badge {
+  display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 600; text-transform: lowercase;
+}
+.reason-topic_change { background: var(--bg-card); color: var(--text-tertiary); border: 1px solid var(--border); }
+.reason-busy { background: var(--amber-bg); color: var(--amber); }
+.reason-claimed_expertise { background: var(--red-bg); color: var(--red); }
+
+/* Dismissal table rows */
+.dismissal-row td { font-style: italic; color: var(--text-secondary); }
+.dismissal-row:hover td { font-style: italic; }
+
+/* Dismissal filters */
+.dismissal-filters {
+  display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap;
+}
+.dismissal-filters select {
+  padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.8rem; background: var(--bg-card); color: var(--text); outline: none;
+}
+.dismissal-filters select:focus { border-color: var(--accent); }
+
 /* Responsive */
 @media (max-width: 640px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
