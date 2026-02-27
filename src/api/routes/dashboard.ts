@@ -359,6 +359,81 @@ dashboardRoutes.get('/press', async (c) => {
   return c.html(publicShell('Press \u2014 Entendi', 'press', content));
 });
 
+dashboardRoutes.get('/contact', (c) => {
+  const content = `
+    <style>
+      .contact-page { margin-top: 4rem; max-width: 480px; }
+      .contact-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+      .contact-form label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; margin-top: 1rem; }
+      .contact-form label:first-child { margin-top: 0; }
+      .contact-form input, .contact-form textarea {
+        width: 100%; padding: 0.6rem 0.85rem; border: 1px solid var(--border); border-radius: 6px;
+        font-size: 0.85rem; font-family: var(--font-body); outline: none; background: white;
+      }
+      .contact-form input:focus, .contact-form textarea:focus { border-color: var(--accent); }
+      .contact-form textarea { min-height: 120px; resize: vertical; }
+      .contact-form button {
+        margin-top: 1.25rem; padding: 0.6rem 1.5rem; border: none; border-radius: 6px;
+        background: var(--accent); color: white; font-size: 0.85rem; font-weight: 600;
+        font-family: var(--font-body); cursor: pointer;
+      }
+      .contact-form button:hover { background: var(--accent-hover); }
+      .contact-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .contact-msg { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.2em; }
+      .contact-msg.success { color: var(--green); }
+      .contact-msg.error { color: var(--red); }
+    </style>
+    <div class="contact-page">
+      <h2>Contact</h2>
+      <form class="contact-form" id="contact-form">
+        <label for="c-name">Name</label>
+        <input type="text" id="c-name" required/>
+        <label for="c-email">Email</label>
+        <input type="email" id="c-email" required/>
+        <label for="c-message">Message</label>
+        <textarea id="c-message" required></textarea>
+        <button type="submit">Send</button>
+      </form>
+      <div class="contact-msg" id="contact-msg"></div>
+    </div>
+    <script>
+      document.getElementById('contact-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button');
+        const msg = document.getElementById('contact-msg');
+        btn.disabled = true;
+        msg.textContent = '';
+        msg.className = 'contact-msg';
+        try {
+          const res = await fetch('/api/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: document.getElementById('c-name').value,
+              email: document.getElementById('c-email').value,
+              message: document.getElementById('c-message').value,
+            }),
+          });
+          if (res.ok) {
+            msg.textContent = 'Message sent. Thanks!';
+            msg.className = 'contact-msg success';
+            e.target.reset();
+          } else {
+            const body = await res.json();
+            msg.textContent = body.error || 'Something went wrong.';
+            msg.className = 'contact-msg error';
+          }
+        } catch {
+          msg.textContent = 'Network error. Try again.';
+          msg.className = 'contact-msg error';
+        }
+        btn.disabled = false;
+      });
+    </script>`;
+
+  return c.html(publicShell('Contact \u2014 Entendi', 'contact', content));
+});
+
 dashboardRoutes.get('/link', (c) => {
   const code = c.req.query('code') || '';
   const safeCode = code.replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
