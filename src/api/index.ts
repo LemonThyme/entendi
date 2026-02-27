@@ -13,6 +13,7 @@ import { preferencesRoutes } from './routes/preferences.js';
 import { eventRoutes } from './routes/events.js';
 import { eventDetailRoutes } from './routes/events-detail.js';
 import { analyticsRoutes } from './routes/analytics.js';
+import { publicRoutes } from './routes/public.js';
 import { createDb, type Database } from './db/connection.js';
 import { createAuth, type Auth } from './lib/auth.js';
 import { rateLimit } from './middleware/rate-limit.js';
@@ -125,6 +126,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/events', eventRoutes);
   app.route('/api/events', eventDetailRoutes);
   app.route('/api/analytics', analyticsRoutes);
+  app.route('/api', publicRoutes);
 
   // Cache static assets with immutable headers
   app.get('/assets/*', async (c, next) => {
