@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, sql, inArray, desc } from 'drizzle-orm';
-import { member, user, organization, userConceptStates, assessmentEvents, concepts } from '../db/schema.js';
+import { member, user, organization, userConceptStates, assessmentEvents, concepts, eventAnnotations } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
 import { z } from 'zod';
@@ -528,4 +528,119 @@ orgRoutes.get('/integrity/flagged', async (c) => {
     page,
     limit,
   });
+});
+
+// GET /events/:eventId — full event detail for any org member's event
+orgRoutes.get('/events/:eventId', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const eventId = parseInt(c.req.param('eventId'));
+  if (isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
+
+  // Fetch event + concept info
+  const [event] = await db.select({
+    id: assessmentEvents.id,
+    userId: assessmentEvents.userId,
+    conceptId: assessmentEvents.conceptId,
+    conceptName: concepts.id,
+    domain: concepts.domain,
+    eventType: assessmentEvents.eventType,
+    rubricScore: assessmentEvents.rubricScore,
+    evaluatorConfidence: assessmentEvents.evaluatorConfidence,
+    muBefore: assessmentEvents.muBefore,
+    muAfter: assessmentEvents.muAfter,
+    probeDepth: assessmentEvents.probeDepth,
+    responseText: assessmentEvents.responseText,
+    evaluationCriteria: assessmentEvents.evaluationCriteria,
+    responseFeatures: assessmentEvents.responseFeatures,
+    integrityScore: assessmentEvents.integrityScore,
+    tutored: assessmentEvents.tutored,
+    createdAt: assessmentEvents.createdAt,
+  }).from(assessmentEvents)
+    .innerJoin(concepts, eq(assessmentEvents.conceptId, concepts.id))
+    .where(eq(assessmentEvents.id, eventId));
+
+  if (!event) return c.json({ error: 'Event not found' }, 404);
+
+  // Verify event's user is in the caller's org
+  const [membership] = await db.select().from(member)
+    .where(and(eq(member.userId, event.userId), eq(member.organizationId, orgId)));
+  if (!membership) return c.json({ error: 'Event user not in organization' }, 403);
+
+  // Fetch annotations with author names
+  const annotations = await db.select({
+    id: eventAnnotations.id,
+    authorId: eventAnnotations.authorId,
+    authorName: user.name,
+    text: eventAnnotations.text,
+    createdAt: eventAnnotations.createdAt,
+  }).from(eventAnnotations)
+    .innerJoin(user, eq(eventAnnotations.authorId, user.id))
+    .where(eq(eventAnnotations.eventId, eventId))
+    .orderBy(desc(eventAnnotations.createdAt));
+
+  return c.json({ ...event, annotations });
+});
+
+// POST /events/:eventId/annotations — create annotation (org admin/owner only)
+orgRoutes.post('/events/:eventId/annotations', async (c) => {
+  const db = c.get('db');
+  const currentUser = c.get('user')!;
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const eventId = parseInt(c.req.param('eventId'));
+  if (isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
+
+  // Verify caller is admin/owner
+  const [callerMembership] = await db.select({ role: member.role }).from(member)
+    .where(and(eq(member.userId, currentUser.id), eq(member.organizationId, orgId)));
+  if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
+    return c.json({ error: 'Only org owners and admins can annotate events' }, 403);
+  }
+
+  // Verify event exists and belongs to an org member
+  const [event] = await db.select({ userId: assessmentEvents.userId })
+    .from(assessmentEvents).where(eq(assessmentEvents.id, eventId));
+  if (!event) return c.json({ error: 'Event not found' }, 404);
+
+  const [eventUserMembership] = await db.select().from(member)
+    .where(and(eq(member.userId, event.userId), eq(member.organizationId, orgId)));
+  if (!eventUserMembership) return c.json({ error: 'Event user not in organization' }, 403);
+
+  // Validate body
+  const body = await c.req.json();
+  const parsed = z.object({ text: z.string().min(1).max(2000) }).safeParse(body);
+  if (!parsed.success) return c.json({ error: 'Validation error', details: parsed.error.issues }, 400);
+
+  const [annotation] = await db.insert(eventAnnotations).values({
+    eventId,
+    authorId: currentUser.id,
+    text: parsed.data.text,
+  }).returning();
+
+  return c.json({ ...annotation, authorName: currentUser.name }, 201);
+});
+
+// DELETE /annotations/:annotationId — delete own annotation
+orgRoutes.delete('/annotations/:annotationId', async (c) => {
+  const db = c.get('db');
+  const currentUser = c.get('user')!;
+
+  const annotationId = parseInt(c.req.param('annotationId'));
+  if (isNaN(annotationId)) return c.json({ error: 'Invalid annotation ID' }, 400);
+
+  const [annotation] = await db.select().from(eventAnnotations)
+    .where(eq(eventAnnotations.id, annotationId));
+  if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
+
+  if (annotation.authorId !== currentUser.id) {
+    return c.json({ error: 'Can only delete your own annotations' }, 403);
+  }
+
+  await db.delete(eventAnnotations).where(eq(eventAnnotations.id, annotationId));
+
+  return c.body(null, 204);
 });
