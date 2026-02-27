@@ -50,6 +50,13 @@
     return Math.floor(diff / 86400) + "d ago";
   }
 
+  function statCard(value, label, colorCls) {
+    return h("div", { className: "stat-card" }, [
+      h("div", { className: "stat-value" + (colorCls ? " " + colorCls : "") }, String(value)),
+      h("div", { className: "stat-label" }, label)
+    ]);
+  }
+
   // --- Tabs ---
 
   function initTabs() {
@@ -186,14 +193,6 @@
     container.textContent = "";
     if (!statusData.overview) return;
     var o = statusData.overview;
-
-    function statCard(value, label, colorCls) {
-      var card = h("div", { className: "stat-card" }, [
-        h("div", { className: "stat-value" + (colorCls ? " " + colorCls : "") }, String(value)),
-        h("div", { className: "stat-label" }, label)
-      ]);
-      return card;
-    }
 
     container.appendChild(statCard(o.totalConcepts, "Total Concepts", ""));
     container.appendChild(statCard(o.mastered, "Mastered", "green"));
@@ -379,7 +378,152 @@
   // --- Analytics Tab ---
 
   function renderAnalytics() {
-    // Populated in Task 9
+    renderAnalyticsStats();
+    renderActivityHeatmap();
+    renderVelocityChart();
+    renderDomainRadar();
+  }
+
+  function renderAnalyticsStats() {
+    var container = document.getElementById("analytics-stats");
+    container.textContent = "";
+    for (var i = 0; i < 4; i++) {
+      container.appendChild(h("div", { className: "stat-card skeleton" }, [
+        h("div", { className: "stat-value" }, "\u2014"),
+        h("div", { className: "stat-label" }, "Loading...")
+      ]));
+    }
+
+    fetch("/api/analytics/velocity", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        container.textContent = "";
+        var v7 = data.velocity["7d"] || {};
+        var v30 = data.velocity["30d"] || {};
+        container.appendChild(statCard(v7.assessments || 0, "Assessments (7d)", ""));
+        container.appendChild(statCard(v7.conceptsAssessed || 0, "Concepts (7d)", ""));
+        container.appendChild(statCard((v30.avgDelta >= 0 ? "+" : "") + ((v30.avgDelta || 0) * 100).toFixed(0) + "%", "Avg Delta (30d)", v30.avgDelta >= 0 ? "green" : "amber"));
+        container.appendChild(statCard(v30.assessments || 0, "Assessments (30d)", ""));
+      });
+  }
+
+  function renderActivityHeatmap() {
+    var container = document.getElementById("analytics-heatmap");
+    if (!container || typeof echarts === "undefined") return;
+
+    fetch("/api/analytics/activity-heatmap?days=365", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var chart = echarts.init(container);
+        var heatmapData = (data.heatmap || []).map(function(d) {
+          return [d.date, d.assessmentCount];
+        });
+
+        var year = new Date().getFullYear();
+        chart.setOption({
+          tooltip: {
+            formatter: function(params) {
+              return params.value[0] + ": " + params.value[1] + " assessments";
+            }
+          },
+          visualMap: {
+            min: 0,
+            max: Math.max.apply(null, heatmapData.map(function(d) { return d[1]; }).concat([1])),
+            show: false,
+            inRange: { color: ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"] },
+          },
+          calendar: {
+            top: 20, left: 50, right: 20,
+            cellSize: [13, 13],
+            range: [year + "-01-01", year + "-12-31"],
+            itemStyle: { borderWidth: 2, borderColor: "#fff" },
+            yearLabel: { show: false },
+            dayLabel: { nameMap: "en", fontSize: 10 },
+            monthLabel: { fontSize: 10 },
+          },
+          series: [{
+            type: "heatmap",
+            coordinateSystem: "calendar",
+            data: heatmapData,
+          }],
+        });
+
+        window.addEventListener("resize", function() { chart.resize(); });
+      });
+  }
+
+  function renderVelocityChart() {
+    var container = document.getElementById("analytics-velocity");
+    if (!container || typeof echarts === "undefined") return;
+
+    fetch("/api/analytics/timeline", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var chart = echarts.init(container);
+        var timeline = data.timeline || [];
+
+        chart.setOption({
+          tooltip: { trigger: "axis" },
+          xAxis: { type: "category", data: timeline.map(function(t) { return t.date; }) },
+          yAxis: { type: "value", name: "Cumulative Mastery Gain", axisLabel: { formatter: "{value}" } },
+          series: [{
+            type: "line",
+            data: timeline.map(function(t) { return t.cumulativeDelta; }),
+            smooth: true,
+            areaStyle: { opacity: 0.15 },
+            lineStyle: { width: 2 },
+            itemStyle: { color: "#2563eb" },
+          }],
+          grid: { top: 30, right: 20, bottom: 30, left: 60 },
+        });
+
+        window.addEventListener("resize", function() { chart.resize(); });
+      });
+  }
+
+  function renderDomainRadar() {
+    var container = document.getElementById("analytics-radar");
+    if (!container || typeof echarts === "undefined") return;
+
+    fetch("/api/mastery", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(states) {
+        return fetch("/api/concepts", { headers: getHeaders() })
+          .then(function(r) { return r.json(); })
+          .then(function(allConceptsData) {
+            var domainMastery = {};
+            states.forEach(function(s) {
+              var concept = allConceptsData.find(function(c) { return c.id === s.conceptId; });
+              var domain = concept ? concept.domain : "unknown";
+              if (!domainMastery[domain]) domainMastery[domain] = [];
+              domainMastery[domain].push(pMastery(s.mu));
+            });
+
+            var domains = Object.keys(domainMastery);
+            if (domains.length < 3) return;
+
+            var indicators = domains.map(function(d) { return { name: d, max: 100 }; });
+            var values = domains.map(function(d) {
+              var masteries = domainMastery[d];
+              var avg = masteries.reduce(function(a, b) { return a + b; }, 0) / masteries.length;
+              return Math.round(avg * 100);
+            });
+
+            var chart = echarts.init(container);
+            chart.setOption({
+              radar: { indicator: indicators, shape: "circle" },
+              series: [{
+                type: "radar",
+                data: [{ value: values, name: "Mastery" }],
+                areaStyle: { opacity: 0.15 },
+                lineStyle: { width: 2, color: "#2563eb" },
+                itemStyle: { color: "#2563eb" },
+              }],
+            });
+
+            window.addEventListener("resize", function() { chart.resize(); });
+          });
+      });
   }
 
   // --- Concepts Tab ---
@@ -1119,13 +1263,6 @@
         var container = document.getElementById("integrity-stats");
         if (!container) return;
         container.textContent = "";
-
-        function statCard(value, label) {
-          return h("div", { className: "stat-card" }, [
-            h("div", { className: "stat-value" }, String(value)),
-            h("div", { className: "stat-label" }, label)
-          ]);
-        }
 
         container.appendChild(statCard(
           data.avgScore !== null ? (data.avgScore * 100).toFixed(0) + "%" : "\u2014",
