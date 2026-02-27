@@ -5,8 +5,9 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "node -e \"const f='src/dashboard/manifest.ts';require('fs').existsSync(f)||require('fs').writeFileSync(f,'export const manifest: Record<string, string> = {};\\n')\" && tsc && node --import tsx esbuild.config.ts",
+    "build": "node -e \"const f='src/dashboard/manifest.ts';require('fs').existsSync(f)||require('fs').writeFileSync(f,'export const manifest: Record<string, string> = {};\\n')\" && npx tsc && node --import tsx esbuild.config.ts",
     "build:hooks": "node --import tsx esbuild.config.ts",
+    "plugin:reinstall": "npm run build && rm -rf ~/.claude/plugins/cache/entendi && claude plugin install entendi",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
