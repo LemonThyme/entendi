@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, sql, inArray, desc } from 'drizzle-orm';
-import { member, user, organization, userConceptStates, assessmentEvents, concepts, eventAnnotations } from '../db/schema.js';
+import { member, user, organization, userConceptStates, assessmentEvents, concepts, eventAnnotations, dismissalEvents } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
 import { z } from 'zod';
@@ -646,4 +646,139 @@ orgRoutes.delete('/annotations/:annotationId', async (c) => {
   await db.delete(eventAnnotations).where(eq(eventAnnotations.id, annotationId));
 
   return c.body(null, 204);
+});
+
+// GET /dismissals — paginated list of dismissal events for org members
+orgRoutes.get('/dismissals', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const page = Math.max(1, Number(c.req.query('page') || '1'));
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') || '20')));
+  const offset = (page - 1) * limit;
+  const reasonFilter = c.req.query('reason');
+  const userIdFilter = c.req.query('userId');
+  const conceptIdFilter = c.req.query('conceptId');
+
+  // Get org member IDs
+  const members = await db.select({ userId: member.userId }).from(member)
+    .where(eq(member.organizationId, orgId));
+  const memberIds = members.map(m => m.userId);
+  if (memberIds.length === 0) return c.json({ items: [], total: 0, page, limit });
+
+  // Build WHERE clauses
+  const conditions = [sqlInIds('de.user_id', memberIds)];
+  if (reasonFilter) conditions.push(sql`de.reason = ${reasonFilter}`);
+  if (userIdFilter) conditions.push(sql`de.user_id = ${userIdFilter}`);
+  if (conceptIdFilter) conditions.push(sql`de.concept_id = ${conceptIdFilter}`);
+  const whereClause = sql.join(conditions, sql` AND `);
+
+  // Count total
+  const countResult = await db.execute(sql`
+    SELECT COUNT(*)::int as total FROM dismissal_events de WHERE ${whereClause}
+  `);
+  const total = (countResult.rows[0] as any)?.total ?? 0;
+
+  // Fetch page
+  const items = await db.execute(sql`
+    SELECT de.id, de.user_id, u.name as user_name, de.concept_id, c.domain,
+           de.reason, de.note, de.requeued, de.resolved_at, de.resolved_as, de.created_at
+    FROM dismissal_events de
+    JOIN "user" u ON de.user_id = u.id
+    JOIN concepts c ON de.concept_id = c.id
+    WHERE ${whereClause}
+    ORDER BY de.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+  return c.json({
+    items: items.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      userName: r.user_name,
+      conceptId: r.concept_id,
+      domain: r.domain,
+      reason: r.reason,
+      note: r.note,
+      requeued: r.requeued,
+      resolvedAt: r.resolved_at,
+      resolvedAs: r.resolved_as,
+      createdAt: r.created_at,
+    })),
+    total,
+    page,
+    limit,
+  });
+});
+
+// GET /dismissals/stats — aggregate dismissal statistics for org
+orgRoutes.get('/dismissals/stats', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const members = await db.select({ userId: member.userId }).from(member)
+    .where(eq(member.organizationId, orgId));
+  const memberIds = members.map(m => m.userId);
+  if (memberIds.length === 0) {
+    return c.json({
+      totalDismissals: 0,
+      byReason: { topic_change: 0, busy: 0, claimed_expertise: 0 },
+      topDismissers: [],
+      repeatBusyDeferrals: [],
+    });
+  }
+
+  const memberFilter = sqlInIds('de.user_id', memberIds);
+
+  // Counts by reason
+  const byReasonResult = await db.execute(sql`
+    SELECT de.reason, COUNT(*)::int as count
+    FROM dismissal_events de
+    WHERE ${memberFilter}
+    GROUP BY de.reason
+  `);
+  const byReason: Record<string, number> = { topic_change: 0, busy: 0, claimed_expertise: 0 };
+  let totalDismissals = 0;
+  for (const row of byReasonResult.rows as any[]) {
+    byReason[row.reason] = row.count;
+    totalDismissals += row.count;
+  }
+
+  // Top 5 dismissers
+  const topResult = await db.execute(sql`
+    SELECT de.user_id, u.name as user_name, COUNT(*)::int as count
+    FROM dismissal_events de
+    JOIN "user" u ON de.user_id = u.id
+    WHERE ${memberFilter}
+    GROUP BY de.user_id, u.name
+    ORDER BY count DESC
+    LIMIT 5
+  `);
+  const topDismissers = (topResult.rows as any[]).map(r => ({
+    userId: r.user_id,
+    userName: r.user_name,
+    count: r.count,
+  }));
+
+  // Repeat busy deferrals (same user+concept, 2+ times)
+  const repeatResult = await db.execute(sql`
+    SELECT de.user_id, u.name as user_name, de.concept_id, COUNT(*)::int as count
+    FROM dismissal_events de
+    JOIN "user" u ON de.user_id = u.id
+    WHERE ${memberFilter} AND de.reason = 'busy'
+    GROUP BY de.user_id, u.name, de.concept_id
+    HAVING COUNT(*) >= 2
+    ORDER BY count DESC
+    LIMIT 20
+  `);
+  const repeatBusyDeferrals = (repeatResult.rows as any[]).map(r => ({
+    userId: r.user_id,
+    userName: r.user_name,
+    conceptId: r.concept_id,
+    count: r.count,
+  }));
+
+  return c.json({ totalDismissals, byReason, topDismissers, repeatBusyDeferrals });
 });
