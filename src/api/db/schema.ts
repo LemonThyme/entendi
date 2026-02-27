@@ -280,6 +280,11 @@ export const dismissalEvents = pgTable('dismissal_events', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
   probeTokenId: text('probe_token_id').references(() => probeTokens.id),
+  reason: text('reason').notNull().default('topic_change'),
+  note: text('note'),
+  requeued: boolean('requeued').notNull().default(false),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  resolvedAs: text('resolved_as'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_dismissal_events_user_concept').on(table.userId, table.conceptId),
