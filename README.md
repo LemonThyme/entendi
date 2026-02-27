@@ -90,28 +90,28 @@ Sign in with the same account you used during `entendi login`.
 ```bash
 git clone https://github.com/LemonThyme/entendi.git
 cd entendi
-npm install
-cp .env.example .env   # fill in DATABASE_URL and BETTER_AUTH_SECRET
-npm run build           # build hooks, MCP server, plugin, dashboard assets
-npm run api:dev         # local API server (port 3456)
-npm test                # run tests
+./setup.sh
 ```
 
-### Plugin Development
+The setup script validates Node 22+, checks your `.env`, installs dependencies, builds everything, and installs the plugin. Run it once after cloning.
 
-After making changes to hooks or MCP server:
+### After code changes
 
 ```bash
-npm run build                     # rebuild everything
-claude plugin install entendi     # reinstall (reads from dist/plugin/)
+npm run plugin:reinstall    # build + reinstall plugin
 ```
 
-If the plugin cache is stale, clear it first:
+The build stamps each plugin version with the git hash, so Claude Code always picks up your latest changes.
 
-```bash
-rm -rf ~/.claude/plugins/cache/entendi
-claude plugin install entendi
-```
+### Commands
+
+| Command | What it does |
+|---------|-------------|
+| `npm run api:dev` | Local API server (port 3456) |
+| `npm run build` | Build hooks, MCP, plugin, dashboard |
+| `npm run plugin:reinstall` | Build + clear cache + reinstall plugin |
+| `npm test` | Run tests |
+| `npx wrangler deploy` | Deploy to Cloudflare Workers |
 
 ### Devcontainer
 
