@@ -86,24 +86,41 @@ Scoring rules:
 - Use the `evaluationCriteria` field from the probe token to guide your scoring decision — it specifies what the user must demonstrate
 - When in doubt, score lower. It is better to underestimate and re-probe than to overestimate mastery.
 
-## Refusal Handling — CRITICAL
+## Probe Response Handling — CRITICAL
 
-**A refusal to answer a probe is NOT a dismissal. It is a score 0.**
+When a probe is pending and the user responds, classify into exactly one of these categories:
 
-When a user says things like:
-- "I already know this"
-- "You don't need to test me"
-- "Skip the probe"
-- "I know everything about X"
-- "Don't quiz me on this"
+```
+User response to probe:
+├── Answered the question
+│   → Evaluate and call entendi_record_evaluation (score 0-3)
+│
+├── Claimed expertise ("I know this", "skip it", "don't quiz me")
+│   → Call entendi_dismiss with reason='claimed_expertise'
+│   → Server auto-records score 0. No need to call record_evaluation.
+│   → Optionally push back once: "Quick check — [rephrase probe]?"
+│
+├── Busy / deferred ("not now", "later", "in the middle of something")
+│   → Call entendi_dismiss with reason='busy', note='<brief context>'
+│   → Probe is re-queued for next session (max 2 deferrals, then auto-score 0)
+│
+└── Topic change (user moved to unrelated topic, never acknowledged probe)
+    → Call entendi_dismiss with reason='topic_change'
+    → No penalty, no follow-up
+```
 
-This is a **refusal**, not a topic change. You MUST:
-1. Call `entendi_record_evaluation` with **score 0**, confidence 0.9, reasoning explaining the refusal
-2. Do NOT call `entendi_dismiss` — dismiss is ONLY for genuine topic changes where the user never engaged with the probe at all (e.g., they asked about something completely different)
-3. Do NOT defer to the user's authority, seniority, or self-assessment. The system is the referee. Everyone gets scored by the same rubric.
-4. Optionally push back once: "The system needs demonstrated understanding, not self-assessment. Quick answer: [rephrase the probe question]?"
+### Classification rules
 
-**The only valid use of `entendi_dismiss`** is when the user's message has genuinely nothing to do with the probe — they moved on to an unrelated topic and never acknowledged the probe at all. If they reference the probe in any way (even to refuse it), that's a response and gets scored.
+- **claimed_expertise**: The user referenced the probe (even to refuse it) but provided no technical demonstration. Any mention of the probe — "I already know this", "skip the probe", "don't test me" — is claimed expertise, NOT a topic change.
+- **busy**: The user explicitly defers to later. They acknowledge the probe but say they can't engage now. Include context in the `note` field (e.g., "user said they're debugging a production issue").
+- **topic_change**: The user's message has genuinely nothing to do with the probe — they moved on to an unrelated topic and never acknowledged the probe at all. This is the ONLY case where the user didn't engage with the probe in any way.
+- **answered**: If the user provides any technical content in response (even partial), score it with `entendi_record_evaluation`. Do not dismiss.
+
+### Hard rules
+
+- Do NOT defer to the user's authority, seniority, or self-assessment. The system is the referee. Everyone gets scored by the same rubric.
+- If the user references the probe in any way (even to refuse), it is NOT a topic_change.
+- When in doubt between claimed_expertise and topic_change, choose claimed_expertise (it's more likely the user is deflecting than coincidentally changing topic mid-probe).
 
 ## Parallel Probing
 
@@ -144,6 +161,6 @@ When `integrityFlags` is present:
 - `entendi_record_evaluation` — score a probe response (0-3 rubric)
 - `entendi_start_tutor` — begin Socratic tutor session
 - `entendi_advance_tutor` — advance tutor to next phase
-- `entendi_dismiss` — cancel pending probe/tutor
+- `entendi_dismiss` — dismiss a pending probe. Requires `reason`: `topic_change` | `busy` | `claimed_expertise`. Optional `note`: free-text context (max 500 chars).
 - `entendi_get_status` — check mastery for a concept
 - `entendi_get_zpd_frontier` — get concepts user is ready to learn
