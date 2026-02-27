@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, sql, inArray, desc } from 'drizzle-orm';
 import { member, user, organization, userConceptStates, assessmentEvents, concepts } from '../db/schema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
@@ -104,6 +104,87 @@ orgRoutes.get('/members/:userId', async (c) => {
       lastAssessed: s.lastAssessed,
     })),
   });
+});
+
+// GET /members/:userId/history — recent assessment events for an org member
+orgRoutes.get('/members/:userId/history', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  const targetUserId = c.req.param('userId');
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  // Verify target user is in the org
+  const [membership] = await db.select().from(member)
+    .where(eq(member.userId, targetUserId));
+  if (!membership || membership.organizationId !== orgId) {
+    return c.json({ error: 'User not in organization' }, 403);
+  }
+
+  const events = await db.select({
+    id: assessmentEvents.id,
+    conceptId: assessmentEvents.conceptId,
+    eventType: assessmentEvents.eventType,
+    rubricScore: assessmentEvents.rubricScore,
+    muBefore: assessmentEvents.muBefore,
+    muAfter: assessmentEvents.muAfter,
+    evaluatorConfidence: assessmentEvents.evaluatorConfidence,
+    integrityScore: assessmentEvents.integrityScore,
+    createdAt: assessmentEvents.createdAt,
+  }).from(assessmentEvents)
+    .where(eq(assessmentEvents.userId, targetUserId))
+    .orderBy(desc(assessmentEvents.createdAt))
+    .limit(20);
+
+  return c.json(events);
+});
+
+// GET /members/:userId/integrity — integrity stats for an org member
+orgRoutes.get('/members/:userId/integrity', async (c) => {
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+  const targetUserId = c.req.param('userId');
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  // Verify target user is in the org
+  const [membership] = await db.select().from(member)
+    .where(eq(member.userId, targetUserId));
+  if (!membership || membership.organizationId !== orgId) {
+    return c.json({ error: 'User not in organization' }, 403);
+  }
+
+  const dampeningThreshold = 0.5;
+
+  // Get all events with integrity scores for this user
+  const integrityResult = await db.execute(sql`
+    SELECT
+      AVG(integrity_score) as avg_score,
+      COUNT(*)::int as total,
+      COUNT(CASE WHEN integrity_score < ${dampeningThreshold} THEN 1 END)::int as flagged_count
+    FROM assessment_events
+    WHERE user_id = ${targetUserId} AND integrity_score IS NOT NULL
+  `);
+
+  const row = integrityResult.rows[0] as any;
+  const avgIntegrityScore = row?.avg_score ? Number(row.avg_score) : null;
+  const flaggedCount = row?.flagged_count ?? 0;
+  const totalAssessed = row?.total ?? 0;
+
+  // Get flagged events
+  const flaggedEvents = await db.select({
+    conceptId: assessmentEvents.conceptId,
+    eventType: assessmentEvents.eventType,
+    rubricScore: assessmentEvents.rubricScore,
+    integrityScore: assessmentEvents.integrityScore,
+    createdAt: assessmentEvents.createdAt,
+  }).from(assessmentEvents)
+    .where(and(
+      eq(assessmentEvents.userId, targetUserId),
+      sql`integrity_score IS NOT NULL AND integrity_score < ${dampeningThreshold}`
+    ))
+    .orderBy(desc(assessmentEvents.createdAt))
+    .limit(20);
+
+  return c.json({ avgIntegrityScore, flaggedCount, totalAssessed, flaggedEvents });
 });
 
 // GET /rankings — mastery leaderboard for org members

@@ -291,7 +291,7 @@ body {
 .member-row {
   display: grid; grid-template-columns: 1fr 100px 80px 60px;
   align-items: center; padding: 0.6rem 1rem; background: var(--bg-card);
-  font-size: 0.85rem; gap: 0.5rem;
+  font-size: 0.85rem; gap: 0.5rem; cursor: pointer;
 }
 .member-row:hover { background: var(--bg); }
 .member-name { font-weight: 500; }

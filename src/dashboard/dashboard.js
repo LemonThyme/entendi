@@ -19,6 +19,16 @@
     return el;
   }
 
+  function cacheGet(key) {
+    try { var d = sessionStorage.getItem("entendi_" + key); return d ? JSON.parse(d) : null; } catch(e) { return null; }
+  }
+  function cacheSet(key, data) {
+    try { sessionStorage.setItem("entendi_" + key, JSON.stringify(data)); } catch(e) {}
+  }
+  function cacheClear() {
+    try { Object.keys(sessionStorage).forEach(function(k) { if (k.indexOf("entendi_") === 0) sessionStorage.removeItem(k); }); } catch(e) {}
+  }
+
   function getHeaders() {
     var headers = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = "Bearer " + token;
@@ -144,7 +154,7 @@
     bar.textContent = "";
     var userBar = h("div", { className: "user-bar" }, [
       h("span", null, currentUser ? (currentUser.name || currentUser.email) : "User"),
-      h("button", { onclick: function() { fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", credentials: "include" }).finally(function() { localStorage.removeItem("entendi_token"); token = null; location.reload(); }); } }, "Sign out")
+      h("button", { onclick: function() { fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", credentials: "include" }).finally(function() { localStorage.removeItem("entendi_token"); token = null; cacheClear(); location.reload(); }); } }, "Sign out")
     ]);
     bar.appendChild(userBar);
 
@@ -153,18 +163,35 @@
     connectSSE();
   }
 
+  function applyData(concepts, mastery) {
+    allConcepts = concepts;
+    allMasteryMap = {};
+    for (var i = 0; i < mastery.length; i++) {
+      allMasteryMap[mastery[i].conceptId] = mastery[i];
+    }
+    renderOverviewHero(concepts, mastery);
+    loadActivity();
+  }
+
   function loadData() {
+    // Stale-while-revalidate: render cached data immediately if available
+    var cached = cacheGet("data");
+    if (cached) {
+      applyData(cached.concepts, cached.mastery);
+    }
+
+    // Fetch fresh data in background
     Promise.all([
       fetch("/api/concepts", { headers: getHeaders() }).then(function(r) { return r.json(); }),
       fetch("/api/mastery", { headers: getHeaders() }).then(function(r) { return r.json(); }),
     ]).then(function(results) {
-      allConcepts = results[0];
-      allMasteryMap = {};
-      for (var i = 0; i < results[1].length; i++) {
-        allMasteryMap[results[1][i].conceptId] = results[1][i];
+      var fresh = { concepts: results[0], mastery: results[1] };
+      var prev = cacheGet("data");
+      cacheSet("data", fresh);
+      // Re-render if data changed or no cache existed
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(fresh)) {
+        applyData(fresh.concepts, fresh.mastery);
       }
-      renderOverviewHero(results[0], results[1]);
-      loadActivity();
     });
   }
 
@@ -318,6 +345,30 @@
       );
       return;
     }
+
+    // Show skeleton while loading
+    var actArea = document.getElementById("activity-area");
+    actArea.textContent = "";
+    var actSkelTable = h("table", { className: "activity-table" });
+    actSkelTable.appendChild(h("thead", {}, h("tr", {}, [
+      h("th", {}, "Concept"),
+      h("th", {}, "Type"),
+      h("th", {}, "Score"),
+      h("th", {}, "Mastery"),
+      h("th", { style: "text-align:right" }, "When")
+    ])));
+    var actSkelBody = h("tbody", {});
+    for (var si = 0; si < 5; si++) {
+      actSkelBody.appendChild(h("tr", {}, [
+        h("td", {}, h("div", { className: "skeleton", style: "width:120px;height:14px" })),
+        h("td", {}, h("div", { className: "skeleton", style: "width:50px;height:14px" })),
+        h("td", {}, h("div", { className: "skeleton", style: "width:30px;height:14px" })),
+        h("td", {}, h("div", { className: "skeleton", style: "width:100px;height:14px" })),
+        h("td", { style: "text-align:right" }, h("div", { className: "skeleton", style: "width:50px;height:14px;margin-left:auto" }))
+      ]));
+    }
+    actSkelTable.appendChild(actSkelBody);
+    actArea.appendChild(actSkelTable);
 
     Promise.all(sorted.map(function(conceptId) {
       return fetch("/api/mastery/" + encodeURIComponent(conceptId) + "/history", { headers: getHeaders() })
@@ -547,10 +598,25 @@
     listContainer.textContent = "";
     detailContainer.style.display = "none";
 
-    // Skeleton
-    for (var i = 0; i < 8; i++) {
-      listContainer.appendChild(h("div", { className: "concept-row skeleton" }, "Loading..."));
+    // Skeleton table
+    var skelTable = h("table", { className: "activity-table" });
+    skelTable.appendChild(h("thead", {}, h("tr", {}, [
+      h("th", {}, "Concept"),
+      h("th", {}, "Mastery"),
+      h("th", { style: "text-align:center" }, "Confidence"),
+      h("th", { style: "text-align:right" }, "Assessments")
+    ])));
+    var skelBody = h("tbody", {});
+    for (var i = 0; i < 6; i++) {
+      skelBody.appendChild(h("tr", {}, [
+        h("td", {}, h("div", { className: "skeleton", style: "width:120px;height:14px" })),
+        h("td", {}, h("div", { className: "skeleton", style: "width:80px;height:14px" })),
+        h("td", { style: "text-align:center" }, h("div", { className: "skeleton", style: "width:40px;height:14px;margin:0 auto" })),
+        h("td", { style: "text-align:right" }, h("div", { className: "skeleton", style: "width:30px;height:14px;margin-left:auto" }))
+      ]));
     }
+    skelTable.appendChild(skelBody);
+    listContainer.appendChild(skelTable);
 
     Promise.all([
       fetch("/api/mastery", { headers: getHeaders() }).then(function(r) { return r.json(); }),
@@ -1422,7 +1488,7 @@
             actions.appendChild(menu);
           }
 
-          var row = h("div", { className: "member-row" }, [
+          var row = h("div", { className: "member-row", onclick: (function(memberInfo) { return function() { openMemberDetail(memberInfo); }; })(m) }, [
             h("div", null, [
               h("div", { className: "member-name" }, m.name || m.email),
               emailSpan
@@ -1436,6 +1502,228 @@
         list.appendChild(memberList);
       })
       .catch(function() {});
+  }
+
+  function openMemberDetail(memberInfo) {
+    var area = document.getElementById("org-area");
+    area.textContent = "";
+
+    // Back button
+    area.appendChild(h("button", {
+      className: "btn-back",
+      onclick: function() { renderOrganization(); }
+    }, "\u2190 Back to organization"));
+
+    // Header: name, email, role badge, avg mastery
+    var avgPct = memberInfo.mastery && memberInfo.mastery.avgMastery > 0
+      ? Math.round(memberInfo.mastery.avgMastery * 100) + "%" : "\u2014";
+    area.appendChild(h("div", { className: "concept-detail-header" }, [
+      h("h2", { style: "font-family:var(--font-display)" }, memberInfo.name || memberInfo.email),
+      h("span", { className: "member-role" }, memberInfo.role),
+      h("span", { className: "mastery-range-large" }, avgPct)
+    ]));
+
+    // Three sections with loading skeletons
+    var conceptsSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, h("div", { className: "section-title" }, "Concepts")),
+      h("div", { id: "member-concepts-area" })
+    ]);
+    var historySection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, h("div", { className: "section-title" }, "Recent Activity")),
+      h("div", { id: "member-history-area" })
+    ]);
+    var integritySection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, h("div", { className: "section-title" }, "Integrity")),
+      h("div", { id: "member-integrity-area" })
+    ]);
+    area.appendChild(conceptsSection);
+    area.appendChild(historySection);
+    area.appendChild(integritySection);
+
+    // Fetch all three in parallel
+    loadMemberConcepts(memberInfo.userId);
+    loadMemberHistory(memberInfo.userId);
+    loadMemberIntegrity(memberInfo.userId);
+  }
+
+  function loadMemberConcepts(userId) {
+    var area = document.getElementById("member-concepts-area");
+    if (!area) return;
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:120px" }, ""));
+
+    fetch("/api/org/members/" + encodeURIComponent(userId), { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        area.textContent = "";
+        var concepts = data.concepts || [];
+        if (concepts.length === 0) {
+          area.appendChild(h("div", { className: "empty-state" }, "No concepts assessed yet."));
+          return;
+        }
+
+        concepts.sort(function(a, b) {
+          return (b.lastAssessed || "").localeCompare(a.lastAssessed || "");
+        });
+
+        var table = h("table", { className: "activity-table" });
+        table.appendChild(h("thead", {}, h("tr", {}, [
+          h("th", {}, "Concept"),
+          h("th", {}, "Mastery"),
+          h("th", { style: "text-align:center" }, "Confidence"),
+          h("th", { style: "text-align:center" }, "Assessments"),
+          h("th", { style: "text-align:right" }, "Last Assessed")
+        ])));
+
+        var tbody = h("tbody", {});
+        concepts.forEach(function(c) {
+          var p = Math.round(c.mastery * 100);
+          var displayName = c.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+          var conf = confidenceLabel(c.sigma, c.assessmentCount);
+
+          var masteryCell = h("td", {});
+          var barContainer = h("div", { className: "mastery-bar-container", style: "display:inline-block;width:80px;vertical-align:middle" });
+          var bar = h("div", { className: "mastery-bar" });
+          bar.style.width = p + "%";
+          bar.style.background = masteryColor(p);
+          barContainer.appendChild(bar);
+          masteryCell.appendChild(barContainer);
+          var low = Math.round(pMastery(c.mu - 2 * c.sigma) * 100);
+          var high = Math.min(100, Math.round(pMastery(c.mu + 2 * c.sigma) * 100));
+          masteryCell.appendChild(h("span", { className: "mastery-range" }, low + "\u2013" + high + "%"));
+
+          tbody.appendChild(h("tr", {}, [
+            h("td", {}, h("span", { className: "concept-name" }, displayName)),
+            masteryCell,
+            h("td", { style: "text-align:center" }, h("span", { className: "confidence-badge " + conf.cls }, conf.text)),
+            h("td", { style: "text-align:center" }, String(c.assessmentCount)),
+            h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(c.lastAssessed))
+          ]));
+        });
+        table.appendChild(tbody);
+        area.appendChild(table);
+      })
+      .catch(function() {
+        area.textContent = "";
+        area.appendChild(h("div", { className: "empty-state" }, "Failed to load concepts."));
+      });
+  }
+
+  function loadMemberHistory(userId) {
+    var area = document.getElementById("member-history-area");
+    if (!area) return;
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:120px" }, ""));
+
+    fetch("/api/org/members/" + encodeURIComponent(userId) + "/history", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(events) {
+        area.textContent = "";
+        if (!events || !Array.isArray(events) || events.length === 0) {
+          area.appendChild(h("div", { className: "empty-state" }, "No assessment history yet."));
+          return;
+        }
+
+        var table = h("table", { className: "activity-table" });
+        table.appendChild(h("thead", {}, h("tr", {}, [
+          h("th", {}, "Concept"),
+          h("th", {}, "Type"),
+          h("th", {}, "Score"),
+          h("th", {}, "Mastery"),
+          h("th", { style: "text-align:right" }, "When")
+        ])));
+
+        var tbody = h("tbody", {});
+        events.forEach(function(ev) {
+          var displayName = ev.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+          var pBefore = Math.round(pMastery(ev.muBefore) * 100);
+          var pAfter = Math.round(pMastery(ev.muAfter) * 100);
+          var delta = pAfter - pBefore;
+          var deltaStr = (delta >= 0 ? "+" : "") + delta + "%";
+          var trendCls = delta > 0 ? "trend-up" : delta < 0 ? "trend-down" : "trend-flat";
+
+          var typeLabel = ev.eventType === "probe" ? "Probe"
+            : ev.eventType === "tutor_phase1" ? "Tutor P1"
+            : ev.eventType === "tutor_phase4" ? "Tutor P4"
+            : ev.eventType;
+
+          var deltaSpan = h("span", { className: trendCls, style: "font-weight:600;margin-left:6px" }, deltaStr);
+          var masteryCell = h("td", {});
+          var masteryText = h("span", { style: "color:var(--text-secondary)" }, pBefore + "% \u2192 " + pAfter + "%");
+          masteryText.appendChild(deltaSpan);
+          masteryCell.appendChild(masteryText);
+
+          tbody.appendChild(h("tr", {}, [
+            h("td", {}, h("span", { className: "concept-name" }, displayName)),
+            h("td", { className: "event-type" }, typeLabel),
+            h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
+            masteryCell,
+            h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
+          ]));
+        });
+        table.appendChild(tbody);
+        area.appendChild(table);
+      })
+      .catch(function() {
+        area.textContent = "";
+        area.appendChild(h("div", { className: "empty-state" }, "Failed to load history."));
+      });
+  }
+
+  function loadMemberIntegrity(userId) {
+    var area = document.getElementById("member-integrity-area");
+    if (!area) return;
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:120px" }, ""));
+
+    fetch("/api/org/members/" + encodeURIComponent(userId) + "/integrity", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        area.textContent = "";
+
+        // Stats row
+        var statsRow = h("div", { className: "stats-row", style: "grid-template-columns:repeat(3,1fr)" });
+        statsRow.appendChild(statCard(
+          data.avgIntegrityScore !== null ? (data.avgIntegrityScore * 100).toFixed(0) + "%" : "\u2014",
+          "Avg Integrity", data.avgIntegrityScore !== null && data.avgIntegrityScore >= 0.7 ? "green" : "amber"
+        ));
+        statsRow.appendChild(statCard(String(data.flaggedCount), "Flagged", data.flaggedCount > 0 ? "accent" : "green"));
+        statsRow.appendChild(statCard(String(data.totalAssessed), "Total Assessed", ""));
+        area.appendChild(statsRow);
+
+        // Flagged responses table
+        var flagged = data.flaggedEvents || [];
+        if (flagged.length > 0) {
+          area.appendChild(h("div", { className: "section-title", style: "margin-top:1rem;margin-bottom:0.5rem" }, "Flagged Responses"));
+          var table = h("table", { className: "activity-table" });
+          table.appendChild(h("thead", {}, h("tr", {}, [
+            h("th", {}, "Concept"),
+            h("th", {}, "Type"),
+            h("th", {}, "Score"),
+            h("th", {}, "Integrity"),
+            h("th", { style: "text-align:right" }, "When")
+          ])));
+
+          var tbody = h("tbody", {});
+          flagged.forEach(function(ev) {
+            var displayName = ev.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+            var intPct = ev.integrityScore !== null ? (ev.integrityScore * 100).toFixed(0) + "%" : "\u2014";
+            tbody.appendChild(h("tr", {}, [
+              h("td", {}, h("span", { className: "concept-name" }, displayName)),
+              h("td", { className: "event-type" }, ev.eventType),
+              h("td", {}, h("span", { className: "score-badge score-" + ev.rubricScore }, ev.rubricScore + "/3")),
+              h("td", {}, h("span", { style: "color:var(--red);font-weight:600" }, intPct)),
+              h("td", { className: "time-ago", style: "text-align:right" }, timeAgo(ev.createdAt))
+            ]));
+          });
+          table.appendChild(tbody);
+          area.appendChild(table);
+        }
+      })
+      .catch(function() {
+        area.textContent = "";
+        area.appendChild(h("div", { className: "empty-state" }, "Failed to load integrity data."));
+      });
   }
 
   function loadRankings(orgId) {
@@ -1604,6 +1892,28 @@
     if (allMasteryMap[data.conceptId]) {
       allMasteryMap[data.conceptId].mu = -Math.log(100 / data.masteryAfter - 1);
       allMasteryMap[data.conceptId].lastAssessed = data.createdAt;
+    }
+
+    // Update sessionStorage cache
+    var cached = cacheGet("data");
+    if (cached) {
+      for (var i = 0; i < cached.mastery.length; i++) {
+        if (cached.mastery[i].conceptId === data.conceptId) {
+          cached.mastery[i].mu = allMasteryMap[data.conceptId].mu;
+          cached.mastery[i].lastAssessed = data.createdAt;
+          break;
+        }
+      }
+      cacheSet("data", cached);
+    }
+
+    // Re-render the currently visible tab
+    var activeTab = document.querySelector(".tab-btn.active");
+    var tabName = activeTab ? activeTab.getAttribute("data-tab") : "overview";
+    if (tabName === "concepts") {
+      renderConceptsTab();
+    } else if (tabName === "overview") {
+      loadActivity();
     }
 
     // Only toast for real-time updates, not buffered events on connect
