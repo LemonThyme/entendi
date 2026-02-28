@@ -10,7 +10,7 @@ publicRoutes.post('/waitlist', async (c) => {
   const body = await c.req.json();
   const email = body?.email?.trim()?.toLowerCase();
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return c.json({ error: 'Valid email required' }, 400);
   }
 
@@ -54,8 +54,14 @@ publicRoutes.post('/contact', async (c) => {
   if (!name || !email || !message) {
     return c.json({ error: 'Name, email, and message are required' }, 400);
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (name.length > 200) {
+    return c.json({ error: 'Name too long (max 200 characters)' }, 400);
+  }
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return c.json({ error: 'Valid email required' }, 400);
+  }
+  if (message.length > 5000) {
+    return c.json({ error: 'Message too long (max 5000 characters)' }, 400);
   }
 
   const db = c.get('db');

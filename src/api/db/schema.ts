@@ -22,7 +22,9 @@ export const session = pgTable('session', {
   userAgent: text('userAgent'),
   userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
   activeOrganizationId: text('activeOrganizationId'),
-});
+}, (table) => [
+  index('idx_session_user').on(table.userId),
+]);
 
 export const account = pgTable('account', {
   id: text('id').primaryKey(),
@@ -38,7 +40,9 @@ export const account = pgTable('account', {
   password: text('password'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_account_user').on(table.userId),
+]);
 
 export const verification = pgTable('verification', {
   id: text('id').primaryKey(),
@@ -66,7 +70,10 @@ export const member = pgTable('member', {
   organizationId: text('organizationId').notNull().references(() => organization.id, { onDelete: 'cascade' }),
   role: text('role').notNull(),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_member_user').on(table.userId),
+  index('idx_member_org').on(table.organizationId),
+]);
 
 export const invitation = pgTable('invitation', {
   id: text('id').primaryKey(),
@@ -77,7 +84,9 @@ export const invitation = pgTable('invitation', {
   status: text('status').notNull(),
   expiresAt: timestamp('expiresAt').notNull(),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_invitation_org').on(table.organizationId),
+]);
 
 // --- Auth: API Key plugin ---
 
@@ -103,7 +112,9 @@ export const apikey = pgTable('apikey', {
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
   permissions: text('permissions'),
   metadata: text('metadata'),
-});
+}, (table) => [
+  index('idx_apikey_user').on(table.userId),
+]);
 
 // --- Concepts ---
 
@@ -124,7 +135,9 @@ export const concepts = pgTable('concepts', {
   popFailureRate: real('pop_failure_rate').notNull().default(0.0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_concepts_domain').on(table.domain),
+]);
 
 export const conceptEdges = pgTable('concept_edges', {
   sourceId: text('source_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
@@ -134,6 +147,7 @@ export const conceptEdges = pgTable('concept_edges', {
 }, (table) => [
   primaryKey({ columns: [table.sourceId, table.targetId, table.edgeType] }),
   index('idx_concept_edges_target').on(table.targetId),
+  index('idx_concept_edges_source_type').on(table.sourceId, table.edgeType),
 ]);
 
 // --- Concept Embeddings (pgvector) ---
@@ -197,6 +211,7 @@ export const assessmentEvents = pgTable('assessment_events', {
 }, (table) => [
   index('idx_assessment_events_user_concept').on(table.userId, table.conceptId),
   index('idx_assessment_events_created').on(table.createdAt),
+  index('idx_assessment_events_user_created').on(table.userId, table.createdAt),
 ]);
 
 // --- Tutor Sessions ---
@@ -214,7 +229,9 @@ export const tutorSessions = pgTable('tutor_sessions', {
   lastMisconception: text('last_misconception'),
   researchPerformed: boolean('research_performed').notNull().default(false),
   sources: text('sources').array().notNull().default([]),
-});
+}, (table) => [
+  index('idx_tutor_sessions_user_concept').on(table.userId, table.conceptId),
+]);
 
 export const tutorExchanges = pgTable('tutor_exchanges', {
   id: serial('id').primaryKey(),
@@ -223,7 +240,9 @@ export const tutorExchanges = pgTable('tutor_exchanges', {
   question: text('question').notNull(),
   response: text('response'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_tutor_exchanges_session').on(table.sessionId),
+]);
 
 // --- Probe Sessions ---
 
@@ -288,6 +307,7 @@ export const dismissalEvents = pgTable('dismissal_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_dismissal_events_user_concept').on(table.userId, table.conceptId),
+  index('idx_dismissal_events_user_created').on(table.userId, table.createdAt),
 ]);
 
 // --- Anomaly Scores ---
@@ -317,14 +337,18 @@ export const courses = pgTable('courses', {
   status: text('status').notNull().default('draft'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_courses_owner').on(table.ownerId),
+]);
 
 export const courseModules = pgTable('course_modules', {
   id: text('id').primaryKey(),
   courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   orderIndex: integer('order_index').notNull().default(0),
-});
+}, (table) => [
+  index('idx_course_modules_course').on(table.courseId),
+]);
 
 export const courseConcepts = pgTable('course_concepts', {
   id: serial('id').primaryKey(),

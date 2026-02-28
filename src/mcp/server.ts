@@ -364,6 +364,26 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.getMcpServer().connect(transport);
   process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl}, authenticated: ${!!apiKey})\n`);
+
+  // Graceful shutdown on SIGINT/SIGTERM
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    mcpLog(`shutdown initiated by ${signal}`);
+    process.stderr.write(`[Entendi MCP] Received ${signal}, shutting down...\n`);
+    try {
+      await transport.close();
+      await server.close();
+      mcpLog(`shutdown complete (${signal})`);
+    } catch (err) {
+      mcpLog(`shutdown error`, { error: String(err) });
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));

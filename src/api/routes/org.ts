@@ -53,11 +53,23 @@ orgRoutes.get('/members', async (c) => {
     .innerJoin(user, eq(member.userId, user.id))
     .where(eq(member.organizationId, orgId));
 
-  // Get mastery overview per member
-  const result = await Promise.all(members.map(async (m) => {
-    const states = await db.select().from(userConceptStates)
-      .where(eq(userConceptStates.userId, m.userId));
+  // Batch-fetch all concept states for org members in a single query
+  const memberIds = members.map(m => m.userId);
+  const allStates = memberIds.length > 0
+    ? await db.select().from(userConceptStates)
+        .where(inArray(userConceptStates.userId, memberIds))
+    : [];
 
+  // Group states by userId
+  const statesByUser = new Map<string, typeof allStates>();
+  for (const s of allStates) {
+    let arr = statesByUser.get(s.userId);
+    if (!arr) { arr = []; statesByUser.set(s.userId, arr); }
+    arr.push(s);
+  }
+
+  const result = members.map((m) => {
+    const states = statesByUser.get(m.userId) ?? [];
     const mastered = states.filter(s => pMastery(s.mu) >= 0.7).length;
     const assessed = states.filter(s => s.assessmentCount > 0).length;
 
@@ -71,7 +83,7 @@ orgRoutes.get('/members', async (c) => {
           : 0,
       },
     };
-  }));
+  });
 
   return c.json(result);
 });
@@ -227,10 +239,23 @@ orgRoutes.get('/rankings', async (c) => {
     .innerJoin(user, eq(member.userId, user.id))
     .where(eq(member.organizationId, orgId));
 
-  const rankings = await Promise.all(members.map(async (m) => {
-    const states = await db.select().from(userConceptStates)
-      .where(eq(userConceptStates.userId, m.userId));
+  // Batch-fetch all concept states for org members in a single query
+  const memberIds = members.map(m => m.userId);
+  const allStates = memberIds.length > 0
+    ? await db.select().from(userConceptStates)
+        .where(inArray(userConceptStates.userId, memberIds))
+    : [];
 
+  // Group states by userId
+  const statesByUser = new Map<string, typeof allStates>();
+  for (const s of allStates) {
+    let arr = statesByUser.get(s.userId);
+    if (!arr) { arr = []; statesByUser.set(s.userId, arr); }
+    arr.push(s);
+  }
+
+  const rankings = members.map((m) => {
+    const states = statesByUser.get(m.userId) ?? [];
     const assessed = states.filter(s => s.assessmentCount > 0);
     const mastered = assessed.filter(s => pMastery(s.mu) >= 0.7).length;
     const avgMastery = assessed.length > 0
@@ -246,7 +271,7 @@ orgRoutes.get('/rankings', async (c) => {
       totalAssessed: assessed.length,
       avgMastery,
     };
-  }));
+  });
 
   // Sort by mastered count desc, then avgMastery desc
   rankings.sort((a, b) => b.mastered - a.mastered || b.avgMastery - a.avgMastery);

@@ -44,12 +44,17 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     );
   });
 
-  // CORS — allow configured origins or fall back to permissive
-  const allowedOrigins = process.env.ENTENDI_CORS_ORIGINS?.split(',').map(s => s.trim());
+  // CORS — allow configured origins or sensible defaults
+  const defaultOrigins = [
+    'https://entendi.dev',
+    'https://entendi-api.tomaskorenblit.workers.dev',
+    'http://localhost:3456',
+  ];
+  const allowedOrigins = process.env.ENTENDI_CORS_ORIGINS
+    ? process.env.ENTENDI_CORS_ORIGINS.split(',').map(s => s.trim())
+    : defaultOrigins;
   app.use('*', cors({
-    origin: allowedOrigins
-      ? (origin) => allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
-      : (origin) => origin || '*',
+    origin: (origin) => allowedOrigins.includes(origin) ? origin : '',
     allowHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
