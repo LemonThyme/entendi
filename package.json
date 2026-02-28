@@ -1,6 +1,6 @@
 {
   "name": "entendi",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Comprehension accountability layer for AI-assisted work",
   "main": "dist/index.js",
   "type": "module",
