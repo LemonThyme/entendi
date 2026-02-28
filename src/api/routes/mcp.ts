@@ -220,7 +220,7 @@ mcpRoutes.post('/observe', async (c) => {
     }
   }
 
-  const selection = selectProbeCandidate(candidates, similarities, !!trunkId);
+  const selection = selectProbeCandidate(candidates, similarities, !!trunkId, trunkId ?? undefined);
   if (!selection) {
     return c.json({ shouldProbe: false, intrusiveness: 'skip', userProfile: 'unknown' });
   }
