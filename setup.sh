@@ -64,6 +64,12 @@ if [ -z "${BETTER_AUTH_SECRET:-}" ] || [[ "$BETTER_AUTH_SECRET" == *"generate-wi
 fi
 ok "Required env vars set"
 
+# ── 3b. Install git hooks ──────────────────────────────────────────────
+info "Installing git hooks..."
+cp scripts/commit-msg.sh .git/hooks/commit-msg
+chmod +x .git/hooks/commit-msg
+ok "commit-msg hook installed (enforces Conventional Commits)"
+
 # ── 4. Clean stale artifacts ──────────────────────────────────────────
 info "Cleaning stale build artifacts..."
 rm -rf dist

@@ -77,6 +77,30 @@ Dashboard (browser) ────────────────────
 
 The plugin installer reads from `dist/plugin/`. Always run `npm run build` before reinstalling.
 
+## Commit Convention
+
+**All commits MUST use [Conventional Commits](https://www.conventionalcommits.org/).** Release-please uses these prefixes to determine version bumps automatically.
+
+| Prefix | When to use | Version bump |
+|--------|-------------|--------------|
+| `feat:` | New feature or capability | minor (0.1.0 → 0.2.0) |
+| `fix:` | Bug fix | patch (0.1.0 → 0.1.1) |
+| `perf:` | Performance improvement | patch |
+| `docs:` | Documentation only | none (hidden from changelog) |
+| `test:` | Adding/updating tests | none (hidden) |
+| `chore:` | Maintenance, deps, config | none (hidden) |
+| `ci:` | CI/CD changes | none (hidden) |
+| `refactor:` | Code change that neither fixes a bug nor adds a feature | none (hidden) |
+| `feat!:` | Breaking change | minor (capped while pre-1.0) |
+
+Rules:
+- Prefix is **mandatory** — never commit without one
+- Use lowercase prefix followed by colon and space: `feat: add user dashboard`
+- Scope is optional but encouraged: `fix(auth): handle expired tokens`
+- Keep the subject line under 72 characters
+- Use imperative mood: "add", "fix", "update" — not "added", "fixes", "updated"
+- If a commit does multiple things, use the most significant prefix (feat > fix > refactor > chore)
+
 ## Debug Log
 
 `~/.entendi/debug.log` — all hooks, MCP tools, and API calls logged here.
