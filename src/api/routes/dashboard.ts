@@ -38,16 +38,17 @@ function getShellHTML(): string {
         <div class="header-meta" id="header-meta"></div>
       </div>
       <div id="user-bar"></div>
-      <div class="tabs" id="tabs">
-        <button class="tab-btn active" data-tab="overview">Overview</button>
-        <button class="tab-btn" data-tab="analytics">Analytics</button>
-        <button class="tab-btn" data-tab="concepts">Concepts</button>
-        <button class="tab-btn" data-tab="integrity">Integrity</button>
-        <button class="tab-btn" data-tab="organization">Organization</button>
-        <button class="tab-btn" data-tab="settings">Settings</button>
+      <nav aria-label="Skip to content"><a href="#tab-overview" class="skip-link">Skip to content</a></nav>
+      <div class="tabs" id="tabs" role="tablist" aria-label="Dashboard sections">
+        <button class="tab-btn active" data-tab="overview" role="tab" aria-selected="true" aria-controls="tab-overview" id="tabBtn-overview" tabindex="0">Overview</button>
+        <button class="tab-btn" data-tab="analytics" role="tab" aria-selected="false" aria-controls="tab-analytics" id="tabBtn-analytics" tabindex="-1">Analytics</button>
+        <button class="tab-btn" data-tab="concepts" role="tab" aria-selected="false" aria-controls="tab-concepts" id="tabBtn-concepts" tabindex="-1">Concepts</button>
+        <button class="tab-btn" data-tab="integrity" role="tab" aria-selected="false" aria-controls="tab-integrity" id="tabBtn-integrity" tabindex="-1">Integrity</button>
+        <button class="tab-btn" data-tab="organization" role="tab" aria-selected="false" aria-controls="tab-organization" id="tabBtn-organization" tabindex="-1">Organization</button>
+        <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" id="tabBtn-settings" tabindex="-1">Settings</button>
       </div>
 
-      <div class="tab-content active" id="tab-overview">
+      <div class="tab-content active" id="tab-overview" role="tabpanel" aria-labelledby="tabBtn-overview" tabindex="0">
         <div style="display:flex;gap:16px;margin-bottom:32px;" id="hero-panels">
           <div style="flex:1;" id="panel-strongest"></div>
           <div style="flex:1;" id="panel-attention"></div>
@@ -60,25 +61,25 @@ function getShellHTML(): string {
         </div>
       </div>
 
-      <div class="tab-content" id="tab-analytics">
+      <div class="tab-content" id="tab-analytics" role="tabpanel" aria-labelledby="tabBtn-analytics" tabindex="0">
         <div class="section">
           <div class="section-header">
             <div class="section-title">Activity</div>
           </div>
-          <div class="chart-panel" id="analytics-heatmap" style="height:180px;"></div>
+          <div class="chart-panel" id="analytics-heatmap" style="height:180px;" role="img" aria-label="Activity heatmap showing assessment frequency by day over the past year"></div>
         </div>
         <div class="section">
           <div class="section-header">
             <div class="section-title">Learning Velocity</div>
             <div class="velocity-toggle" id="velocity-toggle"></div>
           </div>
-          <div class="chart-panel" id="analytics-velocity" style="height:300px;"></div>
+          <div class="chart-panel" id="analytics-velocity" style="height:300px;" role="img" aria-label="Learning velocity chart showing cumulative mastery gain over time"></div>
         </div>
         <div class="section">
           <div class="section-header">
             <div class="section-title">Domain Strengths</div>
           </div>
-          <div class="chart-panel" id="analytics-radar" style="height:350px;"></div>
+          <div class="chart-panel" id="analytics-radar" style="height:350px;" role="img" aria-label="Radar chart comparing mastery levels across knowledge domains"></div>
         </div>
         <div class="section">
           <div class="section-header">
@@ -89,7 +90,7 @@ function getShellHTML(): string {
         </div>
       </div>
 
-      <div class="tab-content" id="tab-concepts">
+      <div class="tab-content" id="tab-concepts" role="tabpanel" aria-labelledby="tabBtn-concepts" tabindex="0">
         <div class="section">
           <div class="section-header">
             <div class="section-title">Your Concepts</div>
@@ -101,12 +102,12 @@ function getShellHTML(): string {
         <div id="concept-detail" style="display:none;"></div>
       </div>
 
-      <div class="tab-content" id="tab-integrity">
+      <div class="tab-content" id="tab-integrity" role="tabpanel" aria-labelledby="tabBtn-integrity" tabindex="0">
         <div class="section">
           <div class="section-header">
             <div class="section-title">Integrity Trend</div>
           </div>
-          <div class="chart-panel" id="integrity-trend" style="height:300px;"></div>
+          <div class="chart-panel" id="integrity-trend" style="height:300px;" role="img" aria-label="Integrity trend chart showing response integrity scores over time"></div>
         </div>
         <div class="section">
           <div class="section-header">
@@ -116,11 +117,11 @@ function getShellHTML(): string {
         </div>
       </div>
 
-      <div class="tab-content" id="tab-organization">
+      <div class="tab-content" id="tab-organization" role="tabpanel" aria-labelledby="tabBtn-organization" tabindex="0">
         <div id="org-area"></div>
       </div>
 
-      <div class="tab-content" id="tab-settings">
+      <div class="tab-content" id="tab-settings" role="tabpanel" aria-labelledby="tabBtn-settings" tabindex="0">
         <div id="settings-area"></div>
       </div>
     </div>
