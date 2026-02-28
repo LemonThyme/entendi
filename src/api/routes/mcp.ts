@@ -374,6 +374,9 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   if (parsed instanceof Response) return parsed;
   const body = parsed;
 
+  // Resolve concept ID through normalization + alias lookup
+  body.conceptId = await resolveConceptId(db, body.conceptId);
+
   // For probe events, require a valid probe token and responseText
   let probeTokenId: string | undefined;
   let evaluationCriteria: string | undefined;
@@ -541,6 +544,9 @@ mcpRoutes.post('/tutor/start', async (c) => {
   const parsed = parseBody(tutorStartSchema, raw, c);
   if (parsed instanceof Response) return parsed;
   const body = parsed;
+
+  // Resolve concept ID through normalization + alias lookup
+  body.conceptId = await resolveConceptId(db, body.conceptId);
 
   const sessionId = crypto.randomUUID();
 
