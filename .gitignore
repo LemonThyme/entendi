@@ -5,6 +5,7 @@ dist/
 .claude/settings.local.json
 .entendi/
 .claude/worktrees/
+.test-tmp/
 /.mcp.json
 public/assets/
 src/dashboard/manifest.ts
