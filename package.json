@@ -18,7 +18,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/api/db/seed.ts",
     "db:migrate:run": "tsx src/api/db/migrate.ts",
-    "api:dev": "tsx src/api/index.ts"
+    "api:dev": "tsx src/api/index.ts",
+    "deploy:staging": "npx wrangler deploy --env staging"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

@@ -31,12 +31,21 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   const app = new Hono<Env>();
   const db = createDb(databaseUrl);
   const auth = createAuth(db, authOptions);
+  const startedAt = Date.now();
 
-  // Global error handler
+  // Global error handler with structured logging
   app.onError((err, c) => {
     const status = 'status' in err && typeof err.status === 'number' ? err.status : 500;
     if (status >= 500) {
-      console.error(`[Entendi] ${c.req.method} ${c.req.path} — ${err.message}`);
+      console.error(JSON.stringify({
+        level: 'error',
+        method: c.req.method,
+        path: c.req.path,
+        status,
+        message: err.message,
+        stack: err.stack,
+        timestamp: new Date().toISOString(),
+      }));
     }
     return c.json(
       { error: status >= 500 ? 'Internal server error' : err.message },
@@ -101,14 +110,30 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     return auth.handler(c.req.raw);
   });
 
-  // Health check with DB connectivity
+  // Health check with DB connectivity and diagnostics
   app.get('/health', async (c) => {
+    const uptimeMs = Date.now() - startedAt;
+    const environment = process.env.ENVIRONMENT || 'production';
     try {
       const { sql } = await import('drizzle-orm');
+      const dbStart = Date.now();
       await db.execute(sql`SELECT 1`);
-      return c.json({ status: 'ok', db: 'connected' });
+      const dbLatencyMs = Date.now() - dbStart;
+      return c.json({
+        status: 'ok',
+        db: 'connected',
+        dbLatencyMs,
+        uptimeMs,
+        environment,
+      });
     } catch (err) {
-      return c.json({ status: 'degraded', db: 'unreachable', error: String(err) }, 503);
+      return c.json({
+        status: 'degraded',
+        db: 'unreachable',
+        error: String(err),
+        uptimeMs,
+        environment,
+      }, 503);
     }
   });
 

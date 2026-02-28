@@ -3,9 +3,19 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deploy target"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
 
 concurrency:
-  group: deploy-production
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
   cancel-in-progress: false
 
 jobs:
@@ -37,6 +47,14 @@ jobs:
       - run: npm run build
       - name: Verify build output
         run: test -f dist/mcp/server.js && test -f dist/plugin/mcp/server.js
-      - uses: cloudflare/wrangler-action@v3
+      - name: Deploy to production
+        if: github.event.inputs.environment != 'staging'
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Deploy to staging
+        if: github.event.inputs.environment == 'staging'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --env staging
