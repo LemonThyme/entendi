@@ -69,22 +69,51 @@
 
   // --- Tabs ---
 
+  function switchTab(btn) {
+    var btns = document.querySelectorAll(".tab-btn");
+    var tab = btn.getAttribute("data-tab");
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].classList.remove("active");
+      btns[j].setAttribute("aria-selected", "false");
+      btns[j].setAttribute("tabindex", "-1");
+    }
+    btn.classList.add("active");
+    btn.setAttribute("aria-selected", "true");
+    btn.setAttribute("tabindex", "0");
+    btn.focus();
+    document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
+    var target = document.getElementById("tab-" + tab);
+    if (target) target.classList.add("active");
+
+    if (tab === "analytics") renderAnalytics();
+    if (tab === "concepts") renderConceptsTab();
+    if (tab === "integrity") renderIntegrity();
+    if (tab === "settings") renderSettings();
+    if (tab === "organization") renderOrganization();
+  }
+
   function initTabs() {
     var btns = document.querySelectorAll(".tab-btn");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].addEventListener("click", function() {
-        var tab = this.getAttribute("data-tab");
-        for (var j = 0; j < btns.length; j++) btns[j].classList.remove("active");
-        this.classList.add("active");
-        document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
-        var target = document.getElementById("tab-" + tab);
-        if (target) target.classList.add("active");
-
-        if (tab === "analytics") renderAnalytics();
-        if (tab === "concepts") renderConceptsTab();
-        if (tab === "integrity") renderIntegrity();
-        if (tab === "settings") renderSettings();
-        if (tab === "organization") renderOrganization();
+      btns[i].addEventListener("click", function() { switchTab(this); });
+      btns[i].addEventListener("keydown", function(e) {
+        var allBtns = Array.from(document.querySelectorAll(".tab-btn"));
+        var idx = allBtns.indexOf(this);
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          var next = allBtns[(idx + 1) % allBtns.length];
+          switchTab(next);
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          var prev = allBtns[(idx - 1 + allBtns.length) % allBtns.length];
+          switchTab(prev);
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          switchTab(allBtns[0]);
+        } else if (e.key === "End") {
+          e.preventDefault();
+          switchTab(allBtns[allBtns.length - 1]);
+        }
       });
     }
   }
@@ -221,10 +250,10 @@
           barFill.style.background = barColor;
           var displayName = item.id.replace(/-/g, " ").replace(/\//g, " \u203A ");
           var nameEl = h("div", { className: "hero-concept-name", style: "cursor:pointer", onclick: (function(id) { return function() { navigateToConcept(id); }; })(item.id) }, displayName);
-          var row = h("div", { className: "hero-concept" }, [
+          var row = h("div", { className: "hero-concept", role: "listitem" }, [
             nameEl,
-            h("div", { className: "hero-concept-bar" }, [barFill]),
-            h("div", { className: "hero-concept-pct" }, item.pct + "%"),
+            h("div", { className: "hero-concept-bar", role: "progressbar", "aria-valuenow": String(item.pct), "aria-valuemin": "0", "aria-valuemax": "100", "aria-label": item.pct + "% mastery" }, [barFill]),
+            h("div", { className: "hero-concept-pct", "aria-hidden": "true" }, item.pct + "%"),
             h("div", { className: "hero-concept-meta" }, timeAgo(item.lastAssessed))
           ]);
           panel.appendChild(row);
@@ -274,6 +303,8 @@
   function renderConceptList(domainFilter) {
     var container = document.getElementById("concept-list");
     container.textContent = "";
+    container.setAttribute("role", "list");
+    container.setAttribute("aria-label", "Concept mastery list");
 
     var filtered = domainFilter
       ? allConcepts.filter(function(c) { return c.domain === domainFilter; })
@@ -301,13 +332,14 @@
       var count = state ? state.assessmentCount : 0;
       var conf = confidenceLabel(sigma, count);
 
-      var row = h("div", { className: "concept-row" }, [
+      var masteryLabel = pct >= 0 ? pct + "% mastery" : "Not assessed";
+      var row = h("div", { className: "concept-row", role: "listitem" }, [
         h("div", null, [
           h("div", { className: "concept-name" }, concept.id),
           h("div", { className: "concept-domain" }, concept.domain)
         ]),
-        h("div", { className: "mastery-cell" }, [
-          h("div", { className: "mastery-bar-bg" }, [
+        h("div", { className: "mastery-cell", "aria-label": masteryLabel }, [
+          h("div", { className: "mastery-bar-bg", role: "progressbar", "aria-valuenow": String(pct >= 0 ? pct : 0), "aria-valuemin": "0", "aria-valuemax": "100", "aria-label": masteryLabel }, [
             (function() {
               var fill = h("div", { className: "mastery-bar-fill" });
               fill.style.width = (pct >= 0 ? pct : 0) + "%";
@@ -582,14 +614,8 @@
 
   function navigateToConcept(conceptId) {
     // Switch to concepts tab and open detail
-    var btns = document.querySelectorAll(".tab-btn");
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.remove("active");
-      if (btns[i].getAttribute("data-tab") === "concepts") btns[i].classList.add("active");
-    }
-    document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
-    var target = document.getElementById("tab-concepts");
-    if (target) target.classList.add("active");
+    var conceptsBtn = document.getElementById("tabBtn-concepts");
+    if (conceptsBtn) switchTab(conceptsBtn);
     renderConceptsTab(conceptId);
   }
 
@@ -659,8 +685,8 @@
         var confidence = s.sigma < 0.3 ? "High" : s.sigma < 0.8 ? "Med" : "Low";
         var displayName = c.id.replace(/-/g, " ").replace(/\//g, " \u203A ");
 
-        var masteryCell = h("td", {});
-        var barContainer = h("div", { className: "mastery-bar-container", style: "display:inline-block;width:80px;vertical-align:middle" });
+        var masteryCell = h("td", { "aria-label": p + "% mastery (" + low + "\u2013" + high + "% range)" });
+        var barContainer = h("div", { className: "mastery-bar-container", style: "display:inline-block;width:80px;vertical-align:middle", role: "progressbar", "aria-valuenow": String(p), "aria-valuemin": "0", "aria-valuemax": "100", "aria-label": p + "% mastery" });
         var bar = h("div", { className: "mastery-bar" });
         bar.style.width = p + "%";
         bar.style.background = masteryColor(p);
@@ -749,7 +775,7 @@
         }
 
         // Mastery timeline chart with confidence band
-        var chartPanel = h("div", { className: "chart-panel", style: "height:300px;margin:1rem 0" });
+        var chartPanel = h("div", { className: "chart-panel", style: "height:300px;margin:1rem 0", role: "img", "aria-label": "Mastery timeline chart showing assessment history for " + detailName });
         detailContainer.appendChild(chartPanel);
 
         if (data.timeline && data.timeline.length > 0 && typeof echarts !== "undefined") {
@@ -2341,14 +2367,8 @@
           onclick: function() {
             closeEventPanel();
             // Navigate to concepts tab filtered by domain
-            var btns = document.querySelectorAll(".tab-btn");
-            for (var i = 0; i < btns.length; i++) {
-              btns[i].classList.remove("active");
-              if (btns[i].getAttribute("data-tab") === "concepts") btns[i].classList.add("active");
-            }
-            document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
-            var target = document.getElementById("tab-concepts");
-            if (target) target.classList.add("active");
+            var conceptsBtn = document.getElementById("tabBtn-concepts");
+            if (conceptsBtn) switchTab(conceptsBtn);
             renderConceptsTab();
             // After render, click the domain filter
             setTimeout(function() {
@@ -2403,15 +2423,8 @@
       var integrityEl = h("div", { className: "event-panel-score-item event-panel-link", onclick: function() {
         closeEventPanel();
         // Navigate to integrity tab
-        var btns = document.querySelectorAll(".tab-btn");
-        for (var i = 0; i < btns.length; i++) {
-          btns[i].classList.remove("active");
-          if (btns[i].getAttribute("data-tab") === "integrity") btns[i].classList.add("active");
-        }
-        document.querySelectorAll(".tab-content").forEach(function(tc) { tc.classList.remove("active"); });
-        var target = document.getElementById("tab-integrity");
-        if (target) target.classList.add("active");
-        renderIntegrity();
+        var integrityBtn = document.getElementById("tabBtn-integrity");
+        if (integrityBtn) switchTab(integrityBtn);
       }}, [
         h("div", { className: "event-panel-score-value", style: integrityColor }, integrityPct),
         h("div", { className: "event-panel-score-label" }, "Integrity")
