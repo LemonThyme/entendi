@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { generateSparklineSvg } from '../../src/api/lib/sparkline.js';
 
 describe('generateSparklineSvg', () => {

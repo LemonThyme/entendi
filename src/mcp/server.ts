@@ -1,13 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-import { appendFileSync, mkdirSync } from 'fs';
 import { execFile } from 'child_process';
+import { appendFileSync, mkdirSync } from 'fs';
+import { homedir, platform } from 'os';
 import { join } from 'path';
-import { homedir } from 'os';
-import { platform } from 'os';
-import { EntendiApiClient } from './api-client.js';
+import { z } from 'zod';
 import { loadConfig, saveConfig } from '../shared/config.js';
+import { EntendiApiClient } from './api-client.js';
 
 const MCP_LOG_DIR = join(homedir(), '.entendi');
 const MCP_LOG_FILE = join(MCP_LOG_DIR, 'debug.log');

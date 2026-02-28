@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { KnowledgeGraph } from './knowledge-graph.js';
 import type { PendingProbe, ProbeSessionState, TutorSession } from '../schemas/types.js';
+import { KnowledgeGraph } from './knowledge-graph.js';
 
 /**
  * Atomically write data to a file using write-to-temp + rename.
@@ -21,6 +21,7 @@ export function atomicWriteFileSync(filePath: string, data: string): void {
  */
 export class StateManager {
   private dataDir: string;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: stored for future use
   private userId: string;
   private kg: KnowledgeGraph;
   private probeSession: ProbeSessionState;

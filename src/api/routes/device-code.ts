@@ -1,8 +1,8 @@
-import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
+import { Hono } from 'hono';
 import { deviceCodes } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const DEVICE_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 // Charset without ambiguous characters (0/O, 1/I/l)

@@ -1,7 +1,7 @@
-import * as esbuild from 'esbuild';
-import { chmodSync, readdirSync, mkdirSync, copyFileSync, existsSync, writeFileSync, rmSync, readFileSync } from 'fs';
-import { join } from 'path';
 import { execFileSync } from 'child_process';
+import * as esbuild from 'esbuild';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 const hookDir = join('src', 'hooks');
 let hookFiles: string[] = [];

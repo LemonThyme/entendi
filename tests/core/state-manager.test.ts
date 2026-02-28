@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { StateManager } from '../../src/core/state-manager.js';
-import { createTutorSession } from '../../src/schemas/types.js';
-import type { RubricScore } from '../../src/schemas/types.js';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { StateManager } from '../../src/core/state-manager.js';
+import type { RubricScore } from '../../src/schemas/types.js';
+import { createTutorSession } from '../../src/schemas/types.js';
 
 describe('StateManager', () => {
   let dataDir: string;

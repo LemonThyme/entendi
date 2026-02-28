@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadConfig } from '../../src/config/config-loader.js';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { loadConfig } from '../../src/config/config-loader.js';
 
 describe('loadConfig', () => {
   let dataDir: string;

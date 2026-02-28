@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  SEED_CONCEPTS,
   buildSeedConceptNodes,
+  SEED_CONCEPTS,
   seedTaxonomyStats,
 } from '../../src/config/seed-taxonomy.js';
-import type { TaxonomySeedEntry, ConceptNode, EdgeType } from '../../src/schemas/types.js';
+import type { EdgeType, } from '../../src/schemas/types.js';
 
 const VALID_EDGE_TYPES: EdgeType[] = [
   'requires', 'part_of', 'related_to', 'alternative_to', 'used_with', 'is_example_of',

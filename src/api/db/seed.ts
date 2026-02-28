@@ -1,6 +1,6 @@
-import { concepts, conceptEdges } from './schema.js';
 import { buildSeedConceptNodes } from '../../config/seed-taxonomy.js';
 import type { Database } from './connection.js';
+import { conceptEdges, concepts } from './schema.js';
 
 export async function seedTaxonomy(db: Database) {
   const seedConcepts = buildSeedConceptNodes();

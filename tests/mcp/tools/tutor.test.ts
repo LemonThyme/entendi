@@ -1,18 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { StateManager } from '../../../src/core/state-manager.js';
+import { readPendingAction, writePendingAction } from '../../../src/mcp/pending-action.js';
 import {
-  handleStartTutor,
+  type AdvanceTutorInput,
   handleAdvanceTutor,
   handleDismiss,
+  handleStartTutor,
   type StartTutorInput,
-  type AdvanceTutorInput,
-  type DismissInput,
 } from '../../../src/mcp/tools/tutor.js';
-import { StateManager } from '../../../src/core/state-manager.js';
-import { createConceptNode, pMastery } from '../../../src/schemas/types.js';
-import { readPendingAction, writePendingAction } from '../../../src/mcp/pending-action.js';
+import { createConceptNode, } from '../../../src/schemas/types.js';
 
 describe('entendi_start_tutor', () => {
   let dataDir: string;

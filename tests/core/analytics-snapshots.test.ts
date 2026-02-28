@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildDailySnapshotUpsert, buildConceptAnalyticsUpsert } from '../../src/core/analytics-snapshots.js';
+import { describe, expect, it } from 'vitest';
+import { buildConceptAnalyticsUpsert, buildDailySnapshotUpsert } from '../../src/core/analytics-snapshots.js';
 
 describe('buildDailySnapshotUpsert', () => {
   it('computes correct values for a probe event', () => {

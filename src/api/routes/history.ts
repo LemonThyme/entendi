@@ -1,8 +1,8 @@
+import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { eq, and, desc } from 'drizzle-orm';
 import { assessmentEvents } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const historyRoutes = new Hono<Env>();
 
@@ -12,7 +12,7 @@ historyRoutes.use('*', requireAuth);
 historyRoutes.get('/', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const limit = parseInt(c.req.query('limit') || '50');
+  const limit = parseInt(c.req.query('limit') || '50', 10);
 
   const events = await db.select().from(assessmentEvents)
     .where(eq(assessmentEvents.userId, user.id))

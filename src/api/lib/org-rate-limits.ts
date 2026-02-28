@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { member, organization } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
+import { member, organization } from '../db/schema.js';
 
 export interface OrgRateLimits {
   /** Max probe evaluations per concept per window. 0 = unlimited. Default: 1 */
@@ -43,7 +43,7 @@ export async function getOrgRateLimits(db: Database, userId: string): Promise<Or
     .innerJoin(organization, eq(member.organizationId, organization.id))
     .where(eq(member.userId, userId));
 
-  let effective = { ...DEFAULTS };
+  const effective = { ...DEFAULTS };
 
   for (const row of memberships) {
     if (!row.metadata) continue;

@@ -1,5 +1,5 @@
-import type { ExtractedConcept } from '../schemas/types.js';
 import { PACKAGE_CONCEPT_MAP } from '../config/package-concepts.js';
+import type { ExtractedConcept } from '../schemas/types.js';
 
 /**
  * Extended concept with domain information from the package mapping.

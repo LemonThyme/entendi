@@ -1,6 +1,5 @@
-import type { NoveltyLevel, GRMItemParams } from '../schemas/types.js';
-import { DEFAULT_GRM_PARAMS } from '../schemas/types.js';
-import { retrievability, grmFisherInformation } from './probabilistic-model.js';
+import type { GRMItemParams, NoveltyLevel } from '../schemas/types.js';
+import { grmFisherInformation, retrievability } from './probabilistic-model.js';
 
 const PROBE_PROBABILITIES: Record<NoveltyLevel, number> = {
   routine: 0.05,

@@ -1,15 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   advanceTutorPhase,
+  isPhaseScored,
   isTutorActive,
   isTutorOffered,
-  isPhaseScored,
-  shouldOfferTutor,
   isTutorTimedOut,
+  shouldOfferTutor,
   TUTOR_TIMEOUT_MS,
 } from '../../src/core/tutor-session.js';
+import type { RubricScore, TutorPhase, TutorSession } from '../../src/schemas/types.js';
 import { createTutorSession } from '../../src/schemas/types.js';
-import type { TutorSession, TutorPhase, RubricScore } from '../../src/schemas/types.js';
 
 function makeSession(phase: TutorPhase, startedAt?: string): TutorSession {
   const session = createTutorSession('test-concept', 1 as RubricScore);

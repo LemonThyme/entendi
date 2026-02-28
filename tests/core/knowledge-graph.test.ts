@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
-import type { ConceptNode } from '../../src/schemas/types.js';
 import { createConceptNode } from '../../src/schemas/types.js';
 
 describe('KnowledgeGraph', () => {

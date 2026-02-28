@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EmailTemplate,
-  getSubject,
   getHtml,
-  sendEmail,
+  getSubject,
   resetResendInstance,
+  sendEmail,
 } from '../../src/api/lib/email.js';
 
 const mockSend = vi.fn().mockResolvedValue({ data: { id: 'mock-email-id' }, error: null });
@@ -14,7 +14,6 @@ vi.mock('resend', () => {
   return {
     Resend: class MockResend {
       emails = { send: mockSend };
-      constructor(_apiKey: string) {}
     },
   };
 });

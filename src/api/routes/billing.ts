@@ -1,9 +1,9 @@
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
 import { subscriptions } from '../db/schema.js';
-import { createCheckoutSession, constructWebhookEvent } from '../lib/stripe.js';
-import { sendEmail, EmailTemplate } from '../lib/email.js';
 import type { Env } from '../index.js';
+import { EmailTemplate, sendEmail } from '../lib/email.js';
+import { constructWebhookEvent, createCheckoutSession } from '../lib/stripe.js';
 
 export const billingRoutes = new Hono<Env>();
 
@@ -70,10 +70,10 @@ billingRoutes.post('/webhook', async (c) => {
   }
 
   const payload = await c.req.text();
-  let event;
+  let event: ReturnType<typeof constructWebhookEvent>;
   try {
     event = constructWebhookEvent(payload, signature);
-  } catch (err) {
+  } catch (_err) {
     return c.json({ error: 'Webhook signature verification failed' }, 400);
   }
 

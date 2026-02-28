@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { enrichConcept, applyEnrichment, type EnrichmentResult } from '../../src/api/lib/concept-enrichment.js';
+import { describe, expect, it, vi } from 'vitest';
+import { applyEnrichment, type EnrichmentResult, enrichConcept } from '../../src/api/lib/concept-enrichment.js';
 
 // Mock the Anthropic SDK — must use a class so `new Anthropic()` works
 vi.mock('@anthropic-ai/sdk', () => {

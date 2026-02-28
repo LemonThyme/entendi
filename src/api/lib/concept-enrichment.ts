@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Database } from '../db/connection.js';
-import { concepts, conceptEdges } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import type { Database } from '../db/connection.js';
+import { conceptEdges, concepts } from '../db/schema.js';
 
 export interface EnrichmentResult {
   canonicalName: string;

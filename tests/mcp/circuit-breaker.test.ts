@@ -1,5 +1,5 @@
 // tests/mcp/circuit-breaker.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CircuitBreaker } from '../../src/mcp/api-client.js';
 
 describe('CircuitBreaker', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildConceptExtractionPrompt, parseConceptExtractionResponse } from '../../src/core/llm-extraction.js';
 
 describe('LLM Concept Extraction', () => {

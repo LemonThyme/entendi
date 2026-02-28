@@ -1,7 +1,8 @@
 import { config } from 'dotenv';
+
 config();
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createApp } from '../../../src/api/index.js';
 
 const testDbUrl = process.env.DATABASE_URL;
@@ -30,7 +31,7 @@ describeWithDb('API routes (integration)', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as any[];
     expect(body.length).toBeGreaterThan(0);
-    body.forEach((c: any) => expect(c.domain).toBe('security'));
+    for (const c of body) expect((c as any).domain).toBe('security');
   });
 
   it('GET /api/concepts/:id returns concept with edges', async () => {

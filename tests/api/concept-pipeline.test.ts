@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveConcept } from '../../src/api/lib/concept-pipeline.js';
 
 // Mock dependencies
 vi.mock('../../src/api/lib/concept-normalize.js', () => ({
   normalizeConcept: vi.fn((raw: string) =>
-    raw.toLowerCase().replace(/[\/\._ ]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 200)
+    raw.toLowerCase().replace(/[/._ ]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 200)
   ),
   resolveConceptId: vi.fn(),
 }));
@@ -20,9 +20,9 @@ vi.mock('../../src/api/lib/concept-enrichment.js', () => ({
   applyEnrichment: vi.fn(),
 }));
 
+import { enrichConcept } from '../../src/api/lib/concept-enrichment.js';
 import { resolveConceptId } from '../../src/api/lib/concept-normalize.js';
 import { embedConcept, findSimilarConcepts, storeEmbedding } from '../../src/api/lib/embeddings.js';
-import { enrichConcept } from '../../src/api/lib/concept-enrichment.js';
 
 describe('resolveConcept', () => {
   let mockDb: any;
@@ -32,7 +32,7 @@ describe('resolveConcept', () => {
 
     // Default: resolveConceptId returns the normalized form (no alias)
     vi.mocked(resolveConceptId).mockImplementation(async (_db, raw) =>
-      raw.toLowerCase().replace(/[\/\._ ]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 200)
+      raw.toLowerCase().replace(/[/._ ]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 200)
     );
 
     // Default: no embeddings available (local dev)

@@ -1,6 +1,6 @@
-import { eq, and, sql } from 'drizzle-orm';
-import { dailySnapshots, conceptAnalytics } from '../api/db/schema.js';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../api/db/connection.js';
+import { conceptAnalytics, dailySnapshots } from '../api/db/schema.js';
 
 interface DailySnapshotInput {
   userId: string;

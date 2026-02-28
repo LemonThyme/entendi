@@ -1,5 +1,5 @@
 (function() {
-  "use strict";
+  
   var code = document.getElementById("device-code").getAttribute("data-code");
   var codeEl = document.getElementById("device-code");
   codeEl.textContent = code;

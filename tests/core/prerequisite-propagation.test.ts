@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { propagatePrerequisiteBoost, type PropagationTarget } from '../../src/core/prerequisite-propagation.js';
+import { describe, expect, it } from 'vitest';
+import { type PropagationTarget, propagatePrerequisiteBoost } from '../../src/core/prerequisite-propagation.js';
 
 describe('propagatePrerequisiteBoost', () => {
   it('returns empty array when mastery decreased (no forward propagation of failure)', () => {

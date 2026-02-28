@@ -18,6 +18,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Lint
+        run: npx biome check .
       - run: npm run build
       - name: Verify build output
         run: |

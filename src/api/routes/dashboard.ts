@@ -1,10 +1,10 @@
-import { Hono } from 'hono';
 import { createHash } from 'crypto';
 import { desc } from 'drizzle-orm';
+import { Hono } from 'hono';
 import { manifest } from '../../dashboard/manifest.js';
 import { pressMentions } from '../db/schema.js';
-import { daysSinceLaunch, publicShell } from './public-html.js';
 import type { Env } from '../index.js';
+import { daysSinceLaunch, publicShell } from './public-html.js';
 
 export const dashboardRoutes = new Hono<Env>();
 

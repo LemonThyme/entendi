@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  writePendingAction,
-  readPendingAction,
   clearPendingAction,
   type PendingAction,
+  readPendingAction,
+  writePendingAction,
 } from '../../src/mcp/pending-action.js';
 
 describe('PendingAction', () => {

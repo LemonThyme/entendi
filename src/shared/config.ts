@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
+import { join } from 'path';
 
 const CONFIG_DIR = join(homedir(), '.entendi');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');

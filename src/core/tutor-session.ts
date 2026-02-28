@@ -1,5 +1,5 @@
-import type { TutorSession, TutorPhase, RubricScore } from '../schemas/types.js';
 import type { OrgPolicy } from '../config/org-policy.js';
+import type { RubricScore, TutorPhase, TutorSession } from '../schemas/types.js';
 
 export const TUTOR_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 

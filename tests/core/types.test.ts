@@ -1,23 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  type MasteryState,
-  type MemoryState,
-  type ConceptNode,
-  type KnowledgeGraphState,
-  type ObservationEvent,
-  type GRMItemParams,
-  type PopulationStats,
-  type TaxonomySeedEntry,
-  type RubricScore,
+  createConceptNode,
   createInitialMastery,
   createInitialMemory,
-  createUserConceptState,
-  createEmptyGraphState,
-  pMastery,
-  DEFAULT_GRM_PARAMS,
-  createConceptNode,
-  createTutorSession,
   createTutorExchange,
+  createTutorSession,
+  createUserConceptState,
+  DEFAULT_GRM_PARAMS,
+  type PopulationStats,
+  pMastery,
+  type RubricScore,
 } from '../../src/schemas/types.js';
 
 describe('types', () => {

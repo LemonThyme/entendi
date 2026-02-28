@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { expectedInfoGain, selectProbeCandidate, type ProbeCandidate } from '../../src/core/probe-selection.js';
+import { describe, expect, it } from 'vitest';
+import { expectedInfoGain, type ProbeCandidate, selectProbeCandidate } from '../../src/core/probe-selection.js';
 
 describe('expectedInfoGain', () => {
   it('returns higher gain for uncertain concepts', () => {

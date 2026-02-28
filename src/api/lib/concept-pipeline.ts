@@ -1,9 +1,9 @@
+import { eq } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
+import { conceptAliases, concepts } from '../db/schema.js';
+import { applyEnrichment, enrichConcept } from './concept-enrichment.js';
 import { normalizeConcept, resolveConceptId } from './concept-normalize.js';
 import { embedConcept, findSimilarConcepts, storeEmbedding } from './embeddings.js';
-import { enrichConcept, applyEnrichment } from './concept-enrichment.js';
-import { concepts, conceptAliases } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
 
 export interface ResolvedConcept {
   canonicalId: string;

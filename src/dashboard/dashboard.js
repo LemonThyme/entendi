@@ -1,5 +1,5 @@
 (function() {
-  "use strict";
+  
   var token = localStorage.getItem("entendi_token");
   var currentUser = null;
 
@@ -20,13 +20,13 @@
   }
 
   function cacheGet(key) {
-    try { var d = sessionStorage.getItem("entendi_" + key); return d ? JSON.parse(d) : null; } catch(e) { return null; }
+    try { var d = sessionStorage.getItem("entendi_" + key); return d ? JSON.parse(d) : null; } catch(_e) { return null; }
   }
   function cacheSet(key, data) {
-    try { sessionStorage.setItem("entendi_" + key, JSON.stringify(data)); } catch(e) {}
+    try { sessionStorage.setItem("entendi_" + key, JSON.stringify(data)); } catch(_e) {}
   }
   function cacheClear() {
-    try { Object.keys(sessionStorage).forEach(function(k) { if (k.indexOf("entendi_") === 0) sessionStorage.removeItem(k); }); } catch(e) {}
+    try { Object.keys(sessionStorage).forEach(function(k) { if (k.indexOf("entendi_") === 0) sessionStorage.removeItem(k); }); } catch(_e) {}
   }
 
   function getHeaders() {
@@ -196,7 +196,7 @@
   }
 
 
-  function renderOverviewHero(concepts, mastery) {
+  function renderOverviewHero(_concepts, mastery) {
     var merged = [];
     for (var i = 0; i < mastery.length; i++) {
       var m = mastery[i];
@@ -242,7 +242,7 @@
 
   var allConcepts = [], allMasteryMap = {};
 
-  function renderConcepts(concepts, mastery) {
+  function _renderConcepts(concepts, mastery) {
     allConcepts = concepts;
     allMasteryMap = {};
     for (var i = 0; i < mastery.length; i++) {
@@ -578,7 +578,7 @@
 
   // --- Concepts Tab ---
 
-  var currentConceptDetail = null;
+  var _currentConceptDetail = null;
 
   function navigateToConcept(conceptId) {
     // Switch to concepts tab and open detail
@@ -817,7 +817,7 @@
           table.appendChild(thead);
           var tbody = h("tbody");
           var historyEventIds = data.timeline.filter(function(t) { return t.eventId && t.type !== "dismissal"; }).map(function(t) { return t.eventId; });
-          data.timeline.forEach(function(ev, idx) {
+          data.timeline.forEach(function(ev, _idx) {
             if (ev.type === "dismissal") {
               var dRow = h("tr", { className: "dismissal-row", style: "cursor:pointer", onclick: (function(evRef) { return function() {
                 openEventPanel(evRef, { isDismissal: true });
@@ -930,7 +930,7 @@
                 + "<br/>" + timeAgo(ev.createdAt);
             }
           },
-          xAxis: { type: "category", data: withIntegrity.map(function(e, i) { return i + 1; }), name: "Assessment #" },
+          xAxis: { type: "category", data: withIntegrity.map(function(_e, i) { return i + 1; }), name: "Assessment #" },
           yAxis: { type: "value", min: 0, max: 1, name: "Integrity Score", axisLabel: { formatter: function(v) { return (v * 100) + "%"; } } },
           series: [{
             type: "line",
@@ -1164,7 +1164,7 @@
     var planName = "Free";
     var planPrice = "$0/month";
 
-    if (sub && sub.plan) {
+    if (sub?.plan) {
       if (sub.plan === "earned_free") { planName = "Earned Free"; planPrice = "$0/month"; }
       else if (sub.plan === "pro") { planName = "Pro"; planPrice = "$5/month"; }
       else if (sub.plan === "team_small") { planName = "Team Small"; planPrice = "$3/seat/month"; }
@@ -1212,7 +1212,7 @@
       area.appendChild(progress);
     }
 
-    if (sub && sub.earnedFreeUntil && planName === "Earned Free") {
+    if (sub?.earnedFreeUntil && planName === "Earned Free") {
       var expiryDate = new Date(sub.earnedFreeUntil).toLocaleDateString();
       var expiryNote = h("div", { className: "earned-free-progress" }, [
         h("strong", null, "Earned free active"),
@@ -1356,7 +1356,7 @@
     var renameItem = h("button", { className: "dot-menu-item", onclick: function() {
       dotMenuDropdown.classList.remove("open");
       var newName = prompt("Rename organization:", org.name || "");
-      if (newName && newName.trim() && newName.trim() !== org.name) {
+      if (newName?.trim() && newName.trim() !== org.name) {
         fetch("/api/auth/organization/update", {
           method: "POST",
           headers: getHeaders(),
@@ -1943,7 +1943,7 @@
       });
   }
 
-  function loadRankings(orgId) {
+  function loadRankings(_orgId) {
     fetch("/api/org/rankings", { headers: getHeaders() })
       .then(function(r) {
         if (r.ok) return r.json();

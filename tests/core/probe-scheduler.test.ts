@@ -1,6 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { shouldProbe, selectConceptToProbe } from '../../src/core/probe-scheduler.js';
-import type { NoveltyLevel } from '../../src/schemas/types.js';
+import { describe, expect, it } from 'vitest';
+import { selectConceptToProbe, shouldProbe } from '../../src/core/probe-scheduler.js';
 import { DEFAULT_GRM_PARAMS } from '../../src/schemas/types.js';
 
 describe('shouldProbe', () => {

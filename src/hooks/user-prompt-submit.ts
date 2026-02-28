@@ -1,5 +1,5 @@
-import { readStdin, log, type HookInput } from './shared.js';
 import { loadConfig } from '../shared/config.js';
+import { type HookInput, log, readStdin } from './shared.js';
 
 export interface UserPromptSubmitOutput {
   hookSpecificOutput?: {

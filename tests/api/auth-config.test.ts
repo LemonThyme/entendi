@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockBetterAuth, mockSendEmail, mockOrganization, mockDbSelect, mockDbInsert, mockDbUpdate } = vi.hoisted(() => {
   const mockBetterAuth = vi.fn().mockReturnValue({

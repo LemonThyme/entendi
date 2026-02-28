@@ -1,6 +1,8 @@
 import { config } from 'dotenv';
+
 config();
-import { describe, it, expect } from 'vitest';
+
+import { describe, expect, it } from 'vitest';
 import { createApp } from '../../../src/api/index.js';
 
 const testDbUrl = process.env.DATABASE_URL;

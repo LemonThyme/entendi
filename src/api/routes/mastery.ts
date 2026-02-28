@@ -1,8 +1,8 @@
+import { and, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { eq, and, sql } from 'drizzle-orm';
-import { userConceptStates, assessmentEvents, concepts, conceptEdges } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { assessmentEvents, userConceptStates } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const masteryRoutes = new Hono<Env>();
 

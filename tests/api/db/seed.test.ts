@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildSeedConceptNodes } from '../../../src/config/seed-taxonomy.js';
 
 describe('seed taxonomy data', () => {

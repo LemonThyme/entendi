@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  shouldGrantEarnedFree,
   getEarnedFreeExpiry,
   getMasteryThreshold,
   getMinConcepts,
+  shouldGrantEarnedFree,
 } from '../../src/api/lib/earned-free.js';
 
 describe('shouldGrantEarnedFree', () => {

@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
-import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
-import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildSeedConceptNodes } from '../../src/config/seed-taxonomy.js';
-import { grmFisherInformation, grmBayesianUpdate } from '../../src/core/probabilistic-model.js';
+import { KnowledgeGraph } from '../../src/core/knowledge-graph.js';
+import { grmBayesianUpdate, grmFisherInformation } from '../../src/core/probabilistic-model.js';
+import { handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 
 function mockPendingAction(action: PendingAction | null) {

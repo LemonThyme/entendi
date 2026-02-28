@@ -1,5 +1,5 @@
-import { readStdin, log, type HookInput } from './shared.js';
 import { loadConfig } from '../shared/config.js';
+import { log, readStdin } from './shared.js';
 
 /**
  * Stop hook — fires when the session is about to end.

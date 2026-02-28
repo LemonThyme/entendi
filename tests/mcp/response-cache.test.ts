@@ -1,5 +1,5 @@
 // tests/mcp/response-cache.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponseCache } from '../../src/mcp/response-cache.js';
 
 describe('ResponseCache', () => {

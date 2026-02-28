@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { member, organization } from '../db/schema.js';
-import type { Database } from '../db/connection.js';
 import { DEFAULT_THRESHOLDS, type IntegrityThresholds } from '../../core/response-integrity.js';
+import type { Database } from '../db/connection.js';
+import { member, organization } from '../db/schema.js';
 
 export interface OrgIntegritySettings extends IntegrityThresholds {
   dampeningThreshold: number;
@@ -45,7 +45,7 @@ export async function getOrgIntegritySettings(db: Database, userId: string): Pro
     .innerJoin(organization, eq(member.organizationId, organization.id))
     .where(eq(member.userId, userId));
 
-  let effective = { ...DEFAULTS };
+  const effective = { ...DEFAULTS };
 
   for (const row of memberships) {
     if (!row.metadata) continue;

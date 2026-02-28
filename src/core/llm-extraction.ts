@@ -1,4 +1,4 @@
-import type { ExtractedConcept, ConceptSpecificity } from '../schemas/types.js';
+import type { ConceptSpecificity, ExtractedConcept } from '../schemas/types.js';
 
 // --- Types ---
 

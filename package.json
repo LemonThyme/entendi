@@ -8,6 +8,8 @@
     "build": "node -e \"const f='src/dashboard/manifest.ts';require('fs').existsSync(f)||require('fs').writeFileSync(f,'export const manifest: Record<string, string> = {};\\n')\" && npx tsc && node --import tsx esbuild.config.ts",
     "build:hooks": "node --import tsx esbuild.config.ts",
     "plugin:reinstall": "rm -rf ~/.claude/plugins/cache/entendi && npm run build && rm -rf ~/.claude/plugins/cache/entendi && claude plugin install entendi",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
@@ -35,6 +37,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
     "@types/node": "^25.3.0",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",

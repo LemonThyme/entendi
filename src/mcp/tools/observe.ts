@@ -1,8 +1,8 @@
-import type { StateManager } from '../../core/state-manager.js';
 import type { KnowledgeGraph } from '../../core/knowledge-graph.js';
+import { type ProbeCandidateInfo, selectConceptToProbe, shouldProbe } from '../../core/probe-scheduler.js';
+import type { StateManager } from '../../core/state-manager.js';
 import type { NoveltyLevel } from '../../schemas/types.js';
-import { pMastery, createConceptNode } from '../../schemas/types.js';
-import { selectConceptToProbe, shouldProbe, type ProbeCandidateInfo } from '../../core/probe-scheduler.js';
+import { createConceptNode, pMastery } from '../../schemas/types.js';
 import { writePendingAction } from '../pending-action.js';
 
 // --- Public types ---

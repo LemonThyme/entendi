@@ -1,10 +1,10 @@
+import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { eq, and, gt, sql, inArray } from 'drizzle-orm';
-import { assessmentEvents, member } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
 import { pMastery } from '../../schemas/types.js';
+import { assessmentEvents, member } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const eventRoutes = new Hono<Env>();
 
@@ -27,7 +27,7 @@ eventRoutes.get('/', async (c) => {
   }
 
   // Get Last-Event-ID for incremental updates
-  const lastEventId = parseInt(c.req.header('Last-Event-ID') || '0') || 0;
+  const lastEventId = parseInt(c.req.header('Last-Event-ID') || '0', 10) || 0;
 
   return streamSSE(c, async (stream) => {
     await stream.writeSSE({ event: 'connected', data: JSON.stringify({ retry: 3000 }) });

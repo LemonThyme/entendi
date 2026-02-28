@@ -1,18 +1,18 @@
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { eq, and, desc, gte, sql, asc } from 'drizzle-orm';
+import { masteryRange, pMastery } from '../../core/mastery-display.js';
 import {
   assessmentEvents,
-  userConceptStates,
-  concepts,
   conceptAnalytics,
-  dailySnapshots,
   conceptEdges,
-  tutorSessions,
+  concepts,
+  dailySnapshots,
   dismissalEvents,
+  tutorSessions,
+  userConceptStates,
 } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
-import { pMastery, masteryRange } from '../../core/mastery-display.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const analyticsRoutes = new Hono<Env>();
 analyticsRoutes.use('*', requireAuth);
@@ -141,7 +141,7 @@ analyticsRoutes.get('/velocity', async (c) => {
 analyticsRoutes.get('/activity-heatmap', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const days = parseInt(c.req.query('days') || '365');
+  const days = parseInt(c.req.query('days') || '365', 10);
 
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
   const snapshots = await db.select({

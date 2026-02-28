@@ -404,7 +404,7 @@ body {
 .confidence-badge.confidence-low { background: var(--red-bg); color: var(--red); }
 
 /* --- Concept name links --- */
-.activity-table .concept-name:hover { text-decoration-color: var(--accent) !important; color: var(--accent); }
+.activity-table .concept-name:hover { text-decoration-color: var(--accent); color: var(--accent); }
 
 /* --- Domain badges --- */
 .domain-badge {
