@@ -16,6 +16,7 @@ import { masteryRoutes } from './routes/mastery.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
+import { openapiRoutes } from './routes/openapi.js';
 import { publicRoutes } from './routes/public.js';
 
 export type Env = {
@@ -147,6 +148,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/events', eventRoutes);
   app.route('/api/events', eventDetailRoutes);
   app.route('/api/analytics', analyticsRoutes);
+  app.route('/api', openapiRoutes);
   app.route('/api', publicRoutes);
 
   // Cache static assets with immutable headers
