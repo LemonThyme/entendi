@@ -38,6 +38,28 @@ describe('normalizeConcept', () => {
     expect(normalizeConcept('---')).toBe('');
     expect(normalizeConcept('  ')).toBe('');
   });
+
+  it('handles dotted names (e.g. React.Component)', () => {
+    expect(normalizeConcept('React.Component')).toBe('react-component');
+    expect(normalizeConcept('fs.readFileSync')).toBe('fs-readfilesync');
+  });
+
+  it('handles path-like concepts', () => {
+    expect(normalizeConcept('src/api/routes')).toBe('src-api-routes');
+  });
+
+  it('normalizes multiple variant forms to same canonical ID', () => {
+    const variants = [
+      'A/B Testing',
+      'a/b testing',
+      'A/B_Testing',
+      'a-b-testing',
+      'A.B.Testing',
+    ];
+    const normalized = variants.map(normalizeConcept);
+    expect(new Set(normalized).size).toBe(1);
+    expect(normalized[0]).toBe('a-b-testing');
+  });
 });
 
 describe('resolveConceptId', () => {

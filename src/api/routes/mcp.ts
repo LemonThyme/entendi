@@ -220,7 +220,7 @@ mcpRoutes.post('/observe', async (c) => {
     }
   }
 
-  const selection = selectProbeCandidate(candidates, similarities, !!trunkId);
+  const selection = selectProbeCandidate(candidates, similarities, !!trunkId, trunkId ?? undefined);
   if (!selection) {
     return c.json({ shouldProbe: false, intrusiveness: 'skip', userProfile: 'unknown' });
   }
@@ -373,6 +373,9 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   const parsed = parseBody(recordEvaluationSchema, raw, c);
   if (parsed instanceof Response) return parsed;
   const body = parsed;
+
+  // Resolve concept ID through normalization + alias lookup
+  body.conceptId = await resolveConceptId(db, body.conceptId);
 
   // For probe events, require a valid probe token and responseText
   let probeTokenId: string | undefined;
@@ -541,6 +544,9 @@ mcpRoutes.post('/tutor/start', async (c) => {
   const parsed = parseBody(tutorStartSchema, raw, c);
   if (parsed instanceof Response) return parsed;
   const body = parsed;
+
+  // Resolve concept ID through normalization + alias lookup
+  body.conceptId = await resolveConceptId(db, body.conceptId);
 
   const sessionId = crypto.randomUUID();
 

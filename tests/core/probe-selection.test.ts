@@ -91,4 +91,48 @@ describe('selectProbeCandidate', () => {
     const result = selectProbeCandidate(candidates, similarities, false);
     expect(result?.selected.conceptId).toBe('a-b-testing');
   });
+
+  describe('primaryConceptId preference', () => {
+    it('directly selects primaryConceptId when it has positive info-gain', () => {
+      // bayesian-inference has lower info-gain than a-b-testing, but is the primary concept
+      const result = selectProbeCandidate(candidates, new Map(), false, 'bayesian-inference');
+      expect(result?.selected.conceptId).toBe('bayesian-inference');
+      expect(result?.score).toBeGreaterThan(0);
+    });
+
+    it('overrides embedding similarity weighting for primary concept', () => {
+      // a-b-testing has highest info-gain and best similarity to trunk,
+      // but primaryConceptId should override that
+      const similarities = new Map([
+        ['a-b-testing', 1.0],
+        ['thompson-sampling', 0.0],
+      ]);
+      const result = selectProbeCandidate(candidates, similarities, true, 'thompson-sampling');
+      expect(result?.selected.conceptId).toBe('thompson-sampling');
+    });
+
+    it('falls back to weighted selection when primary has zero info-gain', () => {
+      const zeroGainCandidates: ProbeCandidate[] = [
+        { conceptId: 'known-concept', mu: 0, sigma: 0, fisherInfo: 1.0, urgency: 0 },
+        { conceptId: 'uncertain-concept', mu: 0, sigma: 1.5, fisherInfo: 1.0, urgency: 0.9 },
+      ];
+      // known-concept has sigma=0 → info-gain=0, so primary preference is skipped
+      const result = selectProbeCandidate(zeroGainCandidates, new Map(), false, 'known-concept');
+      expect(result?.selected.conceptId).toBe('uncertain-concept');
+    });
+
+    it('falls back when primaryConceptId is not among candidates', () => {
+      const result = selectProbeCandidate(candidates, new Map(), false, 'nonexistent-concept');
+      // Should fall back to info-gain selection (a-b-testing has highest)
+      expect(result?.selected.conceptId).toBe('a-b-testing');
+    });
+
+    it('works with single candidate matching primary', () => {
+      const single: ProbeCandidate[] = [
+        { conceptId: 'react-hooks', mu: 0, sigma: 1.0, fisherInfo: 0.5, urgency: 0.6 },
+      ];
+      const result = selectProbeCandidate(single, new Map(), false, 'react-hooks');
+      expect(result?.selected.conceptId).toBe('react-hooks');
+    });
+  });
 });
