@@ -20,6 +20,7 @@ interface WorkerEnv {
 let cachedApp: ReturnType<typeof createApp> | null = null;
 
 function propagateEnv(env: WorkerEnv): void {
+  process.env.BETTER_AUTH_SECRET = env.BETTER_AUTH_SECRET;
   process.env.BETTER_AUTH_URL = env.BETTER_AUTH_URL;
   if (env.GITHUB_CLIENT_ID) process.env.GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID;
   if (env.GITHUB_CLIENT_SECRET) process.env.GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET;

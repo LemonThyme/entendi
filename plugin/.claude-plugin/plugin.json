@@ -3,7 +3,7 @@
   "description": "Comprehension accountability layer for AI-assisted work",
   "version": "0.1.0",
   "author": { "name": "TK" },
-  "repository": "https://github.com/tk/entendi",
+  "repository": "https://github.com/LemonThyme/entendi",
   "license": "MIT",
   "keywords": ["comprehension", "learning", "bayesian", "knowledge-graph"]
 }

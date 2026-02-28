@@ -27,7 +27,16 @@ import type { Env } from '../index.js';
 import type { Context } from 'hono';
 import type { Database } from '../db/connection.js';
 
-const PROBE_TOKEN_SECRET = process.env.BETTER_AUTH_SECRET ?? 'entendi-default-secret-change-in-production';
+let _probeTokenSecret: string | undefined;
+function getProbeTokenSecret(): string {
+  if (!_probeTokenSecret) {
+    _probeTokenSecret = process.env.BETTER_AUTH_SECRET;
+    if (!_probeTokenSecret) {
+      throw new Error('BETTER_AUTH_SECRET is required for probe token signing');
+    }
+  }
+  return _probeTokenSecret;
+}
 const PROBE_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 export const mcpRoutes = new Hono<Env>();
@@ -323,7 +332,7 @@ mcpRoutes.post('/observe', async (c) => {
     conceptId: selected.conceptId,
     depth,
     evaluationCriteria: guidance,
-    secret: PROBE_TOKEN_SECRET,
+    secret: getProbeTokenSecret(),
     ttlMs: PROBE_TOKEN_TTL_MS,
   });
 
@@ -377,7 +386,7 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     }
 
     // Verify cryptographic signature, expiry, userId, and conceptId
-    const verification = verifyProbeToken(body.probeToken as ProbeToken, PROBE_TOKEN_SECRET, {
+    const verification = verifyProbeToken(body.probeToken as ProbeToken, getProbeTokenSecret(), {
       userId: user.id,
       conceptId: body.conceptId,
     });

@@ -38,7 +38,7 @@ export interface AdvanceTutorResult {
 }
 
 export interface DismissInput {
-  reason?: 'user_declined' | 'topic_changed' | 'timeout';
+  reason?: 'topic_change' | 'busy' | 'claimed_expertise';
 }
 
 export interface DismissResult {
