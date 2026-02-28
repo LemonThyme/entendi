@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# SessionStart hook — injects Entendi concept detection skill into every session
+# SessionStart hook — injects Entendi concept detection skill, validates config,
+# checks API health, and persists credentials via CLAUDE_ENV_FILE.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOG_DIR="${HOME}/.entendi"
 LOG_FILE="${LOG_DIR}/debug.log"
+CONFIG_FILE="${HOME}/.entendi/config.json"
+DEFAULT_API_URL="https://entendi-api.tomaskorenblit.workers.dev"
 
 mkdir -p "$LOG_DIR"
 
-# Read the concept-detection skill
-SKILL_CONTENT=$(cat "${PLUGIN_ROOT}/skills/concept-detection/SKILL.md" 2>/dev/null || echo "Error reading concept-detection skill")
+log() {
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:session-start:bash] $1" >> "$LOG_FILE"
+}
 
 # Escape for JSON embedding (same approach as superpowers)
 escape_for_json() {
@@ -23,9 +27,69 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
+# --- Task 1: Validate API key and connection health ---
+
+STARTUP_WARNINGS=""
+API_KEY=""
+API_URL="$DEFAULT_API_URL"
+
+# Check config file and extract API key / URL
+if [ -f "$CONFIG_FILE" ]; then
+  # Parse API key from config (lightweight — no jq dependency)
+  API_KEY=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));process.stdout.write(c.apiKey||'')}catch{}" 2>/dev/null || true)
+  CONFIG_URL=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));process.stdout.write(c.apiUrl||'')}catch{}" 2>/dev/null || true)
+  if [ -n "$CONFIG_URL" ]; then
+    API_URL="$CONFIG_URL"
+  fi
+fi
+
+# Override with env var if set
+if [ -n "${ENTENDI_API_URL:-}" ]; then
+  API_URL="$ENTENDI_API_URL"
+fi
+
+if [ -z "$API_KEY" ]; then
+  STARTUP_WARNINGS="[Entendi] No API key found. Run entendi_login to link your account."
+  log "no API key in config"
+else
+  log "API key found, checking health at ${API_URL}/health"
+
+  # Lightweight health check — don't block the session on failure
+  HEALTH_STATUS=""
+  HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 5 "${API_URL}/health" 2>/dev/null) || true
+
+  if [ "$HEALTH_STATUS" = "200" ]; then
+    log "health check passed (HTTP 200)"
+  elif [ -n "$HEALTH_STATUS" ] && [ "$HEALTH_STATUS" != "000" ]; then
+    STARTUP_WARNINGS="[Entendi] API health check returned HTTP ${HEALTH_STATUS}. Some features may be unavailable."
+    log "health check warning: HTTP ${HEALTH_STATUS}"
+  else
+    STARTUP_WARNINGS="[Entendi] Could not reach API at ${API_URL}. Some features may be unavailable."
+    log "health check failed: unreachable"
+  fi
+fi
+
+# --- Task 2: Persist API key via CLAUDE_ENV_FILE ---
+
+if [ -n "$API_KEY" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "ENTENDI_API_KEY=${API_KEY}" >> "$CLAUDE_ENV_FILE"
+  log "wrote ENTENDI_API_KEY to CLAUDE_ENV_FILE"
+fi
+
+# --- Read and inject the concept-detection skill ---
+
+SKILL_CONTENT=$(cat "${PLUGIN_ROOT}/skills/concept-detection/SKILL.md" 2>/dev/null || echo "Error reading concept-detection skill")
+
+# Prepend any startup warnings to the skill content
+if [ -n "$STARTUP_WARNINGS" ]; then
+  SKILL_CONTENT="${STARTUP_WARNINGS}
+
+${SKILL_CONTENT}"
+fi
+
 SKILL_ESCAPED=$(escape_for_json "$SKILL_CONTENT")
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:session-start:bash] injecting concept-detection skill (${#SKILL_CONTENT} bytes)" >> "$LOG_FILE"
+log "injecting concept-detection skill (${#SKILL_CONTENT} bytes)"
 
 # Output JSON — both shapes for compatibility (Cursor + Claude Code)
 cat <<EOF

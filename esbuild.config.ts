@@ -107,7 +107,7 @@ for (const file of hookEntrypoints) {
 }
 
 // 2b. Ensure bash wrapper scripts and run-hook.cmd are executable
-const hookScripts = ['run-hook.cmd', 'user-prompt-submit'];
+const hookScripts = ['run-hook.cmd', 'session-start', 'user-prompt-submit'];
 for (const file of hookScripts) {
   const dest = join(pluginDir, 'hooks', file);
   if (existsSync(dest)) {

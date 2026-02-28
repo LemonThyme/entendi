@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node -e \"const f='src/dashboard/manifest.ts';require('fs').existsSync(f)||require('fs').writeFileSync(f,'export const manifest: Record<string, string> = {};\\n')\" && npx tsc && node --import tsx esbuild.config.ts",
     "build:hooks": "node --import tsx esbuild.config.ts",
-    "plugin:reinstall": "npm run build && rm -rf ~/.claude/plugins/cache/entendi && claude plugin install entendi",
+    "plugin:reinstall": "rm -rf ~/.claude/plugins/cache/entendi && npm run build && rm -rf ~/.claude/plugins/cache/entendi && claude plugin install entendi",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
@@ -40,6 +40,7 @@
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",
     "esbuild": "^0.27.3",
+    "pdfkit": "^0.17.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",

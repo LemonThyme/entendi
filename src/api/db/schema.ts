@@ -369,6 +369,7 @@ export const courseEnrollments = pgTable('course_enrollments', {
   status: text('status').notNull().default('active'),
 }, (table) => [
   index('idx_course_enrollments_user').on(table.userId),
+  index('idx_course_enrollments_course_user').on(table.courseId, table.userId),
 ]);
 
 // --- Device Codes (CLI-first auth linking) ---
@@ -380,7 +381,9 @@ export const deviceCodes = pgTable('device_codes', {
   status: text('status').notNull().default('pending'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('idx_device_codes_status').on(table.status),
+]);
 
 // --- Subscriptions (Stripe billing) ---
 
