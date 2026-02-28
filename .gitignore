@@ -8,3 +8,11 @@ dist/
 /.mcp.json
 public/assets/
 src/dashboard/manifest.ts
+
+# Brand naming exploration (not part of product)
+docs/brand-candidates-*.csv
+docs/brand-candidates-*.md
+docs/brand-naming-*.pdf
+scripts/generate-brand-candidates.js
+scripts/generate-japanese-brands.js
+scripts/generate-naming-report.js
