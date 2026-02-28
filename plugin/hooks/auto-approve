@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# PermissionRequest hook — auto-approves Entendi MCP tools
+# except entendi_login (which opens a browser and needs user consent).
+set -euo pipefail
+
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+mkdir -p "$LOG_DIR"
+
+INPUT=$(cat)
+
+# Extract tool name from input JSON
+TOOL_NAME=$(echo "$INPUT" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.tool_name||o.toolName||'')}catch{}})" 2>/dev/null || true)
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:auto-approve:bash] tool=${TOOL_NAME}" >> "$LOG_FILE"
+
+# Don't auto-approve entendi_login (it opens a browser)
+if echo "$TOOL_NAME" | grep -qi "login"; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:auto-approve:bash] skipping login tool" >> "$LOG_FILE"
+  echo '{}'
+  exit 0
+fi
+
+# Auto-approve all other entendi MCP tools
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:auto-approve:bash] auto-approving ${TOOL_NAME}" >> "$LOG_FILE"
+
+cat <<'EOF'
+{"decision":"allow"}
+EOF
+
+exit 0

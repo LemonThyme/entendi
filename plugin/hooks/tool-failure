@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# PostToolUseFailure hook — logs Entendi MCP tool failures and provides recovery guidance
+set -euo pipefail
+
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+mkdir -p "$LOG_DIR"
+
+INPUT=$(cat)
+
+# Extract error details from input JSON
+ERROR_INFO=$(echo "$INPUT" | node -e "
+let d='';
+process.stdin.on('data',c=>d+=c);
+process.stdin.on('end',()=>{
+  try {
+    const o = JSON.parse(d);
+    const name = o.tool_name || o.toolName || 'unknown';
+    const error = o.error || o.tool_error || '';
+    process.stdout.write(JSON.stringify({ name, error: String(error).slice(0, 500) }));
+  } catch {
+    process.stdout.write('{}');
+  }
+});
+" 2>/dev/null || echo '{}')
+
+TOOL_NAME=$(echo "$ERROR_INFO" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{process.stdout.write(JSON.parse(d).name||'unknown')}catch{process.stdout.write('unknown')}})" 2>/dev/null || echo "unknown")
+ERROR_MSG=$(echo "$ERROR_INFO" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{process.stdout.write(JSON.parse(d).error||'')}catch{}})" 2>/dev/null || true)
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:tool-failure:bash] tool=${TOOL_NAME} error=${ERROR_MSG:0:200}" >> "$LOG_FILE"
+
+# Provide recovery guidance based on error type
+GUIDANCE=""
+
+if echo "$ERROR_MSG" | grep -qi "unauthorized\|401\|api key\|forbidden\|403"; then
+  GUIDANCE="[Entendi] Tool '${TOOL_NAME}' failed: authentication error. The API key may be expired or invalid. Try running entendi_login to re-authenticate."
+elif echo "$ERROR_MSG" | grep -qi "ECONNREFUSED\|ENOTFOUND\|timeout\|unreachable\|network\|fetch failed\|503"; then
+  GUIDANCE="[Entendi] Tool '${TOOL_NAME}' failed: API unreachable. The Entendi API may be temporarily unavailable. The tool will work again when connectivity is restored."
+elif echo "$ERROR_MSG" | grep -qi "rate limit\|429\|too many"; then
+  GUIDANCE="[Entendi] Tool '${TOOL_NAME}' failed: rate limit exceeded. Wait a moment before retrying."
+elif [ -n "$ERROR_MSG" ]; then
+  GUIDANCE="[Entendi] Tool '${TOOL_NAME}' failed: ${ERROR_MSG:0:200}. This may be a transient error — retrying once may help."
+fi
+
+if [ -n "$GUIDANCE" ]; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:tool-failure:bash] guidance: ${GUIDANCE:0:200}" >> "$LOG_FILE"
+  ESCAPED=$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" -- "$GUIDANCE" 2>/dev/null || printf '"%s"' "$GUIDANCE")
+  printf '{"suppressOutput":true,"additionalContext":%s}' "$ESCAPED"
+fi
+
+exit 0
