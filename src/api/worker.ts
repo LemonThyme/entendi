@@ -4,6 +4,11 @@
  */
 import { createApp } from './index.js';
 
+/** Minimal R2 bucket interface (avoids @cloudflare/workers-types dependency) */
+interface R2BucketLike {
+  put(key: string, value: string | ReadableStream | ArrayBuffer, options?: Record<string, unknown>): Promise<unknown>;
+}
+
 interface WorkerEnv {
   DATABASE_URL: string;
   BETTER_AUTH_SECRET: string;
@@ -15,7 +20,7 @@ interface WorkerEnv {
   RESEND_API_KEY?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
-  R2_BUCKET?: R2Bucket;
+  R2_BUCKET?: R2BucketLike;
 }
 
 let cachedApp: ReturnType<typeof createApp> | null = null;
@@ -39,7 +44,7 @@ const BACKUP_TABLES = [
   'tutor_sessions',
 ] as const;
 
-async function runBackup(db: import('./db/connection.js').Database, bucket: R2Bucket): Promise<{ tables: number; totalRows: number }> {
+async function runBackup(db: import('./db/connection.js').Database, bucket: R2BucketLike): Promise<{ tables: number; totalRows: number }> {
   const { sql } = await import('drizzle-orm');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   let totalRows = 0;
