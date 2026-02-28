@@ -93,4 +93,41 @@ describeWithDb('Public API routes (integration)', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('GET /privacy returns HTML privacy policy', async () => {
+    const res = await app.request('/privacy');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Privacy Policy');
+    expect(html).toContain('Data We Collect');
+    expect(html).toContain('Account information');
+    expect(html).toContain('Behavioral biometrics');
+    expect(html).toContain('Session cookies');
+  });
+
+  it('GET /terms returns HTML terms of service', async () => {
+    const res = await app.request('/terms');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Terms of Service');
+    expect(html).toContain('Acceptable Use');
+    expect(html).toContain('Account Deletion');
+  });
+
+  it('DELETE /api/me returns 401 when unauthenticated', async () => {
+    const res = await app.request('/api/me', { method: 'DELETE' });
+    expect(res.status).toBe(401);
+  });
+
+  it('Landing page includes SEO meta tags', async () => {
+    const res = await app.request('/');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('meta name="description"');
+    expect(html).toContain('meta property="og:title"');
+    expect(html).toContain('meta property="og:description"');
+    expect(html).toContain('meta property="og:url"');
+    expect(html).toContain('meta property="og:type"');
+    expect(html).toContain('meta name="twitter:card"');
+  });
 });

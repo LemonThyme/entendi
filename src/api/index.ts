@@ -119,6 +119,22 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     return c.json({ user });
   });
 
+  // Delete current user and all associated data (right-to-deletion)
+  app.delete('/api/me', async (c) => {
+    const currentUser = c.get('user');
+    if (!currentUser) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { eq } = await import('drizzle-orm');
+    const { eventAnnotations, user: userTable } = await import('./db/schema.js');
+
+    // Delete event annotations first (no cascade on authorId FK)
+    await db.delete(eventAnnotations).where(eq(eventAnnotations.authorId, currentUser.id));
+    // Delete user row — all other tables cascade
+    await db.delete(userTable).where(eq(userTable.id, currentUser.id));
+
+    return c.json({ ok: true });
+  });
+
   // Routes
   app.route('/api/concepts', conceptRoutes);
   app.route('/api/mastery', masteryRoutes);

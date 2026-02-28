@@ -4,8 +4,19 @@ export function daysSinceLaunch(): number {
   return Math.floor((Date.now() - LAUNCH_DATE.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function nav(active: 'home' | 'press' | 'contact'): string {
-  const link = (href: string, label: string, key: typeof active) =>
+export type PageId = 'home' | 'press' | 'contact' | 'privacy' | 'terms';
+
+export interface PageMeta {
+  description?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogUrl?: string;
+  ogType?: string;
+  twitterCard?: string;
+}
+
+function nav(active: PageId): string {
+  const link = (href: string, label: string, key: PageId) =>
     `<a href="${href}" class="nav-link${active === key ? ' active' : ''}">${label}</a>`;
   return `<nav class="site-nav">
     ${link('/', 'entendi', 'home')}
@@ -17,13 +28,26 @@ function nav(active: 'home' | 'press' | 'contact'): string {
   </nav>`;
 }
 
-export function publicShell(title: string, active: 'home' | 'press' | 'contact', body: string): string {
+function metaTags(meta?: PageMeta): string {
+  if (!meta) return '';
+  const tags: string[] = [];
+  if (meta.description) tags.push(`<meta name="description" content="${meta.description}"/>`);
+  if (meta.ogTitle) tags.push(`<meta property="og:title" content="${meta.ogTitle}"/>`);
+  if (meta.ogDescription) tags.push(`<meta property="og:description" content="${meta.ogDescription}"/>`);
+  if (meta.ogUrl) tags.push(`<meta property="og:url" content="${meta.ogUrl}"/>`);
+  if (meta.ogType) tags.push(`<meta property="og:type" content="${meta.ogType}"/>`);
+  if (meta.twitterCard) tags.push(`<meta name="twitter:card" content="${meta.twitterCard}"/>`);
+  return tags.join('\n  ');
+}
+
+export function publicShell(title: string, active: PageId, body: string, meta?: PageMeta): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title}</title>
+  ${metaTags(meta)}
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a2e'/%3E%3Cpath d='M 19.5 7 C 19.5 3.5 15.5 3.5 15.5 7 L 15.5 22' stroke='white' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='15.5' cy='27' r='2' fill='white'/%3E%3C/svg%3E"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>

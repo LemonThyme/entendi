@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { desc } from 'drizzle-orm';
 import { manifest } from '../../dashboard/manifest.js';
 import { pressMentions } from '../db/schema.js';
-import { daysSinceLaunch, publicShell } from './public-html.js';
+import { daysSinceLaunch, publicShell, type PageMeta } from './public-html.js';
 import type { Env } from '../index.js';
 
 export const dashboardRoutes = new Hono<Env>();
@@ -218,6 +218,15 @@ function getLinkShellHTML(safeCode: string, linkJsHref: string): string {
 </html>`;
 }
 
+const landingMeta: PageMeta = {
+  description: 'Entendi is a comprehension accountability layer for AI-assisted work. It observes concepts as you code with AI and probes your understanding with Socratic questions.',
+  ogTitle: 'Entendi — Know what you know',
+  ogDescription: 'Comprehension accountability for AI-assisted work. Observes concepts, probes understanding, builds a Bayesian knowledge graph.',
+  ogUrl: 'https://entendi.dev',
+  ogType: 'website',
+  twitterCard: 'summary',
+};
+
 function getLandingHTML(): string {
   return publicShell('Entendi — Comprehension accountability for AI-assisted work', 'home', `
   <style>
@@ -298,8 +307,116 @@ function getLandingHTML(): string {
       }
       btn.disabled = false;
     });
-  </script>`);
+  </script>`, landingMeta);
 }
+
+function getPrivacyHTML(): string {
+  return publicShell('Privacy Policy — Entendi', 'privacy', `
+  <style>
+    .legal-page { margin-top: 4rem; margin-bottom: 4rem; }
+    .legal-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+    .legal-page h3 { font-size: 0.95rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    .legal-page p, .legal-page li { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.7; }
+    .legal-page p { margin-bottom: 0.75rem; }
+    .legal-page ul { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .legal-page li { margin-bottom: 0.25rem; }
+    .legal-page a { color: var(--accent); text-decoration: none; }
+    .legal-page a:hover { text-decoration: underline; }
+    .legal-date { color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 1.5rem; }
+  </style>
+  <div class="legal-page">
+    <h2>Privacy Policy</h2>
+    <p class="legal-date">Effective: February 28, 2026</p>
+
+    <h3>What Entendi Does</h3>
+    <p>Entendi is a comprehension accountability layer for AI-assisted work. It observes concepts you encounter while working with AI tools and probes your understanding through Socratic questioning.</p>
+
+    <h3>Data We Collect</h3>
+    <ul>
+      <li><strong>Account information</strong> — email address and display name when you sign up</li>
+      <li><strong>IP address</strong> — recorded in session logs for security and abuse prevention</li>
+      <li><strong>Probe responses</strong> — your text answers to comprehension probes</li>
+      <li><strong>Behavioral biometrics</strong> — response patterns (word count, typing speed, vocabulary complexity) and anomaly scores used to detect integrity issues</li>
+      <li><strong>Session cookies</strong> — used for authentication; expire after 7 days</li>
+      <li><strong>Concept and mastery data</strong> — which concepts you've encountered and your assessed understanding</li>
+    </ul>
+
+    <h3>How We Use Your Data</h3>
+    <p>Your data is used exclusively to provide the Entendi service: tracking comprehension, generating probes, computing mastery scores, and detecting anomalies. We do not sell your data or use it for advertising.</p>
+
+    <h3>Data Sharing</h3>
+    <p>If you belong to an organization on Entendi, your mastery data and assessment history may be visible to organization administrators. We do not share data with third parties except as required by law.</p>
+
+    <h3>Data Retention</h3>
+    <p>Your data is retained as long as your account is active. You may delete your account and all associated data at any time via the account deletion endpoint (DELETE /api/me) or by contacting us.</p>
+
+    <h3>Security</h3>
+    <p>Data is stored in a PostgreSQL database hosted on Neon with encryption at rest and in transit. Probe tokens are HMAC-signed and single-use.</p>
+
+    <h3>Contact</h3>
+    <p>For privacy inquiries, use the <a href="/contact">contact form</a>.</p>
+  </div>`);
+}
+
+function getTermsHTML(): string {
+  return publicShell('Terms of Service — Entendi', 'terms', `
+  <style>
+    .legal-page { margin-top: 4rem; margin-bottom: 4rem; }
+    .legal-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+    .legal-page h3 { font-size: 0.95rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    .legal-page p, .legal-page li { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.7; }
+    .legal-page p { margin-bottom: 0.75rem; }
+    .legal-page ul { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .legal-page li { margin-bottom: 0.25rem; }
+    .legal-page a { color: var(--accent); text-decoration: none; }
+    .legal-page a:hover { text-decoration: underline; }
+    .legal-date { color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 1.5rem; }
+  </style>
+  <div class="legal-page">
+    <h2>Terms of Service</h2>
+    <p class="legal-date">Effective: February 28, 2026</p>
+
+    <h3>Acceptance</h3>
+    <p>By using Entendi, you agree to these terms. If you do not agree, do not use the service.</p>
+
+    <h3>The Service</h3>
+    <p>Entendi provides comprehension accountability for AI-assisted work. It observes concepts in your AI interactions, probes your understanding, and maintains a knowledge graph of your assessed mastery.</p>
+
+    <h3>Your Account</h3>
+    <p>You are responsible for maintaining the security of your account credentials. You must provide accurate information when creating an account.</p>
+
+    <h3>Acceptable Use</h3>
+    <ul>
+      <li>Do not attempt to manipulate or game the comprehension assessment system</li>
+      <li>Do not use automated tools to generate probe responses</li>
+      <li>Do not share account credentials with others</li>
+      <li>Do not attempt to access other users' data</li>
+    </ul>
+
+    <h3>Intellectual Property</h3>
+    <p>Your probe responses and learning data belong to you. Entendi's software, design, and assessment methodology are owned by Entendi.</p>
+
+    <h3>Account Deletion</h3>
+    <p>You may delete your account at any time. Deletion removes all your data including mastery scores, assessment history, probe responses, and behavioral profiles. This action is irreversible.</p>
+
+    <h3>Limitation of Liability</h3>
+    <p>Entendi is provided "as is" without warranty. We are not liable for any damages arising from your use of the service, including but not limited to inaccurate mastery assessments.</p>
+
+    <h3>Changes to Terms</h3>
+    <p>We may update these terms. Continued use after changes constitutes acceptance. Material changes will be communicated via the email associated with your account.</p>
+
+    <h3>Contact</h3>
+    <p>Questions about these terms? Use the <a href="/contact">contact form</a>.</p>
+  </div>`);
+}
+
+dashboardRoutes.get('/privacy', (c) => {
+  return c.html(getPrivacyHTML());
+});
+
+dashboardRoutes.get('/terms', (c) => {
+  return c.html(getTermsHTML());
+});
 
 dashboardRoutes.get('/', (c) => {
   const user = c.get('user');
