@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Stop hook — checks for dangling probes when session ends
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+
+mkdir -p "$LOG_DIR"
+
+# Capture stdin
+INPUT=$(cat)
+
+if [ -z "$INPUT" ]; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:stop:bash] empty stdin, exiting" >> "$LOG_FILE"
+  exit 0
+fi
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:stop:bash] invoking node, input length=${#INPUT}" >> "$LOG_FILE"
+
+# Run node — fire-and-forget, never block session exit
+OUTPUT=""
+STDERR_OUTPUT=""
+EXIT_CODE=0
+OUTPUT=$(echo "$INPUT" | node "${PLUGIN_ROOT}/hooks/stop.js" 2>"${LOG_DIR}/hook-stderr.tmp") || EXIT_CODE=$?
+STDERR_OUTPUT=$(cat "${LOG_DIR}/hook-stderr.tmp" 2>/dev/null || true)
+rm -f "${LOG_DIR}/hook-stderr.tmp"
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:stop:bash] exit=$EXIT_CODE stderr=${STDERR_OUTPUT:0:200}" >> "$LOG_FILE"
+
+exit 0

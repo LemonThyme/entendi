@@ -1,10 +1,16 @@
 /**
  * HTTP client for the Entendi API. Replaces StateManager for the MCP server,
  * delegating all state operations to the production API.
+ *
+ * Includes:
+ * - Retry with exponential backoff and jitter
+ * - Circuit breaker (fail-fast after consecutive failures)
+ * - In-memory response cache for read-only endpoints
  */
 import { appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { ResponseCache } from './response-cache.js';
 
 const LOG_DIR = join(homedir(), '.entendi');
 const LOG_FILE = join(LOG_DIR, 'debug.log');
@@ -22,6 +28,90 @@ function apiLog(message: string, data?: unknown): void {
   } catch {}
 }
 
+// ---------------------------------------------------------------------------
+// Circuit breaker
+// ---------------------------------------------------------------------------
+
+/** Circuit breaker states. */
+export type CircuitState = 'closed' | 'open' | 'half-open';
+
+export interface CircuitBreakerOptions {
+  /** Number of consecutive failures before opening the circuit (default: 5). */
+  failureThreshold?: number;
+  /** Cooldown in ms before allowing a half-open probe request (default: 30_000). */
+  cooldownMs?: number;
+}
+
+export class CircuitBreaker {
+  private state: CircuitState = 'closed';
+  private consecutiveFailures = 0;
+  private openedAt = 0;
+  readonly failureThreshold: number;
+  readonly cooldownMs: number;
+
+  constructor(options?: CircuitBreakerOptions) {
+    this.failureThreshold = options?.failureThreshold ?? 5;
+    this.cooldownMs = options?.cooldownMs ?? 30_000;
+  }
+
+  /** Current circuit state. */
+  getState(): CircuitState {
+    // Auto-transition from open -> half-open after cooldown
+    if (this.state === 'open' && Date.now() - this.openedAt >= this.cooldownMs) {
+      this.transitionTo('half-open');
+    }
+    return this.state;
+  }
+
+  /** Check whether a request is allowed. Returns true if allowed. */
+  allowRequest(): boolean {
+    const current = this.getState();
+    return current === 'closed' || current === 'half-open';
+  }
+
+  /** Record a successful request. Resets the breaker to closed. */
+  recordSuccess(): void {
+    if (this.state !== 'closed') {
+      this.transitionTo('closed');
+    }
+    this.consecutiveFailures = 0;
+  }
+
+  /** Record a failed request. May open the circuit. */
+  recordFailure(): void {
+    this.consecutiveFailures++;
+    if (this.state === 'half-open') {
+      // Half-open probe failed — reopen
+      this.transitionTo('open');
+    } else if (this.consecutiveFailures >= this.failureThreshold) {
+      this.transitionTo('open');
+    }
+  }
+
+  /** Number of consecutive failures. */
+  getConsecutiveFailures(): number {
+    return this.consecutiveFailures;
+  }
+
+  private transitionTo(newState: CircuitState): void {
+    const prev = this.state;
+    this.state = newState;
+    if (newState === 'open') {
+      this.openedAt = Date.now();
+    }
+    if (newState === 'closed') {
+      this.consecutiveFailures = 0;
+    }
+    apiLog(`circuit-breaker ${prev} -> ${newState}`, {
+      consecutiveFailures: this.consecutiveFailures,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Retry helpers
+// ---------------------------------------------------------------------------
+
 /** Retry and timeout configuration for API requests. */
 export interface RetryOptions {
   /** Maximum number of retry attempts (default: 3). */
@@ -38,6 +128,9 @@ export interface ApiClientOptions {
   apiUrl: string;
   apiKey: string;
   retry?: RetryOptions;
+  circuitBreaker?: CircuitBreakerOptions;
+  /** TTL in ms for the read-only response cache (default: 60_000). */
+  cacheTtlMs?: number;
 }
 
 /** Check if an HTTP status code is retryable. */
@@ -63,6 +156,10 @@ function computeBackoffDelay(attempt: number, baseDelayMs: number, jitterFactor:
   return Math.max(0, exponentialDelay + jitter);
 }
 
+// ---------------------------------------------------------------------------
+// API Client
+// ---------------------------------------------------------------------------
+
 export class EntendiApiClient {
   private apiUrl: string;
   private apiKey: string;
@@ -70,6 +167,8 @@ export class EntendiApiClient {
   private baseDelayMs: number;
   private jitterFactor: number;
   private defaultTimeoutMs: number;
+  private circuitBreaker: CircuitBreaker;
+  private cache: ResponseCache;
 
   constructor(options: ApiClientOptions) {
     this.apiUrl = options.apiUrl.replace(/\/$/, '');
@@ -78,6 +177,8 @@ export class EntendiApiClient {
     this.baseDelayMs = options.retry?.baseDelayMs ?? 1000;
     this.jitterFactor = options.retry?.jitterFactor ?? 0.25;
     this.defaultTimeoutMs = options.retry?.timeoutMs ?? 10_000;
+    this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
+    this.cache = new ResponseCache({ ttlMs: options.cacheTtlMs ?? 60_000 });
     apiLog('initialized', { apiUrl: this.apiUrl, maxRetries: this.maxRetries, timeoutMs: this.defaultTimeoutMs });
   }
 
@@ -85,7 +186,24 @@ export class EntendiApiClient {
     return this.apiUrl;
   }
 
+  /** Expose circuit breaker for testing / monitoring. */
+  getCircuitBreaker(): CircuitBreaker {
+    return this.circuitBreaker;
+  }
+
+  /** Expose cache for testing / monitoring. */
+  getCache(): ResponseCache {
+    return this.cache;
+  }
+
   private async request(method: string, path: string, body?: unknown, opts?: { timeoutMs?: number }): Promise<any> {
+    // --- Circuit breaker check ---
+    if (!this.circuitBreaker.allowRequest()) {
+      const msg = `Circuit breaker OPEN — failing fast for ${method} ${path}`;
+      apiLog(msg);
+      throw new Error(msg);
+    }
+
     const url = `${this.apiUrl}${path}`;
     const timeoutMs = opts?.timeoutMs ?? this.defaultTimeoutMs;
 
@@ -133,6 +251,11 @@ export class EntendiApiClient {
             continue;
           }
 
+          // Record failure for circuit breaker (only for server/network errors)
+          if (isRetryableStatus(res.status)) {
+            this.circuitBreaker.recordFailure();
+          }
+
           // Non-retryable 4xx or exhausted retries
           throw new Error(`API ${method} ${path} failed (${res.status}): ${text}`);
         }
@@ -144,6 +267,10 @@ export class EntendiApiClient {
         } else {
           apiLog(`${method} ${path} OK`, { status: res.status, elapsed, result });
         }
+
+        // Record success for circuit breaker
+        this.circuitBreaker.recordSuccess();
+
         return result;
       } catch (err) {
         clearTimeout(timer);
@@ -153,6 +280,7 @@ export class EntendiApiClient {
           lastError = new Error(`API ${method} ${path} timed out after ${timeoutMs}ms`);
           apiLog(`${method} ${path} TIMEOUT`, { timeoutMs, attempt });
           if (attempt < this.maxRetries) continue;
+          this.circuitBreaker.recordFailure();
           throw lastError;
         }
 
@@ -163,12 +291,18 @@ export class EntendiApiClient {
           continue;
         }
 
+        // Record failure for circuit breaker on network errors
+        if (isNetworkError(err)) {
+          this.circuitBreaker.recordFailure();
+        }
+
         // Non-retryable or exhausted retries
         throw err;
       }
     }
 
     // Should not reach here, but just in case
+    this.circuitBreaker.recordFailure();
     throw lastError ?? new Error(`API ${method} ${path} failed after ${this.maxRetries} retries`);
   }
 
@@ -177,7 +311,11 @@ export class EntendiApiClient {
     triggerContext: string;
     primaryConceptId?: string;
   }) {
-    return this.request('POST', '/api/mcp/observe', input);
+    const result = await this.request('POST', '/api/mcp/observe', input);
+    // Invalidate status cache after observe (new concepts may have been created)
+    this.cache.invalidateMatching('/api/mcp/status');
+    this.cache.invalidateMatching('/api/mcp/zpd-frontier');
+    return result;
   }
 
   async recordEvaluation(input: {
@@ -198,7 +336,11 @@ export class EntendiApiClient {
     };
     responseText?: string;
   }) {
-    return this.request('POST', '/api/mcp/record-evaluation', input);
+    const result = await this.request('POST', '/api/mcp/record-evaluation', input);
+    // Invalidate status cache for the evaluated concept and zpd-frontier
+    this.cache.invalidateMatching('/api/mcp/status');
+    this.cache.invalidateMatching('/api/mcp/zpd-frontier');
+    return result;
   }
 
   async startTutor(input: {
@@ -216,7 +358,11 @@ export class EntendiApiClient {
     reasoning?: string;
     misconception?: string;
   }) {
-    return this.request('POST', '/api/mcp/tutor/advance', input);
+    const result = await this.request('POST', '/api/mcp/tutor/advance', input);
+    // Tutor advance may update mastery
+    this.cache.invalidateMatching('/api/mcp/status');
+    this.cache.invalidateMatching('/api/mcp/zpd-frontier');
+    return result;
   }
 
   async dismiss(input: { reason: 'topic_change' | 'busy' | 'claimed_expertise'; note?: string }) {
@@ -225,11 +371,35 @@ export class EntendiApiClient {
 
   async getStatus(conceptId?: string) {
     const query = conceptId ? `?conceptId=${encodeURIComponent(conceptId)}` : '';
-    return this.request('GET', `/api/mcp/status${query}`);
+    const path = `/api/mcp/status${query}`;
+    const cacheKey = ResponseCache.key('GET', path);
+
+    // Check cache first
+    const cached = this.cache.get(cacheKey);
+    if (cached !== undefined) {
+      apiLog(`GET ${path} CACHE_HIT`);
+      return cached;
+    }
+
+    const result = await this.request('GET', path);
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   async getZpdFrontier() {
-    return this.request('GET', '/api/mcp/zpd-frontier');
+    const path = '/api/mcp/zpd-frontier';
+    const cacheKey = ResponseCache.key('GET', path);
+
+    // Check cache first
+    const cached = this.cache.get(cacheKey);
+    if (cached !== undefined) {
+      apiLog(`GET ${path} CACHE_HIT`);
+      return cached;
+    }
+
+    const result = await this.request('GET', path);
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   /** Create a device code for CLI-first auth (no auth required). */

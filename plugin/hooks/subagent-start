@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# SubagentStart hook — injects concept-detection skill into subagents
+# so they also observe and probe concepts encountered during delegated work.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+
+mkdir -p "$LOG_DIR"
+
+log() {
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:subagent-start:bash] $1" >> "$LOG_FILE"
+}
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+SKILL_CONTENT=$(cat "${PLUGIN_ROOT}/skills/concept-detection/SKILL.md" 2>/dev/null || echo "")
+
+if [ -z "$SKILL_CONTENT" ]; then
+  log "concept-detection skill not found, skipping injection"
+  echo '{}'
+  exit 0
+fi
+
+SKILL_ESCAPED=$(escape_for_json "$SKILL_CONTENT")
+
+log "injecting concept-detection skill into subagent (${#SKILL_CONTENT} bytes)"
+
+cat <<EOF
+{
+  "suppressOutput": true,
+  "additionalContext": "${SKILL_ESCAPED}"
+}
+EOF
+
+exit 0

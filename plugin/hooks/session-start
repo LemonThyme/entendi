@@ -91,9 +91,18 @@ SKILL_ESCAPED=$(escape_for_json "$SKILL_CONTENT")
 
 log "injecting concept-detection skill (${#SKILL_CONTENT} bytes)"
 
+# Build status message
+if [ -n "$STARTUP_WARNINGS" ]; then
+  STATUS_MSG=$(escape_for_json "$STARTUP_WARNINGS")
+else
+  STATUS_MSG="Entendi connected"
+fi
+
 # Output JSON — both shapes for compatibility (Cursor + Claude Code)
 cat <<EOF
 {
+  "suppressOutput": true,
+  "statusMessage": "${STATUS_MSG}",
   "additional_context": "${SKILL_ESCAPED}",
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",

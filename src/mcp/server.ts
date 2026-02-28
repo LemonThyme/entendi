@@ -19,7 +19,22 @@ function mcpLog(message: string, data?: unknown): void {
     mcpLogReady = true;
   }
   const ts = new Date().toISOString();
-  const dataStr = data !== undefined ? ` ${JSON.stringify(data)}` : '';
+  let dataStr = '';
+  if (data !== undefined) {
+    if (data instanceof Error) {
+      dataStr = ` ${JSON.stringify({ error: data.message, stack: data.stack })}`;
+    } else if (typeof data === 'object' && data !== null && 'error' in data) {
+      const d = data as Record<string, unknown>;
+      const err = d.error;
+      if (err instanceof Error) {
+        dataStr = ` ${JSON.stringify({ ...d, error: err.message, stack: err.stack })}`;
+      } else {
+        dataStr = ` ${JSON.stringify(data)}`;
+      }
+    } else {
+      dataStr = ` ${JSON.stringify(data)}`;
+    }
+  }
   try {
     appendFileSync(MCP_LOG_FILE, `[${ts}] [mcp] ${message}${dataStr}\n`);
   } catch {}
@@ -86,7 +101,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_observe result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_observe error', { error: String(err) });
+        mcpLog('tool:entendi_observe error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -133,7 +148,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_record_evaluation result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_record_evaluation error', { error: String(err) });
+        mcpLog('tool:entendi_record_evaluation error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -158,7 +173,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_start_tutor result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_start_tutor error', { error: String(err) });
+        mcpLog('tool:entendi_start_tutor error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -191,7 +206,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_advance_tutor result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_advance_tutor error', { error: String(err) });
+        mcpLog('tool:entendi_advance_tutor error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -216,7 +231,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_dismiss result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_dismiss error', { error: String(err) });
+        mcpLog('tool:entendi_dismiss error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -237,7 +252,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_get_status result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_get_status error', { error: String(err) });
+        mcpLog('tool:entendi_get_status error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -256,7 +271,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         mcpLog('tool:entendi_get_zpd_frontier result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
-        mcpLog('tool:entendi_get_zpd_frontier error', { error: String(err) });
+        mcpLog('tool:entendi_get_zpd_frontier error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -284,7 +299,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
           const openCmd = os === 'darwin' ? 'open' : os === 'win32' ? 'cmd' : 'xdg-open';
           const openArgs = os === 'win32' ? ['/c', 'start', verifyUrl] : [verifyUrl];
           execFile(openCmd, openArgs, (err) => {
-            if (err) mcpLog('tool:entendi_login browser open failed', { error: String(err) });
+            if (err) mcpLog('tool:entendi_login browser open failed', { error: err });
           });
 
           const instructions = [
@@ -334,7 +349,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
 
         return { content: [{ type: 'text' as const, text: `Code "${code}" is still pending. Make sure you confirmed in the browser, then call entendi_login with this code again.` }] };
       } catch (err) {
-        mcpLog('tool:entendi_login error', { error: String(err) });
+        mcpLog('tool:entendi_login error', { error: err });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     },
@@ -377,7 +392,7 @@ async function main() {
       await server.close();
       mcpLog(`shutdown complete (${signal})`);
     } catch (err) {
-      mcpLog(`shutdown error`, { error: String(err) });
+      mcpLog(`shutdown error`, { error: err });
     }
     process.exit(0);
   };
