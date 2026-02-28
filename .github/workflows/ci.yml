@@ -25,3 +25,6 @@ jobs:
           test -f dist/plugin/mcp/server.js
           test -f dist/plugin/skills/concept-detection/SKILL.md
       - run: npm test
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
