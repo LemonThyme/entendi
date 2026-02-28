@@ -3,12 +3,24 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-init",
+            "once": true,
+            "statusMessage": "Initializing Entendi..."
+          }
+        ]
+      },
+      {
         "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start",
-            "async": false
+            "async": false,
+            "statusMessage": "Loading comprehension skill..."
           }
         ]
       }
@@ -42,6 +54,86 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/stop",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact",
+            "statusMessage": "Preserving Entendi state..."
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "mcp__entendi__(?!login).*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/auto-approve",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__entendi__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/tool-failure",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/notification",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/config-change",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/task-completed",
+            "timeout": 30
           }
         ]
       }

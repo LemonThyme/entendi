@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# ConfigChange hook — detects and applies Entendi config changes mid-session
+set -euo pipefail
+
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+CONFIG_FILE="${HOME}/.entendi/config.json"
+mkdir -p "$LOG_DIR"
+
+INPUT=$(cat)
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:config-change:bash] config changed" >> "$LOG_FILE"
+
+# Re-read config and update CLAUDE_ENV_FILE if available
+if [ -f "$CONFIG_FILE" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  API_KEY=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));process.stdout.write(c.apiKey||'')}catch{}" 2>/dev/null || true)
+  API_URL=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));process.stdout.write(c.apiUrl||'')}catch{}" 2>/dev/null || true)
+
+  if [ -n "$API_KEY" ]; then
+    echo "ENTENDI_API_KEY=${API_KEY}" >> "$CLAUDE_ENV_FILE"
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:config-change:bash] updated ENTENDI_API_KEY in env" >> "$LOG_FILE"
+  fi
+  if [ -n "$API_URL" ]; then
+    echo "ENTENDI_API_URL=${API_URL}" >> "$CLAUDE_ENV_FILE"
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:config-change:bash] updated ENTENDI_API_URL in env" >> "$LOG_FILE"
+  fi
+fi
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:config-change:bash] done" >> "$LOG_FILE"
+
+printf '{"suppressOutput":true,"additionalContext":"[Entendi] Configuration reloaded."}'
+
+exit 0

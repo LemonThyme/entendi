@@ -96,7 +96,7 @@ if (existsSync(pluginJsonPath)) {
 }
 
 // 2. Copy bundled hook entrypoints (JS bundles + bash wrappers)
-const hookEntrypoints = ['user-prompt-submit.js', 'stop.js'];
+const hookEntrypoints = ['user-prompt-submit.js', 'stop.js', 'pre-compact.js', 'session-end.js', 'notification.js'];
 mkdirSync(join(pluginDir, 'hooks'), { recursive: true });
 for (const file of hookEntrypoints) {
   const src = join('dist', 'hooks', file);
@@ -107,7 +107,11 @@ for (const file of hookEntrypoints) {
 }
 
 // 2b. Ensure bash wrapper scripts and run-hook.cmd are executable
-const hookScripts = ['run-hook.cmd', 'session-start', 'subagent-start', 'user-prompt-submit', 'stop'];
+const hookScripts = [
+  'run-hook.cmd', 'session-init', 'session-start', 'subagent-start', 'user-prompt-submit',
+  'stop', 'session-end', 'pre-compact', 'auto-approve', 'tool-failure',
+  'config-change', 'notification', 'task-completed',
+];
 for (const file of hookScripts) {
   const dest = join(pluginDir, 'hooks', file);
   if (existsSync(dest)) {

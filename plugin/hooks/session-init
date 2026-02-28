@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# SessionStart one-time init hook (once: true)
+# Runs only on first startup — validates API key, checks health, sets env,
+# and checks for plugin updates.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+CONFIG_FILE="${HOME}/.entendi/config.json"
+VERSION_CACHE="${HOME}/.entendi/version-check.json"
+DEFAULT_API_URL="https://entendi-api.tomaskorenblit.workers.dev"
+
+mkdir -p "$LOG_DIR"
+
+log() {
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:session-init:bash] $1" >> "$LOG_FILE"
+}
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+# --- 1. Validate API key and connection health ---
+
+STARTUP_WARNINGS=""
+API_KEY=""
+API_URL="$DEFAULT_API_URL"
+
+if [ -f "$CONFIG_FILE" ]; then
+  API_KEY=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));process.stdout.write(c.apiKey||'')}catch{}" 2>/dev/null || true)
+  CONFIG_URL=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));process.stdout.write(c.apiUrl||'')}catch{}" 2>/dev/null || true)
+  if [ -n "$CONFIG_URL" ]; then
+    API_URL="$CONFIG_URL"
+  fi
+fi
+
+if [ -n "${ENTENDI_API_URL:-}" ]; then
+  API_URL="$ENTENDI_API_URL"
+fi
+
+if [ -z "$API_KEY" ]; then
+  STARTUP_WARNINGS="[Entendi] No API key found. Run entendi_login to link your account."
+  log "no API key in config"
+else
+  log "API key found, checking health at ${API_URL}/health"
+
+  HEALTH_STATUS=""
+  HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 5 "${API_URL}/health" 2>/dev/null) || true
+
+  if [ "$HEALTH_STATUS" = "200" ]; then
+    log "health check passed (HTTP 200)"
+  elif [ -n "$HEALTH_STATUS" ] && [ "$HEALTH_STATUS" != "000" ]; then
+    STARTUP_WARNINGS="[Entendi] API health check returned HTTP ${HEALTH_STATUS}. Some features may be unavailable."
+    log "health check warning: HTTP ${HEALTH_STATUS}"
+  else
+    STARTUP_WARNINGS="[Entendi] Could not reach API at ${API_URL}. Some features may be unavailable."
+    log "health check failed: unreachable"
+  fi
+fi
+
+# --- 2. Persist API key via CLAUDE_ENV_FILE ---
+
+if [ -n "$API_KEY" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "ENTENDI_API_KEY=${API_KEY}" >> "$CLAUDE_ENV_FILE"
+  echo "ENTENDI_API_URL=${API_URL}" >> "$CLAUDE_ENV_FILE"
+  log "wrote ENTENDI_API_KEY and ENTENDI_API_URL to CLAUDE_ENV_FILE"
+fi
+
+# --- 3. Version check (cached 24h) ---
+
+UPDATE_MSG=""
+PLUGIN_VERSION=$(node -e "try{const p=JSON.parse(require('fs').readFileSync('${PLUGIN_ROOT}/.claude-plugin/plugin.json','utf-8'));process.stdout.write(p.version||'')}catch{}" 2>/dev/null || true)
+
+if [ -n "$PLUGIN_VERSION" ]; then
+  CACHE_VALID="false"
+
+  if [ -f "$VERSION_CACHE" ]; then
+    CACHE_TS=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$VERSION_CACHE','utf-8'));process.stdout.write(String(c.checkedAt||0))}catch{process.stdout.write('0')}" 2>/dev/null || echo "0")
+    NOW_TS=$(node -e "process.stdout.write(String(Date.now()))" 2>/dev/null || echo "0")
+    AGE=$(( (NOW_TS - CACHE_TS) / 1000 ))
+
+    if [ "$AGE" -lt 86400 ] 2>/dev/null; then
+      CACHE_VALID="true"
+      LATEST=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$VERSION_CACHE','utf-8'));process.stdout.write(c.latestVersion||'')}catch{}" 2>/dev/null || true)
+    fi
+  fi
+
+  if [ "$CACHE_VALID" = "false" ]; then
+    log "checking latest version from GitHub"
+    LATEST=$(curl -s --connect-timeout 3 --max-time 5 \
+      "https://api.github.com/repos/LemonThyme/entendi/releases/latest" 2>/dev/null \
+      | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const r=JSON.parse(d);process.stdout.write((r.tag_name||'').replace(/^v/,''))}catch{}})" 2>/dev/null) || true
+
+    if [ -n "$LATEST" ]; then
+      node -e "require('fs').writeFileSync('$VERSION_CACHE',JSON.stringify({latestVersion:'$LATEST',currentVersion:'${PLUGIN_VERSION%%+*}',checkedAt:Date.now()}))" 2>/dev/null || true
+      log "version cache updated: current=${PLUGIN_VERSION%%+*} latest=${LATEST}"
+    else
+      log "version check failed (no response from GitHub)"
+    fi
+  fi
+
+  # Compare versions (strip +hash suffix from current)
+  CURRENT_CLEAN="${PLUGIN_VERSION%%+*}"
+  if [ -n "$LATEST" ] && [ "$CURRENT_CLEAN" != "$LATEST" ]; then
+    UPDATE_MSG="[Entendi] Update available: v${CURRENT_CLEAN} → v${LATEST}. Run 'claude plugin update entendi' to update."
+    log "update available: ${CURRENT_CLEAN} -> ${LATEST}"
+  fi
+fi
+
+# --- 4. Build output ---
+
+CONTEXT_PARTS=""
+if [ -n "$STARTUP_WARNINGS" ]; then
+  CONTEXT_PARTS="$STARTUP_WARNINGS"
+fi
+if [ -n "$UPDATE_MSG" ]; then
+  if [ -n "$CONTEXT_PARTS" ]; then
+    CONTEXT_PARTS="${CONTEXT_PARTS}\n${UPDATE_MSG}"
+  else
+    CONTEXT_PARTS="$UPDATE_MSG"
+  fi
+fi
+
+if [ -n "$CONTEXT_PARTS" ]; then
+  ESCAPED=$(escape_for_json "$CONTEXT_PARTS")
+  STATUS=$(escape_for_json "$STARTUP_WARNINGS${UPDATE_MSG:+ | $UPDATE_MSG}")
+else
+  ESCAPED=""
+  STATUS="Entendi initialized"
+fi
+
+log "session-init complete"
+
+cat <<EOF
+{
+  "suppressOutput": true,
+  "statusMessage": "${STATUS:-Entendi initialized}",
+  "additional_context": "${ESCAPED}",
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "${ESCAPED}"
+  }
+}
+EOF
+
+exit 0

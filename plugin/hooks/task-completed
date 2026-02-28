@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# TaskCompleted hook — quality gate for agent team task completion.
+# Checks TypeScript compilation before allowing task to be marked complete.
+# Only active when ENTENDI_QUALITY_GATES=1 is set.
+set -euo pipefail
+
+LOG_DIR="${HOME}/.entendi"
+LOG_FILE="${LOG_DIR}/debug.log"
+mkdir -p "$LOG_DIR"
+
+INPUT=$(cat)
+
+# Skip if quality gates not enabled
+if [ "${ENTENDI_QUALITY_GATES:-}" != "1" ]; then
+  exit 0
+fi
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:task-completed:bash] quality gate checking" >> "$LOG_FILE"
+
+# Check TypeScript compilation
+TSC_OUTPUT=""
+TSC_EXIT=0
+TSC_OUTPUT=$(npx tsc --noEmit 2>&1) || TSC_EXIT=$?
+
+if [ "$TSC_EXIT" -ne 0 ]; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:task-completed:bash] TypeScript check failed" >> "$LOG_FILE"
+  # Exit 2 = block the action with feedback
+  echo "TypeScript compilation failed. Fix type errors before completing this task:" >&2
+  echo "$TSC_OUTPUT" | head -20 >&2
+  exit 2
+fi
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [hook:task-completed:bash] quality gate passed" >> "$LOG_FILE"
+exit 0
