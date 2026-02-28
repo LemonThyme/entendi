@@ -25,7 +25,7 @@ describe('MCP Server', () => {
     expect(server.getApiClient()).toBeDefined();
   });
 
-  it('registers all 8 entendi tools', () => {
+  it('registers all 9 entendi tools', () => {
     const server = createEntendiServer(testOptions);
     const tools = server.getRegisteredTools();
     const toolNames = tools.map((t: { name: string }) => t.name);
@@ -37,7 +37,8 @@ describe('MCP Server', () => {
     expect(toolNames).toContain('entendi_get_status');
     expect(toolNames).toContain('entendi_get_zpd_frontier');
     expect(toolNames).toContain('entendi_login');
-    expect(toolNames).toHaveLength(8);
+    expect(toolNames).toContain('entendi_health_check');
+    expect(toolNames).toHaveLength(9);
   });
 
   it('returns a copy of registered tools (not internal array)', () => {
@@ -51,8 +52,17 @@ describe('MCP Server', () => {
   it('can create multiple independent server instances', () => {
     const server1 = createEntendiServer(testOptions);
     const server2 = createEntendiServer({ apiUrl: 'http://localhost:3457', apiKey: 'other-key' });
-    expect(server1.getRegisteredTools()).toHaveLength(8);
-    expect(server2.getRegisteredTools()).toHaveLength(8);
+    expect(server1.getRegisteredTools()).toHaveLength(9);
+    expect(server2.getRegisteredTools()).toHaveLength(9);
     expect(server1.getApiClient()).not.toBe(server2.getApiClient());
+  });
+
+  it('registers only login and health_check tools when unauthenticated', () => {
+    const server = createEntendiServer({ apiUrl: 'http://localhost:3456' });
+    const tools = server.getRegisteredTools();
+    const toolNames = tools.map((t: { name: string }) => t.name);
+    expect(toolNames).toContain('entendi_login');
+    expect(toolNames).toContain('entendi_health_check');
+    expect(toolNames).toHaveLength(2);
   });
 });

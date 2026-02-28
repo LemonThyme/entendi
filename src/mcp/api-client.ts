@@ -402,6 +402,33 @@ export class EntendiApiClient {
     return result;
   }
 
+  /** Check API health (no auth required). Returns { status, db } from /health. */
+  async healthCheck(): Promise<{ status: string; db: string; error?: string }> {
+    const url = `${this.apiUrl}/health`;
+    apiLog('GET /health (unauthenticated)');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return res.json() as Promise<{ status: string; db: string; error?: string }>;
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Health check timed out after ${this.defaultTimeoutMs}ms`);
+      }
+      throw err;
+    }
+  }
+
+  /** Verify auth by calling /api/me. Returns user info or throws. */
+  async verifyAuth(): Promise<{ user: Record<string, unknown> }> {
+    return this.request('GET', '/api/me');
+  }
+
   /** Create a device code for CLI-first auth (no auth required). */
   async createDeviceCode(): Promise<{ code: string; verifyUrl: string; expiresAt: string }> {
     const url = `${this.apiUrl}/api/auth/device-code`;

@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { execFile } from 'child_process';
-import { appendFileSync, mkdirSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir, platform } from 'os';
 import { join } from 'path';
 import { z } from 'zod';
@@ -89,14 +90,31 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         z.string().optional(),
       ),
     },
-    async (args) => {
+    async (args, extra) => {
       mcpLog('tool:entendi_observe called', args);
+      const progressToken = extra._meta?.progressToken;
       try {
         const result = await api.observe({
           concepts: args.concepts,
           triggerContext: args.triggerContext,
           primaryConceptId: args.primaryConceptId,
         });
+        // Emit progress notification if token was provided and multiple concepts were sent
+        if (progressToken !== undefined && args.concepts.length > 1) {
+          try {
+            await extra.sendNotification({
+              method: 'notifications/progress',
+              params: {
+                progressToken,
+                progress: args.concepts.length,
+                total: args.concepts.length,
+                message: `Processed ${args.concepts.length} concepts`,
+              },
+            } as ServerNotification);
+          } catch (notifErr) {
+            mcpLog('tool:entendi_observe progress notification failed', { error: String(notifErr) });
+          }
+        }
         mcpLog('tool:entendi_observe result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
@@ -328,6 +346,14 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
               mcpLog('tool:entendi_login config save failed', { error: String(saveErr) });
             }
 
+            // Notify client that tool list has changed (new auth tools available)
+            try {
+              mcpServer.sendToolListChanged();
+              mcpLog('tool:entendi_login sent tools/list_changed notification');
+            } catch (notifErr) {
+              mcpLog('tool:entendi_login list_changed notification failed', { error: String(notifErr) });
+            }
+
             const lines = [
               'Device linked successfully!',
               '',
@@ -354,6 +380,65 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
   );
   registeredTools.push({ name: 'entendi_login' });
+
+  // --- Tool 9: entendi_health_check (always available) ---
+  mcpServer.tool(
+    'entendi_health_check',
+    'Check Entendi system health: config file, API key, API reachability, auth validity, and DB connectivity. Works before login to show what is missing.',
+    {},
+    async () => {
+      mcpLog('tool:entendi_health_check called');
+      const configPath = join(homedir(), '.entendi', 'config.json');
+      const checks: Record<string, { ok: boolean; detail: string }> = {};
+
+      // 1. Config file exists
+      const configExists = existsSync(configPath);
+      checks.config = {
+        ok: configExists,
+        detail: configExists ? configPath : 'Not found. Run entendi_login to create.',
+      };
+
+      // 2. API key present
+      const hasApiKey = !!options.apiKey;
+      checks.apiKey = {
+        ok: hasApiKey,
+        detail: hasApiKey ? 'Present' : 'Missing. Run entendi_login to authenticate.',
+      };
+
+      // 3. API reachable + DB connected (via /health)
+      try {
+        const health = await api.healthCheck();
+        checks.apiReachable = { ok: true, detail: `${options.apiUrl} (status: ${health.status})` };
+        checks.database = {
+          ok: health.db === 'connected',
+          detail: health.db === 'connected' ? 'Connected' : `${health.db}: ${health.error ?? 'unknown'}`,
+        };
+      } catch (err) {
+        checks.apiReachable = { ok: false, detail: `${options.apiUrl} — ${String(err)}` };
+        checks.database = { ok: false, detail: 'Cannot check (API unreachable)' };
+      }
+
+      // 4. Auth valid (only if we have an API key and API is reachable)
+      if (hasApiKey && checks.apiReachable.ok) {
+        try {
+          const me = await api.verifyAuth();
+          checks.auth = { ok: true, detail: `Authenticated as ${(me.user as Record<string, unknown>).email ?? 'unknown'}` };
+        } catch (err) {
+          checks.auth = { ok: false, detail: `Auth failed: ${String(err)}` };
+        }
+      } else if (!hasApiKey) {
+        checks.auth = { ok: false, detail: 'Skipped (no API key)' };
+      } else {
+        checks.auth = { ok: false, detail: 'Skipped (API unreachable)' };
+      }
+
+      const allOk = Object.values(checks).every(c => c.ok);
+      const result = { healthy: allOk, checks };
+      mcpLog('tool:entendi_health_check result', result);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+  registeredTools.push({ name: 'entendi_health_check' });
 
   return {
     close: async () => { await mcpServer.close(); },
