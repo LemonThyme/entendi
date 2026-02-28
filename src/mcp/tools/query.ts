@@ -1,6 +1,6 @@
-import { StateManager } from '../../core/state-manager.js';
-import { pMastery } from '../../schemas/types.js';
 import { grmFisherInformation } from '../../core/probabilistic-model.js';
+import type { StateManager } from '../../core/state-manager.js';
+import { pMastery } from '../../schemas/types.js';
 
 // --- Types ---
 

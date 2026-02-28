@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { masteryRange, masteryLabel, trendDirection } from '../../src/core/mastery-display.js';
+import { describe, expect, it } from 'vitest';
+import { masteryLabel, masteryRange, trendDirection } from '../../src/core/mastery-display.js';
 
 describe('masteryRange', () => {
   it('returns clamped range for high uncertainty', () => {

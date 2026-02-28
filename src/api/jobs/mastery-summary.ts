@@ -3,10 +3,10 @@
  * Sends periodic email summaries to users with their mastery progress.
  * Triggered by Cloudflare Workers Cron Trigger (Monday 8AM UTC).
  */
-import { eq, and, gte, desc, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
-import { user, userConceptStates, assessmentEvents, concepts, emailPreferences } from '../db/schema.js';
-import { sendEmail, EmailTemplate } from '../lib/email.js';
+import { assessmentEvents, concepts, emailPreferences, user, userConceptStates } from '../db/schema.js';
+import { EmailTemplate, sendEmail } from '../lib/email.js';
 import { generateSparklineSvg } from '../lib/sparkline.js';
 
 export interface MasterySummaryResult {

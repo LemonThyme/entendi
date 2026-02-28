@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, smallint, boolean, timestamp, jsonb, primaryKey, index, serial, date } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, pgTable, primaryKey, real, serial, smallint, text, timestamp } from 'drizzle-orm/pg-core';
 
 // --- Auth (Better Auth) ---
 

@@ -1,5 +1,5 @@
 // tests/mcp/api-client-resilience.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EntendiApiClient } from '../../src/mcp/api-client.js';
 
 // Suppress file-system logging during tests

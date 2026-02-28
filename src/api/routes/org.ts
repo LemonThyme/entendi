@@ -1,12 +1,11 @@
-import { Hono } from 'hono';
-import { eq, and, sql, inArray, desc } from 'drizzle-orm';
-import { member, user, organization, userConceptStates, assessmentEvents, concepts, eventAnnotations, dismissalEvents } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
-import { pMastery } from '../../schemas/types.js';
-import { z } from 'zod';
-import type { Env } from '../index.js';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
-import type { Database } from '../db/connection.js';
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { pMastery } from '../../schemas/types.js';
+import { assessmentEvents, concepts, dismissalEvents, eventAnnotations, member, organization, user, userConceptStates } from '../db/schema.js';
+import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 /** Build a SQL fragment for `<col> IN (...)` that works with parameterized queries */
 function sqlInIds(col: string, ids: string[]) {
@@ -586,8 +585,8 @@ orgRoutes.get('/events/:eventId', async (c) => {
   const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
-  const eventId = parseInt(c.req.param('eventId'));
-  if (isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
+  const eventId = parseInt(c.req.param('eventId'), 10);
+  if (Number.isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
 
   // Fetch event + concept info
   const [event] = await db.select({
@@ -641,8 +640,8 @@ orgRoutes.post('/events/:eventId/annotations', async (c) => {
   const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
-  const eventId = parseInt(c.req.param('eventId'));
-  if (isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
+  const eventId = parseInt(c.req.param('eventId'), 10);
+  if (Number.isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
 
   // Verify caller is admin/owner
   const [callerMembership] = await db.select({ role: member.role }).from(member)
@@ -679,8 +678,8 @@ orgRoutes.delete('/annotations/:annotationId', async (c) => {
   const db = c.get('db');
   const currentUser = c.get('user')!;
 
-  const annotationId = parseInt(c.req.param('annotationId'));
-  if (isNaN(annotationId)) return c.json({ error: 'Invalid annotation ID' }, 400);
+  const annotationId = parseInt(c.req.param('annotationId'), 10);
+  if (Number.isNaN(annotationId)) return c.json({ error: 'Invalid annotation ID' }, 400);
 
   const [annotation] = await db.select().from(eventAnnotations)
     .where(eq(eventAnnotations.id, annotationId));

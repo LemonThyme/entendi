@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { rateLimit, resetRateLimitStore } from '../../../src/api/middleware/rate-limit.js';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Env } from '../../../src/api/index.js';
+import { rateLimit, resetRateLimitStore } from '../../../src/api/middleware/rate-limit.js';
 
 function createTestApp(max: number, windowMs = 60_000) {
   const app = new Hono<Env>();

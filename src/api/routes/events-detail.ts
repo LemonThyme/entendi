@@ -1,8 +1,8 @@
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
 import { assessmentEvents, concepts } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const eventDetailRoutes = new Hono<Env>();
 
@@ -12,8 +12,8 @@ eventDetailRoutes.use('*', requireAuth);
 eventDetailRoutes.get('/:eventId', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const eventId = parseInt(c.req.param('eventId'));
-  if (isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
+  const eventId = parseInt(c.req.param('eventId'), 10);
+  if (Number.isNaN(eventId)) return c.json({ error: 'Invalid event ID' }, 400);
 
   const [event] = await db.select({
     id: assessmentEvents.id,

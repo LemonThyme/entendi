@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCheckoutSession, resetStripeInstance } from '../../src/api/lib/stripe.js';
 
 const mockCreate = vi.fn().mockResolvedValue({
@@ -11,7 +11,6 @@ vi.mock('stripe', () => {
     default: class MockStripe {
       checkout = { sessions: { create: mockCreate } };
       webhooks = { constructEvent: vi.fn() };
-      constructor(_key: string, _opts: any) {}
     },
   };
 });

@@ -8,8 +8,8 @@
  * - In-memory response cache for read-only endpoints
  */
 import { appendFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
 import { homedir } from 'os';
+import { join } from 'path';
 import { ResponseCache } from './response-cache.js';
 
 const LOG_DIR = join(homedir(), '.entendi');
@@ -151,7 +151,7 @@ function isNetworkError(err: unknown): boolean {
 
 /** Compute delay with exponential backoff and jitter. */
 function computeBackoffDelay(attempt: number, baseDelayMs: number, jitterFactor: number): number {
-  const exponentialDelay = baseDelayMs * Math.pow(2, attempt);
+  const exponentialDelay = baseDelayMs * 2 ** attempt;
   const jitter = exponentialDelay * jitterFactor * (2 * Math.random() - 1); // ±jitterFactor
   return Math.max(0, exponentialDelay + jitter);
 }

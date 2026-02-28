@@ -1,12 +1,12 @@
 // tests/core/response-integrity.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  extractResponseFeatures,
   computeIntegrityScore,
-  updateResponseProfile,
-  type UserResponseProfile,
-  type IntegrityThresholds,
   DEFAULT_THRESHOLDS,
+  extractResponseFeatures,
+  type IntegrityThresholds,
+  type UserResponseProfile,
+  updateResponseProfile,
 } from '../../src/core/response-integrity.js';
 
 describe('extractResponseFeatures', () => {

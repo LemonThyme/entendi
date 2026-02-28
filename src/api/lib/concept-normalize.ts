@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { conceptAliases } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
+import { conceptAliases } from '../db/schema.js';
 
 /**
  * Deterministic concept ID normalization.
@@ -16,7 +16,7 @@ import type { Database } from '../db/connection.js';
 export function normalizeConcept(raw: string): string {
   return raw
     .toLowerCase()
-    .replace(/[\/\._ ]/g, '-')
+    .replace(/[/._ ]/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 200);

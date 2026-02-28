@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { describe, expect, it } from 'vitest';
 
 const pluginDir = join(process.cwd(), 'dist', 'plugin');
 
@@ -18,6 +18,7 @@ describe('plugin build output', () => {
       readFileSync(join(pluginDir, '.mcp.json'), 'utf-8'),
     );
     expect(mcp.entendi).toBeDefined();
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: testing literal plugin variable placeholder
     expect(mcp.entendi.args[0]).toContain('${CLAUDE_PLUGIN_ROOT}');
   });
 

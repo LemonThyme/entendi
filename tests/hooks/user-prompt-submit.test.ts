@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { handleUserPromptSubmit, detectTeachMePattern, detectLoginPattern } from '../../src/hooks/user-prompt-submit.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { detectLoginPattern, detectTeachMePattern, handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 import { loadConfig } from '../../src/shared/config.js';
 

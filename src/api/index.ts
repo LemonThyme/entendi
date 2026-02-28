@@ -1,22 +1,22 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { conceptRoutes } from './routes/concepts.js';
-import { masteryRoutes } from './routes/mastery.js';
-import { mcpRoutes } from './routes/mcp.js';
-import { historyRoutes } from './routes/history.js';
-import { orgRoutes } from './routes/org.js';
-import { dashboardRoutes } from './routes/dashboard.js';
-import { courseRoutes } from './routes/courses.js';
-import { deviceCodeRoutes } from './routes/device-code.js';
+import { createDb, type Database } from './db/connection.js';
+import { type Auth, createAuth } from './lib/auth.js';
+import { rateLimit } from './middleware/rate-limit.js';
+import { analyticsRoutes } from './routes/analytics.js';
 import { billingRoutes } from './routes/billing.js';
-import { preferencesRoutes } from './routes/preferences.js';
+import { conceptRoutes } from './routes/concepts.js';
+import { courseRoutes } from './routes/courses.js';
+import { dashboardRoutes } from './routes/dashboard.js';
+import { deviceCodeRoutes } from './routes/device-code.js';
 import { eventRoutes } from './routes/events.js';
 import { eventDetailRoutes } from './routes/events-detail.js';
-import { analyticsRoutes } from './routes/analytics.js';
+import { historyRoutes } from './routes/history.js';
+import { masteryRoutes } from './routes/mastery.js';
+import { mcpRoutes } from './routes/mcp.js';
+import { orgRoutes } from './routes/org.js';
+import { preferencesRoutes } from './routes/preferences.js';
 import { publicRoutes } from './routes/public.js';
-import { createDb, type Database } from './db/connection.js';
-import { createAuth, type Auth } from './lib/auth.js';
-import { rateLimit } from './middleware/rate-limit.js';
 
 export type Env = {
   Variables: {

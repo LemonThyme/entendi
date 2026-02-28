@@ -1,7 +1,7 @@
-import { Parser, Language } from 'web-tree-sitter';
 import { existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Language, Parser } from 'web-tree-sitter';
 import type { ConceptSpecificity, ExtractedConcept } from '../schemas/types.js';
 
 // Re-export the ExtractedConcept type with ast signal for convenience

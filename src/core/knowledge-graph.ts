@@ -1,13 +1,13 @@
 import {
   type ConceptNode,
-  type UserConceptState,
+  createEmptyGraphState,
+  createUserConceptState,
   type KnowledgeGraphState,
   type NoveltyLevel,
-  createUserConceptState,
-  createEmptyGraphState,
   pMastery,
+  type UserConceptState,
 } from '../schemas/types.js';
-import { retrievability, grmFisherInformation } from './probabilistic-model.js';
+import { grmFisherInformation, retrievability } from './probabilistic-model.js';
 
 export class KnowledgeGraph {
   private state: KnowledgeGraphState;

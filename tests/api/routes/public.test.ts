@@ -1,8 +1,9 @@
 import { config } from 'dotenv';
+
 config();
 
-import { describe, it, expect } from 'vitest';
-import { waitlistSignups, pressMentions, contactSubmissions } from '../../../src/api/db/schema.js';
+import { describe, expect, it } from 'vitest';
+import { contactSubmissions, pressMentions, waitlistSignups } from '../../../src/api/db/schema.js';
 import { createApp } from '../../../src/api/index.js';
 
 describe('Public page schema', () => {

@@ -1,10 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { organization, apiKey, bearer } from 'better-auth/plugins';
-import { eq, and } from 'drizzle-orm';
+import { apiKey, bearer, organization } from 'better-auth/plugins';
+import { and, eq } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import { invitation, member } from '../db/schema.js';
-import { sendEmail, EmailTemplate } from './email.js';
+import { EmailTemplate, sendEmail } from './email.js';
 
 function buildSocialProviders(): Record<string, { clientId: string; clientSecret: string }> | undefined {
   const providers: Record<string, { clientId: string; clientSecret: string }> = {};

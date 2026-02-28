@@ -1,18 +1,19 @@
 // ECharts tree-shaken import for analytics charts
 // Only import the chart types and components we need
-import * as echarts from "echarts/core";
-import { LineChart, BarChart, RadarChart, HeatmapChart, GraphChart } from "echarts/charts";
+
+import { BarChart, GraphChart, HeatmapChart, LineChart, RadarChart } from "echarts/charts";
 import {
-  TitleComponent,
-  TooltipComponent,
+  CalendarComponent,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
-  CalendarComponent,
-  VisualMapComponent,
-  DataZoomComponent,
-  ToolboxComponent,
   RadarComponent,
+  TitleComponent,
+  ToolboxComponent,
+  TooltipComponent,
+  VisualMapComponent,
 } from "echarts/components";
+import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 
 echarts.use([

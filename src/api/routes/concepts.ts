@@ -1,8 +1,8 @@
+import { eq, ilike, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { eq, sql, ilike, or } from 'drizzle-orm';
-import { concepts, conceptEdges } from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
+import { conceptEdges, concepts } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const conceptRoutes = new Hono<Env>();
 
@@ -45,7 +45,7 @@ conceptRoutes.post('/', requireAuth, async (c) => {
   if (!body.id) return c.json({ error: 'id is required' }, 400);
 
   // Normalize ID: lowercase, hyphens
-  const id = body.id.toLowerCase().replace(/[\s\/]+/g, '-').replace(/[^a-z0-9\-_.@]/g, '');
+  const id = body.id.toLowerCase().replace(/[\s/]+/g, '-').replace(/[^a-z0-9\-_.@]/g, '');
 
   const [existing] = await db.select().from(concepts).where(eq(concepts.id, id));
 
@@ -91,7 +91,7 @@ conceptRoutes.post('/batch', requireAuth, async (c) => {
 
   const results: any[] = [];
   for (const item of body.concepts) {
-    const id = item.id.toLowerCase().replace(/[\s\/]+/g, '-').replace(/[^a-z0-9\-_.@]/g, '');
+    const id = item.id.toLowerCase().replace(/[\s/]+/g, '-').replace(/[^a-z0-9\-_.@]/g, '');
 
     await db.insert(concepts).values({
       id,

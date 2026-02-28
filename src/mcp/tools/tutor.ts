@@ -1,9 +1,9 @@
-import type { StateManager } from '../../core/state-manager.js';
-import type { RubricScore, TutorPhase } from '../../schemas/types.js';
-import { createTutorSession, createTutorExchange, pMastery } from '../../schemas/types.js';
-import { advanceTutorPhase, isPhaseScored } from '../../core/tutor-session.js';
 import { loadConfig, type ResolvedConfig } from '../../config/config-loader.js';
-import { writePendingAction, clearPendingAction } from '../pending-action.js';
+import type { StateManager } from '../../core/state-manager.js';
+import { advanceTutorPhase, isPhaseScored } from '../../core/tutor-session.js';
+import type { RubricScore, TutorPhase } from '../../schemas/types.js';
+import { createTutorExchange, createTutorSession, pMastery } from '../../schemas/types.js';
+import { clearPendingAction, writePendingAction } from '../pending-action.js';
 import { applyBayesianUpdate } from './shared-update.js';
 
 // --- Public types ---
@@ -238,9 +238,9 @@ export function handleAdvanceTutor(
 // --- handleDismiss ---
 
 export function handleDismiss(
-  input: DismissInput,
+  _input: DismissInput,
   sm: StateManager,
-  userId: string,
+  _userId: string,
   dataDir?: string,
 ): DismissResult {
   const resolvedDataDir = dataDir ?? sm.getDataDir();

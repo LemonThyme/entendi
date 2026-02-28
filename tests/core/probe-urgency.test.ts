@@ -1,6 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { probeUrgency, type ProbeUrgencyInput } from '../../src/core/probe-urgency.js';
-import { retrievability } from '../../src/core/probabilistic-model.js';
+import { describe, expect, it } from 'vitest';
+import { type ProbeUrgencyInput, probeUrgency } from '../../src/core/probe-urgency.js';
 
 describe('probeUrgency', () => {
   const baseInput: ProbeUrgencyInput = {

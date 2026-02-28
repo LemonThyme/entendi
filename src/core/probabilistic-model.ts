@@ -1,4 +1,4 @@
-import { type MasteryState, type RubricScore, type GRMItemParams, DEFAULT_GRM_PARAMS, pMastery } from '../schemas/types.js';
+import { DEFAULT_GRM_PARAMS, type GRMItemParams, type MasteryState, pMastery, type RubricScore } from '../schemas/types.js';
 
 // FSRS-4.5 simplified constants
 const DECAY = -0.5;
@@ -8,7 +8,7 @@ const FACTOR = 19 / 81; // calibrated so R(S, S) = 0.9
 export function retrievability(t: number, S: number): number {
   if (t <= 0) return 1.0;
   if (S <= 0) return 0.0;
-  return Math.pow(1 + FACTOR * t / S, DECAY);
+  return (1 + FACTOR * t / S) ** DECAY;
 }
 
 const PRIOR_MU = 0.0;
@@ -39,7 +39,7 @@ export function bayesianUpdate(mastery: MasteryState, score: RubricScore): Maste
 export function fsrsStabilityAfterSuccess(S: number, D: number, R: number, grade: 1 | 2 | 3 | 4): number {
   const hardPenalty = grade === 2 ? 0.6 : 1;
   const easyBonus = grade === 4 ? 1.9 : 1;
-  const newS = S * (1 + Math.exp(1.87) * Math.pow(11 - D, 1) * Math.pow(S, -0.17) * (Math.exp(0.8 * (1 - R)) - 1) * hardPenalty * easyBonus);
+  const newS = S * (1 + Math.exp(1.87) * (11 - D) ** 1 * S ** -0.17 * (Math.exp(0.8 * (1 - R)) - 1) * hardPenalty * easyBonus);
   return Math.max(0.1, newS);
 }
 

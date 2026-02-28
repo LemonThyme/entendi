@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
-import { handleObserve, type ObserveInput, type ObserveOutput } from '../../../src/mcp/tools/observe.js';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { StateManager } from '../../../src/core/state-manager.js';
-import { createConceptNode } from '../../../src/schemas/types.js';
 import { readPendingAction } from '../../../src/mcp/pending-action.js';
+import { handleObserve, type ObserveInput, } from '../../../src/mcp/tools/observe.js';
+import { createConceptNode } from '../../../src/schemas/types.js';
 
 describe('entendi_observe', () => {
   let dataDir: string;

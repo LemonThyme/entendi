@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createDefaultOrgPolicy, createDefaultUserPreferences, type OrgPolicy, type UserPreferences } from './org-policy.js';
 

@@ -1,6 +1,6 @@
-import { join } from 'path';
 import { appendFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
+import { join } from 'path';
 
 /** Read all stdin as a string (hooks receive JSON on stdin). */
 export async function readStdin(): Promise<string> {

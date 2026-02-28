@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getOrgIntegritySettings } from '../../src/api/lib/org-integrity-settings.js';
 
 // Mock drizzle query builder (same pattern as org-rate-limits.test.ts)

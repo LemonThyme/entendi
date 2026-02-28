@@ -1,17 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  retrievability,
-  decayPrior,
   bayesianUpdate,
-  fsrsStabilityAfterSuccess,
+  decayPrior,
   fsrsDifficultyUpdate,
-  mapRubricToFsrsGrade,
-  grmCategoryProbs,
+  fsrsStabilityAfterSuccess,
   grmBayesianUpdate,
-  grmUpdate,
+  grmCategoryProbs,
   grmFisherInformation,
+  grmUpdate,
+  mapRubricToFsrsGrade,
+  retrievability,
 } from '../../src/core/probabilistic-model.js';
-import { createInitialMastery, createInitialMemory, type GRMItemParams } from '../../src/schemas/types.js';
+import { createInitialMastery, type GRMItemParams } from '../../src/schemas/types.js';
 
 describe('retrievability', () => {
   it('returns ~0.9 when t equals stability', () => {

@@ -1,16 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { StateManager } from '../../../src/core/state-manager.js';
+import { readPendingAction, writePendingAction } from '../../../src/mcp/pending-action.js';
 import {
   handleRecordEvaluation,
   type RecordEvaluationInput,
-  type RecordEvaluationOutput,
 } from '../../../src/mcp/tools/record-evaluation.js';
-import { StateManager } from '../../../src/core/state-manager.js';
-import { createConceptNode, pMastery } from '../../../src/schemas/types.js';
-import { writePendingAction, readPendingAction } from '../../../src/mcp/pending-action.js';
-import { loadConfig } from '../../../src/config/config-loader.js';
+import { createConceptNode, } from '../../../src/schemas/types.js';
 
 describe('entendi_record_evaluation', () => {
   let dataDir: string;
@@ -380,7 +378,7 @@ describe('entendi_record_evaluation', () => {
     // Compare to what a full (unattenuated) probe update would give
     // The tutored update should be smaller than a full update
     // Reset and do the same with a probe to compare
-    const sm2 = new StateManager(dataDir, userId);
+    const _sm2 = new StateManager(dataDir, userId);
     // sm2 will load the state with the tutor_phase4 update already applied
     // Instead, let's just verify the mastery moved in the right direction but not as much
     // Since we went from score 0 (decreasing) to score 3 (increasing), mastery should increase from afterProbeMu

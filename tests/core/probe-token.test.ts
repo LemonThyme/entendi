@@ -1,5 +1,5 @@
 // tests/core/probe-token.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createProbeToken, verifyProbeToken } from '../../src/core/probe-token.js';
 
 const SECRET = 'test-secret-at-least-32-characters-long-for-hmac';

@@ -1,5 +1,5 @@
 // tests/core/anomaly-detection.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { computeAnomalySignals } from '../../src/core/anomaly-detection.js';
 
 describe('anomaly-detection', () => {

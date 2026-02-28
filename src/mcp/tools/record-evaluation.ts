@@ -1,7 +1,7 @@
-import type { StateManager } from '../../core/state-manager.js';
-import type { RubricScore } from '../../schemas/types.js';
-import { shouldOfferTutor } from '../../core/tutor-session.js';
 import { loadConfig, type ResolvedConfig } from '../../config/config-loader.js';
+import type { StateManager } from '../../core/state-manager.js';
+import { shouldOfferTutor } from '../../core/tutor-session.js';
+import type { RubricScore } from '../../schemas/types.js';
 import { clearPendingAction, writePendingAction } from '../pending-action.js';
 import { applyBayesianUpdate } from './shared-update.js';
 

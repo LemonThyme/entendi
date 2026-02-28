@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  buildProbePrompt,
   buildEvaluationPrompt,
-  parseProbeResponse,
+  buildProbePrompt,
   parseEvaluationResponse,
+  parseProbeResponse,
 } from '../../src/core/probe-engine.js';
 
 describe('buildProbePrompt', () => {

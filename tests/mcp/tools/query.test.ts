@@ -1,15 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { StateManager } from '../../../src/core/state-manager.js';
 import {
   handleGetStatus,
   handleGetZPDFrontier,
-  type GetStatusInput,
-  type GetStatusOutput,
-  type GetZPDFrontierOutput,
 } from '../../../src/mcp/tools/query.js';
-import { StateManager } from '../../../src/core/state-manager.js';
 import { createConceptNode, pMastery } from '../../../src/schemas/types.js';
 
 describe('entendi_get_status', () => {

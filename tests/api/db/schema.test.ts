@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import {
-  user, session, account, verification, organization, member, invitation, apikey,
-  concepts, conceptEdges, userConceptStates, assessmentEvents,
-  tutorSessions, tutorExchanges, probeSessions, pendingActions,
-} from '../../../src/api/db/schema.js';
 import { getTableName } from 'drizzle-orm';
+import { describe, expect, it } from 'vitest';
+import {account, apikey,assessmentEvents,conceptEdges, 
+  concepts, invitation, member, organization, pendingActions,probeSessions, session, tutorExchanges, 
+  tutorSessions, 
+  user, userConceptStates, verification, 
+} from '../../../src/api/db/schema.js';
 
 describe('Drizzle schema', () => {
   const appTables = [concepts, conceptEdges, userConceptStates, assessmentEvents, tutorSessions, tutorExchanges, probeSessions, pendingActions];
@@ -13,7 +13,7 @@ describe('Drizzle schema', () => {
   it('defines all 16 tables', () => {
     const all = [...appTables, ...authTables];
     expect(all).toHaveLength(16);
-    all.forEach(t => expect(getTableName(t)).toBeDefined());
+    for (const t of all) expect(getTableName(t)).toBeDefined();
   });
 
   it('concepts table has correct name', () => {

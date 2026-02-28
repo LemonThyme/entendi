@@ -1,6 +1,6 @@
-import { Hono } from 'hono';
 import { desc } from 'drizzle-orm';
-import { waitlistSignups, pressMentions, contactSubmissions } from '../db/schema.js';
+import { Hono } from 'hono';
+import { contactSubmissions, pressMentions, waitlistSignups } from '../db/schema.js';
 import type { Env } from '../index.js';
 
 export const publicRoutes = new Hono<Env>();

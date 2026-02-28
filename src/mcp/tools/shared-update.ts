@@ -1,15 +1,15 @@
-import type { StateManager } from '../../core/state-manager.js';
-import type { RubricScore, AssessmentEvent } from '../../schemas/types.js';
-import { pMastery } from '../../schemas/types.js';
+import type { ResolvedConfig } from '../../config/config-loader.js';
 import {
+  decayPrior,
+  fsrsDifficultyUpdate,
+  fsrsStabilityAfterSuccess,
   grmUpdate,
   mapRubricToFsrsGrade,
-  fsrsStabilityAfterSuccess,
-  fsrsDifficultyUpdate,
   retrievability,
-  decayPrior,
 } from '../../core/probabilistic-model.js';
-import type { ResolvedConfig } from '../../config/config-loader.js';
+import type { StateManager } from '../../core/state-manager.js';
+import type { AssessmentEvent, RubricScore } from '../../schemas/types.js';
+import { pMastery } from '../../schemas/types.js';
 
 // --- Public types ---
 

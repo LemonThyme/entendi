@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { dailySnapshots, zpdSnapshots, conceptAnalytics } from '../../../src/api/db/schema.js';
+import { describe, expect, it } from 'vitest';
+import { conceptAnalytics, dailySnapshots, zpdSnapshots } from '../../../src/api/db/schema.js';
 
 describe('Analytics schema tables', () => {
   it('dailySnapshots has expected columns', () => {

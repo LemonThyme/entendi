@@ -1,31 +1,31 @@
-import { Hono } from 'hono';
-import { eq, and, sql } from 'drizzle-orm';
-import { z } from 'zod';
-import {
-  concepts, conceptEdges, userConceptStates, assessmentEvents,
-  tutorSessions, tutorExchanges, probeSessions, pendingActions,
-  probeTokens, dismissalEvents, responseProfiles,
-} from '../db/schema.js';
-import { requireAuth } from '../middleware/auth.js';
-import { createProbeToken, verifyProbeToken, type ProbeToken } from '../../core/probe-token.js';
-import { extractResponseFeatures, computeIntegrityScore, updateResponseProfile, type UserResponseProfile } from '../../core/response-integrity.js';
-import {
-  grmUpdate, grmFisherInformation, retrievability, decayPrior,
-  mapRubricToFsrsGrade, fsrsStabilityAfterSuccess, fsrsDifficultyUpdate,
-} from '../../core/probabilistic-model.js';
-import { probeUrgency } from '../../core/probe-urgency.js';
-import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
-import { updateAnalyticsSnapshots } from '../../core/analytics-snapshots.js';
-import { selectProbeCandidate } from '../../core/probe-selection.js';
-import { resolveConcept } from '../lib/concept-pipeline.js';
-import { resolveConceptId } from '../lib/concept-normalize.js';
-import { getOrgRateLimits } from '../lib/org-rate-limits.js';
-import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
-import { conceptSimilarity } from '../lib/embeddings.js';
-import { pMastery, DEFAULT_GRM_PARAMS, type RubricScore, type GRMItemParams } from '../../schemas/types.js';
-import type { Env } from '../index.js';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { updateAnalyticsSnapshots } from '../../core/analytics-snapshots.js';
+import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
+import {decayPrior,fsrsDifficultyUpdate,fsrsStabilityAfterSuccess, grmFisherInformation, 
+  grmUpdate, 
+  mapRubricToFsrsGrade, retrievability, 
+} from '../../core/probabilistic-model.js';
+import { selectProbeCandidate } from '../../core/probe-selection.js';
+import { createProbeToken, type ProbeToken, verifyProbeToken } from '../../core/probe-token.js';
+import { probeUrgency } from '../../core/probe-urgency.js';
+import { computeIntegrityScore, extractResponseFeatures, type UserResponseProfile, updateResponseProfile } from '../../core/response-integrity.js';
+import { type GRMItemParams, pMastery, type RubricScore } from '../../schemas/types.js';
 import type { Database } from '../db/connection.js';
+import {assessmentEvents,conceptEdges, 
+  concepts, dismissalEvents, pendingActions,probeSessions, 
+  probeTokens, responseProfiles,tutorExchanges, 
+  tutorSessions, userConceptStates, 
+} from '../db/schema.js';
+import type { Env } from '../index.js';
+import { resolveConceptId } from '../lib/concept-normalize.js';
+import { resolveConcept } from '../lib/concept-pipeline.js';
+import { conceptSimilarity } from '../lib/embeddings.js';
+import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
+import { getOrgRateLimits } from '../lib/org-rate-limits.js';
+import { requireAuth } from '../middleware/auth.js';
 
 let _probeTokenSecret: string | undefined;
 function getProbeTokenSecret(): string {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { createEntendiServer, type EntendiServer } from '../../src/mcp/server.js';
+import { describe, expect, it } from 'vitest';
+import { createEntendiServer, } from '../../src/mcp/server.js';
 
 const testOptions = { apiUrl: 'http://localhost:3456', apiKey: 'test-key' };
 

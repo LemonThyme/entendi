@@ -15,7 +15,7 @@
  *   - Domain names align with package-concepts.ts where possible
  */
 
-import { createConceptNode, type TaxonomySeedEntry, type ConceptNode, type ConceptEdge, type ConceptSpecificity, type EdgeType } from '../schemas/types.js';
+import { type ConceptEdge, type ConceptNode, type ConceptSpecificity, createConceptNode, type EdgeType, type TaxonomySeedEntry } from '../schemas/types.js';
 
 // ── Shorthand helpers ─────────────────────────────────────────────────
 

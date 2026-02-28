@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { StateManager } from '../../src/core/state-manager.js';
-import { createConceptNode, pMastery } from '../../src/schemas/types.js';
-import { handleObserve } from '../../src/mcp/tools/observe.js';
-import { handleRecordEvaluation } from '../../src/mcp/tools/record-evaluation.js';
-import { handleStartTutor, handleAdvanceTutor, handleDismiss } from '../../src/mcp/tools/tutor.js';
-import { handleGetStatus, handleGetZPDFrontier } from '../../src/mcp/tools/query.js';
 import { readPendingAction } from '../../src/mcp/pending-action.js';
+import { handleObserve } from '../../src/mcp/tools/observe.js';
+import { handleGetStatus, handleGetZPDFrontier } from '../../src/mcp/tools/query.js';
+import { handleRecordEvaluation } from '../../src/mcp/tools/record-evaluation.js';
+import { handleAdvanceTutor, handleDismiss, handleStartTutor } from '../../src/mcp/tools/tutor.js';
+import { createConceptNode, pMastery } from '../../src/schemas/types.js';
 
 describe('MCP Integration: Full Probe Flow', () => {
   let dataDir: string;
