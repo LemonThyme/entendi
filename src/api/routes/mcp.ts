@@ -1054,6 +1054,26 @@ mcpRoutes.get('/pending-action', async (c) => {
 
   if (!action) return c.json({ pending: null, enforcement });
 
+  // Auto-expire stale pending actions
+  const ageMs = Date.now() - new Date(action.createdAt).getTime();
+  const THIRTY_MINUTES = 30 * 60 * 1000;
+  const ONE_HOUR = 60 * 60 * 1000;
+
+  const shouldExpire =
+    (action.actionType === 'awaiting_probe_response' && ageMs > THIRTY_MINUTES) ||
+    (action.actionType === 'tutor_offered' && ageMs > ONE_HOUR);
+
+  if (shouldExpire) {
+    await db.delete(pendingActions).where(eq(pendingActions.userId, user.id));
+    await db.insert(dismissalEvents).values({
+      userId: user.id,
+      conceptId: (action.data as Record<string, unknown>).conceptId as string,
+      reason: 'expired',
+      note: `Auto-expired ${action.actionType} after ${Math.round(ageMs / 60000)} minutes`,
+    });
+    return c.json({ pending: null, enforcement });
+  }
+
   return c.json({
     pending: {
       type: action.actionType,
