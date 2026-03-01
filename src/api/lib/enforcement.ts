@@ -22,8 +22,9 @@ export async function resolveEnforcementLevel(db: Database, userId: string): Pro
     if (!row.metadata) continue;
     try {
       const parsed = JSON.parse(row.metadata);
-      const level = parsed.enforcementLevel;
-      if (level === 'off' || level === 'remind' || level === 'enforce') {
+      const raw = parsed.enforcementLevel;
+      if (raw === 'off' || raw === 'remind' || raw === 'enforce') {
+        const level: EnforcementLevel = raw;
         if (effective === null || STRICTNESS[level] > STRICTNESS[effective]) {
           effective = level;
         }
