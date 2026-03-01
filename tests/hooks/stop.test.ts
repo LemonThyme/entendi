@@ -206,6 +206,38 @@ describe('handleStop observe enforcement', () => {
     expect(result).toBeNull();
   });
 
+  it('uses userPrompt from cache for trivial detection instead of transcript', async () => {
+    const home = makeEnforceTestHome('cache-prompt');
+    // Cache has a non-trivial userPrompt
+    writeFileSync(
+      join(home, '.entendi', 'enforcement-cache.json'),
+      JSON.stringify({ enforcement: 'enforce', ts: Date.now(), userPrompt: 'explain how OAuth works with PKCE' }),
+    );
+    // Transcript has a trivial message (e.g., a short AskUserQuestion selection)
+    const tp = makeTempTranscript([
+      { type: 'user', message: { role: 'user', content: 'ok' } },
+      { type: 'assistant', message: { role: 'assistant', content: 'OK choosing fail-open.' } },
+    ]);
+    const result = await handleStop({ session_id: 'test', cwd: '/tmp', hook_event_name: 'Stop', transcript_path: tp }, home);
+    // Without the cache fix, 'ok' would be trivial → allow stop
+    // With the cache fix, the real userPrompt 'explain...' is non-trivial → block
+    expect(result).not.toBeNull();
+    expect(result!.decision).toBe('block');
+  });
+
+  it('falls back to transcript when cache has no userPrompt', async () => {
+    const home = makeEnforceTestHome('no-cache-prompt');
+    writeEnforcementCache(home, 'enforce');
+    // No userPrompt in cache — old format
+    const tp = makeTempTranscript([
+      { type: 'user', message: { role: 'user', content: 'yes' } },
+      { type: 'assistant', message: { role: 'assistant', content: 'done' } },
+    ]);
+    const result = await handleStop({ session_id: 'test', cwd: '/tmp', hook_event_name: 'Stop', transcript_path: tp }, home);
+    // 'yes' is trivial — should allow stop
+    expect(result).toBeNull();
+  });
+
   it('defaults to remind when no enforcement cache exists', async () => {
     const home = makeEnforceTestHome('no-cache');
     // No cache file written — should default to 'remind' (not block)

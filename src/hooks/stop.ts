@@ -22,16 +22,24 @@ export interface StopOutput {
   reason: string;
 }
 
-function readEnforcementCache(homeDir?: string): string {
+interface EnforcementCache {
+  enforcement: string;
+  userPrompt?: string;
+}
+
+function readEnforcementCache(homeDir?: string): EnforcementCache {
   try {
     const dir = homeDir ?? homedir();
     const raw = readFileSync(join(dir, '.entendi', 'enforcement-cache.json'), 'utf-8');
     const data = JSON.parse(raw);
     // Ignore stale cache (> 5 minutes old)
-    if (Date.now() - data.ts > 5 * 60 * 1000) return 'remind';
-    return data.enforcement ?? 'remind';
+    if (Date.now() - data.ts > 5 * 60 * 1000) return { enforcement: 'remind' };
+    return {
+      enforcement: data.enforcement ?? 'remind',
+      userPrompt: data.userPrompt,
+    };
   } catch {
-    return 'remind';
+    return { enforcement: 'remind' };
   }
 }
 
@@ -43,8 +51,8 @@ export async function handleStop(input: StopInput, homeDir?: string): Promise<St
   }
 
   // 2. Check enforcement level
-  const enforcement = readEnforcementCache(homeDir);
-  if (enforcement === 'off') {
+  const cache = readEnforcementCache(homeDir);
+  if (cache.enforcement === 'off') {
     log('hook:stop', 'enforcement is off, allowing stop');
     return null;
   }
@@ -61,16 +69,17 @@ export async function handleStop(input: StopInput, homeDir?: string): Promise<St
     return null;
   }
 
-  // 4. Check if user message was trivial
-  const userMessage = findLastUserMessage(transcriptPath);
+  // 4. Use cached userPrompt for trivial detection (fixes AskUserQuestion false trivial)
+  // Fall back to transcript if cache doesn't have it
+  const userMessage = cache.userPrompt ?? findLastUserMessage(transcriptPath);
   if (!userMessage || isTrivialMessage(userMessage)) {
     log('hook:stop', 'trivial or empty message, skipping observe enforcement');
     return null;
   }
 
   // 5. Enforce or remind
-  if (enforcement === 'enforce') {
-    log('hook:stop', 'observe NOT called, blocking stop', { enforcement, userMessage: userMessage.slice(0, 100) });
+  if (cache.enforcement === 'enforce') {
+    log('hook:stop', 'observe NOT called, blocking stop', { enforcement: cache.enforcement, userMessage: userMessage.slice(0, 100) });
     return {
       decision: 'block',
       reason:

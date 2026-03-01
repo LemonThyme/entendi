@@ -1,14 +1,33 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { detectLoginPattern, detectTeachMePattern, handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 import { loadConfig } from '../../src/shared/config.js';
+
+const { TEST_HOME } = vi.hoisted(() => ({
+  TEST_HOME: '/tmp/entendi-ups-test',
+}));
 
 vi.mock('../../src/shared/config.js', () => ({
   loadConfig: vi.fn(() => ({ apiUrl: 'http://localhost:3456', apiKey: 'test-key' })),
   saveConfig: vi.fn(),
 }));
 
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: () => TEST_HOME };
+});
+
 const mockLoadConfig = vi.mocked(loadConfig);
+
+beforeAll(() => {
+  mkdirSync(join(TEST_HOME, '.entendi'), { recursive: true });
+});
+
+afterAll(() => {
+  rmSync(TEST_HOME, { recursive: true, force: true });
+});
 
 function makeInput(prompt: string) {
   return {
@@ -264,6 +283,17 @@ describe('handleUserPromptSubmit (thin observer)', () => {
     await handleUserPromptSubmit(makeInput('hello'));
     const fetchCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(fetchCall[1].signal).toBeDefined();
+  });
+
+  it('writes userPrompt to enforcement cache alongside enforcement level', async () => {
+    mockPendingAction(null, 'enforce');
+    await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+
+    const cachePath = join(TEST_HOME, '.entendi', 'enforcement-cache.json');
+    expect(existsSync(cachePath)).toBe(true);
+    const cached = JSON.parse(readFileSync(cachePath, 'utf-8'));
+    expect(cached.enforcement).toBe('enforce');
+    expect(cached.userPrompt).toBe('fix the OAuth redirect');
   });
 
   it('returns null gracefully when API is unavailable', async () => {

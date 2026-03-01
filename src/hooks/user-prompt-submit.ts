@@ -49,10 +49,12 @@ interface PendingActionResult {
   enforcement: string;
 }
 
-function cacheEnforcement(enforcement: string): void {
+function cacheEnforcement(enforcement: string, userPrompt?: string): void {
   try {
     const cachePath = join(homedir(), '.entendi', 'enforcement-cache.json');
-    writeFileSync(cachePath, JSON.stringify({ enforcement, ts: Date.now() }));
+    const data: Record<string, unknown> = { enforcement, ts: Date.now() };
+    if (userPrompt) data.userPrompt = userPrompt;
+    writeFileSync(cachePath, JSON.stringify(data));
   } catch {
     // non-critical
   }
@@ -80,7 +82,6 @@ async function fetchPendingAction(): Promise<PendingActionResult> {
     const data = await res.json() as { pending: any | null; enforcement?: string };
     log('hook:user-prompt-submit', 'fetchPendingAction: result', data);
     const enforcement = data.enforcement ?? 'remind';
-    cacheEnforcement(enforcement);
     return { pending: data.pending, enforcement };
   } catch (err) {
     log('hook:user-prompt-submit', 'fetchPendingAction: exception', { error: String(err) });
@@ -109,6 +110,7 @@ export async function handleUserPromptSubmit(
 
   // 1. Check for pending action via API
   const { pending, enforcement } = await fetchPendingAction();
+  cacheEnforcement(enforcement, userPrompt);
 
   if (pending) {
     switch (pending.type) {
