@@ -1449,6 +1449,62 @@
     ]);
     area.appendChild(orgHeader);
 
+    // Org Settings (enforcement level)
+    var enforcementSelect = h("select", { id: "enforcement-select", className: "enforcement-select" }, [
+      h("option", { value: "off" }, "Off — no observe reminders"),
+      h("option", { value: "remind" }, "Remind — prompt to observe (default)"),
+      h("option", { value: "enforce" }, "Enforce — block until observe is called")
+    ]);
+    enforcementSelect.addEventListener("change", function() {
+      var level = enforcementSelect.value;
+      fetch("/api/org/enforcement", {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify({ enforcementLevel: level })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var msg = document.getElementById("enforcement-msg");
+          if (msg) {
+            msg.textContent = "Saved";
+            msg.style.color = "var(--green)";
+            setTimeout(function() { msg.textContent = ""; }, 2000);
+          }
+        })
+        .catch(function() {
+          var msg = document.getElementById("enforcement-msg");
+          if (msg) { msg.textContent = "Failed to save"; msg.style.color = "var(--red)"; }
+        });
+    });
+
+    var settingsSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Settings"),
+        h("div", { className: "section-subtitle" }, "Configure how Entendi behaves for your organization")
+      ]),
+      h("div", { className: "setting-row" }, [
+        h("div", { className: "setting-label" }, [
+          h("strong", null, "Concept Detection"),
+          h("div", { className: "auth-subtitle", style: "margin:0.2rem 0 0" }, "Controls whether the LLM is reminded or forced to call entendi_observe each turn")
+        ]),
+        h("div", { className: "setting-control" }, [
+          enforcementSelect,
+          h("span", { id: "enforcement-msg", style: "font-size:0.75rem;margin-left:0.5rem" })
+        ])
+      ])
+    ]);
+    area.appendChild(settingsSection);
+
+    // Load current enforcement level
+    fetch("/api/org/enforcement", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.enforcementLevel) {
+          enforcementSelect.value = data.enforcementLevel;
+        }
+      })
+      .catch(function() {});
+
     var inviteSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
         h("div", { className: "section-title" }, "Invite Member")
