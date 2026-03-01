@@ -1,11 +1,88 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { loadConfig } from '../shared/config.js';
-import { log, readStdin } from './shared.js';
+import { hasObserveCallInCurrentTurn, findLastUserMessage } from './transcript.js';
+import { isTrivialMessage } from './trivial.js';
+import { log, readStdin, type HookInput } from './shared.js';
 
 /**
  * Stop hook — fires when the session is about to end.
- * Checks for dangling probe actions and logs a warning if found.
- * Never blocks the session from ending (always exits 0).
+ * 1. Checks if entendi_observe was called this turn (enforcement).
+ * 2. Checks for dangling probe actions and logs a warning if found.
  */
+
+export interface StopInput extends HookInput {
+  transcript_path?: string;
+  stop_hook_active?: boolean;
+}
+
+export interface StopOutput {
+  decision: 'block';
+  reason: string;
+}
+
+function readEnforcementCache(homeDir?: string): string {
+  try {
+    const dir = homeDir ?? homedir();
+    const raw = readFileSync(join(dir, '.entendi', 'enforcement-cache.json'), 'utf-8');
+    const data = JSON.parse(raw);
+    // Ignore stale cache (> 5 minutes old)
+    if (Date.now() - data.ts > 5 * 60 * 1000) return 'remind';
+    return data.enforcement ?? 'remind';
+  } catch {
+    return 'remind';
+  }
+}
+
+export async function handleStop(input: StopInput, homeDir?: string): Promise<StopOutput | null> {
+  // 1. Prevent infinite loops
+  if (input.stop_hook_active) {
+    log('hook:stop', 'stop_hook_active is true, allowing stop');
+    return null;
+  }
+
+  // 2. Check enforcement level
+  const enforcement = readEnforcementCache(homeDir);
+  if (enforcement === 'off') {
+    log('hook:stop', 'enforcement is off, allowing stop');
+    return null;
+  }
+
+  // 3. Check transcript for observe call
+  const transcriptPath = input.transcript_path;
+  if (!transcriptPath) {
+    log('hook:stop', 'no transcript_path, allowing stop');
+    return null;
+  }
+
+  if (hasObserveCallInCurrentTurn(transcriptPath)) {
+    log('hook:stop', 'observe was called this turn, allowing stop');
+    return null;
+  }
+
+  // 4. Check if user message was trivial
+  const userMessage = findLastUserMessage(transcriptPath);
+  if (!userMessage || isTrivialMessage(userMessage)) {
+    log('hook:stop', 'trivial or empty message, skipping observe enforcement');
+    return null;
+  }
+
+  // 5. Enforce or remind
+  if (enforcement === 'enforce') {
+    log('hook:stop', 'observe NOT called, blocking stop', { enforcement, userMessage: userMessage.slice(0, 100) });
+    return {
+      decision: 'block',
+      reason:
+        `[Entendi] You did not call entendi_observe this turn. Identify technical ` +
+        `concepts from the user's message and your work, then call entendi_observe before finishing.`,
+    };
+  }
+
+  // enforcement === 'remind'
+  log('hook:stop', 'observe NOT called (remind mode, not blocking)', { userMessage: userMessage.slice(0, 100) });
+  return null;
+}
 
 async function checkDanglingProbes(): Promise<void> {
   const config = loadConfig();
@@ -47,12 +124,22 @@ async function checkDanglingProbes(): Promise<void> {
 async function main() {
   log('hook:stop', 'session ending');
   const raw = await readStdin();
+  let input: StopInput = { session_id: '', cwd: '', hook_event_name: 'Stop' };
   try {
-    JSON.parse(raw);
+    input = JSON.parse(raw);
   } catch {
     /* invalid input — still check for dangling probes */
   }
 
+  // Observe enforcement check
+  const result = await handleStop(input);
+  if (result) {
+    process.stdout.write(JSON.stringify(result));
+    process.exitCode = 0;
+    return;
+  }
+
+  // Existing dangling probe check
   await checkDanglingProbes();
 
   log('hook:stop', 'done');
