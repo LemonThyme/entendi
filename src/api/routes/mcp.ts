@@ -802,6 +802,17 @@ mcpRoutes.post('/dismiss', async (c) => {
   }
   const { reason, note } = parsed.data;
 
+  // Enforce mode: block topic_change dismissals
+  if (reason === 'topic_change') {
+    const enforcement = await resolveEnforcementLevel(db, user.id);
+    if (enforcement === 'enforce') {
+      return c.json({
+        rejected: true,
+        reason: 'Enforcement level requires probe completion. Re-present the probe to the user.',
+      });
+    }
+  }
+
   // Read pending action before clearing, to record dismissal
   const [action] = await db.select().from(pendingActions)
     .where(eq(pendingActions.userId, user.id));

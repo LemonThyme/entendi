@@ -122,6 +122,17 @@ User response to probe:
 - If the user references the probe in any way (even to refuse), it is NOT a topic_change.
 - When in doubt between claimed_expertise and topic_change, choose claimed_expertise (it's more likely the user is deflecting than coincidentally changing topic mid-probe).
 
+## Dismiss Enforcement
+
+When `entendi_dismiss` returns `{ rejected: true }`, the server has blocked the dismissal
+because the user's enforcement level requires probe completion. You MUST:
+1. Re-present the probe question to the user
+2. Do NOT call dismiss again with `reason: 'topic_change'`
+3. The probe will persist until the user answers, explicitly says "skip" (use `claimed_expertise`), or it expires
+
+If the user genuinely wants to skip a probe, use `reason: 'claimed_expertise'` (which auto-scores 0)
+or `reason: 'busy'` (which defers to next session). Only `topic_change` is blocked under enforce mode.
+
 ## Parallel Probing
 
 When a probe is pending AND the user has asked for multi-step work (code generation, refactoring, multi-file changes, etc.), consider spawning the implementation work as a background agent (using `Task`) and using the main thread for the probe conversation. This way the user's work is not blocked while the probe is conducted, and the probe gets the user's full attention.
