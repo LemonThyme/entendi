@@ -1,3 +1,6 @@
+import { writeFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { loadConfig } from '../shared/config.js';
 import { type HookInput, log, readStdin } from './shared.js';
 
@@ -41,13 +44,27 @@ export function detectTeachMePattern(prompt: string): string | null {
 
 // --- API client for pending actions ---
 
-async function fetchPendingAction(): Promise<any | null> {
+interface PendingActionResult {
+  pending: any | null;
+  enforcement: string;
+}
+
+function cacheEnforcement(enforcement: string): void {
+  try {
+    const cachePath = join(homedir(), '.entendi', 'enforcement-cache.json');
+    writeFileSync(cachePath, JSON.stringify({ enforcement, ts: Date.now() }));
+  } catch {
+    // non-critical
+  }
+}
+
+async function fetchPendingAction(): Promise<PendingActionResult> {
   const config = loadConfig();
   const apiUrl = config.apiUrl;
   const apiKey = config.apiKey;
   if (!apiKey) {
     log('hook:user-prompt-submit', 'fetchPendingAction: no API key configured');
-    return null;
+    return { pending: null, enforcement: 'off' };
   }
 
   try {
@@ -57,14 +74,16 @@ async function fetchPendingAction(): Promise<any | null> {
     });
     if (!res.ok) {
       log('hook:user-prompt-submit', 'fetchPendingAction: API error', { status: res.status });
-      return null;
+      return { pending: null, enforcement: 'off' };
     }
-    const data = await res.json() as { pending: any | null };
+    const data = await res.json() as { pending: any | null; enforcement?: string };
     log('hook:user-prompt-submit', 'fetchPendingAction: result', data);
-    return data.pending;
+    const enforcement = data.enforcement ?? 'remind';
+    cacheEnforcement(enforcement);
+    return { pending: data.pending, enforcement };
   } catch (err) {
     log('hook:user-prompt-submit', 'fetchPendingAction: exception', { error: String(err) });
-    return null;
+    return { pending: null, enforcement: 'off' };
   }
 }
 
@@ -88,7 +107,7 @@ export async function handleUserPromptSubmit(
   }
 
   // 1. Check for pending action via API
-  const pending = await fetchPendingAction();
+  const { pending, enforcement } = await fetchPendingAction();
 
   if (pending) {
     switch (pending.type) {
@@ -137,6 +156,17 @@ export async function handleUserPromptSubmit(
         additionalContext:
           `[Entendi] The user is requesting to learn about '${conceptName}'. ` +
           `Call entendi_start_tutor with conceptId '${conceptName}' and triggerScore null.`,
+      },
+    };
+  }
+
+  // 3. No pending action, no patterns — inject observe reminder if enforcement allows
+  if (enforcement !== 'off') {
+    return {
+      hookSpecificOutput: {
+        additionalContext:
+          `[Entendi] MANDATORY: After completing the user's request, identify technical ` +
+          `concepts discussed and call entendi_observe. Do not skip this step.`,
       },
     };
   }

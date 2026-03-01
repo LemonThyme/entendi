@@ -21,12 +21,12 @@ function makeInput(prompt: string) {
 
 /**
  * Mock globalThis.fetch to return a pending action from the API.
- * The hook calls GET /api/mcp/pending-action which returns { pending: action }.
+ * The hook calls GET /api/mcp/pending-action which returns { pending, enforcement }.
  */
-function mockPendingAction(action: PendingAction | null) {
+function mockPendingAction(action: PendingAction | null, enforcement = 'remind') {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: action !== null,
-    json: async () => ({ pending: action }),
+    ok: true,
+    json: async () => ({ pending: action, enforcement }),
   }));
 }
 
@@ -167,10 +167,30 @@ describe('handleUserPromptSubmit (thin observer)', () => {
 
   // --- No pending action ---
 
-  it('returns null when no pending action and normal message', async () => {
-    mockPendingAction(null);
-    const result = await handleUserPromptSubmit(makeInput('hello world'));
+  it('injects observe reminder when no pending action and enforcement is remind', async () => {
+    mockPendingAction(null, 'remind');
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('entendi_observe');
+    expect(ctx).toContain('MANDATORY');
+  });
+
+  it('does NOT inject reminder when enforcement is off', async () => {
+    mockPendingAction(null, 'off');
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
     expect(result).toBeNull();
+  });
+
+  it('does NOT inject observe reminder when pending action exists', async () => {
+    mockPendingAction(
+      { type: 'awaiting_probe_response', conceptId: 'oauth', depth: 1, timestamp: new Date().toISOString() },
+      'enforce',
+    );
+    const result = await handleUserPromptSubmit(makeInput('oauth uses tokens'));
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('pending comprehension probe');
+    expect(ctx).not.toContain('MANDATORY');
   });
 
   // --- Teach me pattern ---
@@ -207,8 +227,7 @@ describe('handleUserPromptSubmit (thin observer)', () => {
     expect(ctx).toContain('entendi_start_tutor');
   });
 
-  it('does not write any state files (hooks are read-only observers)', async () => {
-    // The hook only reads from the API, never writes to disk
+  it('calls API once per invocation', async () => {
     mockPendingAction({
       type: 'awaiting_probe_response',
       conceptId: 'Redis',
@@ -218,16 +237,14 @@ describe('handleUserPromptSubmit (thin observer)', () => {
 
     const result = await handleUserPromptSubmit(makeInput('Redis is a cache'));
     expect(result).toBeDefined();
-    // Verify fetch was called (API read, not file read)
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it('returns null gracefully when API is unavailable', async () => {
-    // No API key configured
+    // No API key configured — enforcement defaults to 'off' (no API = no enforcement)
     mockLoadConfig.mockReturnValueOnce({ apiUrl: 'http://localhost:3456', apiKey: undefined });
 
-    const result = await handleUserPromptSubmit(makeInput('test'));
-    // Falls through to teach-me pattern check, which also returns null for 'test'
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
     expect(result).toBeNull();
   });
 });
