@@ -75,12 +75,33 @@ export function hasObserveCallInCurrentTurn(transcriptPath: string): boolean {
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       if (block.type === 'tool_use' && typeof block.name === 'string' && block.name.includes('entendi_observe')) {
+        // Verify the observe call succeeded by checking its tool_result
+        const toolUseId = block.id;
+        if (toolUseId && isObserveCallFailed(lines, i, toolUseId)) {
+          continue; // Treat failed observe as not called
+        }
         return true;
       }
     }
   }
 
   return false;
+}
+
+/**
+ * Check if a tool_use was followed by a tool_result with is_error=true.
+ */
+function isObserveCallFailed(lines: any[], afterIdx: number, toolUseId: string): boolean {
+  for (let i = afterIdx + 1; i < lines.length; i++) {
+    const content = lines[i]?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block.type === 'tool_result' && block.tool_use_id === toolUseId) {
+        return block.is_error === true;
+      }
+    }
+  }
+  return false; // No result found — assume success (in-progress)
 }
 
 export function findLastUserMessage(transcriptPath: string): string {

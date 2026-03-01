@@ -238,6 +238,39 @@ describe('handleStop observe enforcement', () => {
     expect(result).toBeNull();
   });
 
+  it('treats failed observe call as not called', async () => {
+    const home = makeEnforceTestHome('failed-observe');
+    writeEnforcementCache(home, 'enforce');
+    const tp = makeTempTranscript([
+      { type: 'user', message: { role: 'user', content: 'explain how circuit breakers work' } },
+      { type: 'assistant', message: { role: 'assistant', content: [
+        { type: 'tool_use', id: 'tu_1', name: 'mcp__plugin_entendi_entendi__entendi_observe', input: {} },
+      ] } },
+      { type: 'user', message: { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'tu_1', is_error: true, content: 'Circuit breaker OPEN' },
+      ] } },
+    ]);
+    const result = await handleStop({ session_id: 'test', cwd: '/tmp', hook_event_name: 'Stop', transcript_path: tp }, home);
+    expect(result).not.toBeNull();
+    expect(result!.decision).toBe('block');
+  });
+
+  it('treats successful observe call as called', async () => {
+    const home = makeEnforceTestHome('success-observe');
+    writeEnforcementCache(home, 'enforce');
+    const tp = makeTempTranscript([
+      { type: 'user', message: { role: 'user', content: 'explain how circuit breakers work' } },
+      { type: 'assistant', message: { role: 'assistant', content: [
+        { type: 'tool_use', id: 'tu_1', name: 'mcp__plugin_entendi_entendi__entendi_observe', input: {} },
+      ] } },
+      { type: 'user', message: { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'tu_1', content: '{"shouldProbe":false}' },
+      ] } },
+    ]);
+    const result = await handleStop({ session_id: 'test', cwd: '/tmp', hook_event_name: 'Stop', transcript_path: tp }, home);
+    expect(result).toBeNull();
+  });
+
   it('defaults to remind when no enforcement cache exists', async () => {
     const home = makeEnforceTestHome('no-cache');
     // No cache file written — should default to 'remind' (not block)
