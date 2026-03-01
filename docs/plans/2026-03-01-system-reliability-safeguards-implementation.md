@@ -950,7 +950,118 @@ git commit -m "feat(api): concurrent observe protection and orphan cleanup"
 
 ---
 
-### Task 8: Dashboard health indicator
+### Task 8: Enforcement-aware dismiss policy
+
+**Files:**
+- Modify: `src/api/routes/mcp.ts:877-886` (dismiss endpoint, topic_change branch)
+- Modify: `plugin/skills/concept-detection/SKILL.md`
+- Test: `tests/api/routes/mcp-dismiss.test.ts` (create or extend)
+
+**Step 1: Write failing tests**
+
+Create `tests/api/routes/mcp-dismiss.test.ts` (or add to existing dismiss tests). Follow the same test patterns as other API route tests:
+
+```typescript
+describe('POST /dismiss enforcement-aware policy', () => {
+  it('rejects topic_change dismiss when enforcement is enforce', async () => {
+    // 1. Set user's org enforcement level to 'enforce'
+    // 2. Create a pending action (awaiting_probe_response)
+    // 3. POST /dismiss with reason='topic_change'
+    // 4. Assert response: { rejected: true, reason: '...' }
+    // 5. Assert pending action still exists in DB
+  });
+
+  it('allows topic_change dismiss when enforcement is remind', async () => {
+    // 1. Set user's org enforcement level to 'remind'
+    // 2. Create a pending action
+    // 3. POST /dismiss with reason='topic_change'
+    // 4. Assert response: { acknowledged: true, dismissalRecorded: true }
+    // 5. Assert pending action was cleared
+  });
+
+  it('allows topic_change dismiss when enforcement is off', async () => {
+    // Same as remind test but with enforcement='off'
+  });
+
+  it('allows busy dismiss even when enforcement is enforce', async () => {
+    // 1. Set enforcement to 'enforce'
+    // 2. Create a pending action
+    // 3. POST /dismiss with reason='busy'
+    // 4. Assert success (not rejected)
+  });
+
+  it('allows claimed_expertise dismiss even when enforcement is enforce', async () => {
+    // 1. Set enforcement to 'enforce'
+    // 2. Create a pending action
+    // 3. POST /dismiss with reason='claimed_expertise'
+    // 4. Assert success (auto-scored 0)
+  });
+});
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `npx vitest run tests/api/routes/mcp-dismiss.test.ts`
+Expected: FAIL — topic_change is always allowed currently
+
+**Step 3: Implement enforcement check in dismiss endpoint**
+
+In `src/api/routes/mcp.ts`, in the `POST /dismiss` handler, add enforcement check before the `topic_change` branch. The `topic_change` handling is currently at lines 877-886. Add the check right after `const { reason, note } = parsed.data;` (line 794):
+
+```typescript
+const { reason, note } = parsed.data;
+
+// Enforce mode: block topic_change dismissals
+if (reason === 'topic_change') {
+  const enforcement = await resolveEnforcementLevel(db, user.id);
+  if (enforcement === 'enforce') {
+    return c.json({
+      rejected: true,
+      reason: 'Enforcement level requires probe completion. Re-present the probe to the user.',
+    });
+  }
+}
+```
+
+`resolveEnforcementLevel` is already imported in this file (used by `GET /pending-action`).
+
+**Step 4: Run tests to verify they pass**
+
+Run: `npx vitest run tests/api/routes/mcp-dismiss.test.ts`
+Expected: ALL tests PASS
+
+**Step 5: Update concept-detection skill**
+
+In `plugin/skills/concept-detection/SKILL.md`, add a new section after "## Probe Response Handling":
+
+```markdown
+## Dismiss Enforcement
+
+When `entendi_dismiss` returns `{ rejected: true }`, the server has blocked the dismissal
+because the user's enforcement level requires probe completion. You MUST:
+1. Re-present the probe question to the user
+2. Do NOT call dismiss again with `reason: 'topic_change'`
+3. The probe will persist until the user answers, explicitly says "skip" (use `claimed_expertise`), or it expires
+
+If the user genuinely wants to skip a probe, use `reason: 'claimed_expertise'` (which auto-scores 0)
+or `reason: 'busy'` (which defers to next session). Only `topic_change` is blocked under enforce mode.
+```
+
+**Step 6: Run full test suite**
+
+Run: `npx vitest run`
+Expected: ALL tests PASS
+
+**Step 7: Commit**
+
+```bash
+git add src/api/routes/mcp.ts plugin/skills/concept-detection/SKILL.md tests/api/routes/mcp-dismiss.test.ts
+git commit -m "feat(enforcement): block topic_change dismiss under enforce mode"
+```
+
+---
+
+### Task 9: Dashboard health indicator (renumbered from 8)
 
 **Files:**
 - Modify: dashboard HTML/JS assets in `src/dashboard/`
@@ -1048,7 +1159,7 @@ git commit -m "feat(dashboard): add health status banner"
 
 ---
 
-### Task 9: Build and smoke test
+### Task 10: Build and smoke test
 
 **Step 1: Run full test suite**
 

@@ -233,6 +233,74 @@ Before creating a `tutor_active` pending action, verify the tutor session row wa
 
 **Files**: `src/api/routes/mcp.ts` (tutor/start endpoint)
 
+## Section 7: Enforcement-Aware Dismiss Policy
+
+### Problem
+
+The LLM freely dismisses probes as `topic_change` even when the user hasn't genuinely changed topic. In this session, two probes were dismissed as `topic_change` when the user said "looks good" (responding to the design, not the probe). The enforcement system only enforces *observe calls*, not *probe completion*. Once a probe is issued, the LLM can dismiss it without consequence.
+
+### Design: Enforcement-Level-Dependent Dismiss Behavior
+
+| Enforcement | `topic_change` | `busy` | `claimed_expertise` |
+|-------------|---------------|--------|---------------------|
+| `off` | Allowed | Allowed | Allowed (auto-score 0) |
+| `remind` | Allowed + logged | Allowed | Allowed (auto-score 0) |
+| `enforce` | **Rejected** — probe persists | Allowed | Allowed (auto-score 0) |
+
+Under `enforce` mode, when the LLM calls `POST /dismiss` with reason `topic_change`:
+- Server resolves the user's enforcement level
+- If `enforce`, the server **rejects** the dismiss — the pending action is NOT cleared
+- Response: `{ rejected: true, reason: "Enforcement level requires probe completion. Re-present the probe to the user." }`
+- The probe stays in `pending_actions` and re-appears via `UserPromptSubmit` on the next turn
+
+`busy` and `claimed_expertise` are still allowed under all enforcement levels because:
+- `busy`: the user explicitly defers — respect their agency
+- `claimed_expertise`: auto-scores 0 — the system captures the data point
+
+### Server-Side Implementation
+
+In `POST /dismiss`, before the `topic_change` branch:
+
+```typescript
+if (reason === 'topic_change') {
+  const enforcement = await resolveEnforcementLevel(db, user.id);
+  if (enforcement === 'enforce') {
+    return c.json({
+      rejected: true,
+      reason: 'Enforcement level requires probe completion. Re-present the probe to the user.',
+    });
+  }
+}
+```
+
+`resolveEnforcementLevel` is already imported and used in the `GET /pending-action` endpoint.
+
+### Skill Update
+
+Update the concept-detection skill (`plugin/skills/concept-detection/SKILL.md`) to add guidance:
+
+```markdown
+## Dismiss Enforcement
+
+When `entendi_dismiss` returns `{ rejected: true }`, the server has blocked the dismissal
+because the user's enforcement level requires probe completion. You MUST:
+1. Re-present the probe question to the user
+2. Do NOT call dismiss again with reason='topic_change'
+3. The probe will persist until the user answers, explicitly says "skip", or it expires
+```
+
+### MCP Server Handling
+
+When `entendi_dismiss` returns `{ rejected: true }`, the MCP tool should return the rejection as content (not as an error). The LLM reads it and acts accordingly per the skill instructions.
+
+### Edge Cases
+
+- **User genuinely changes topic under enforce**: Probe persists via UserPromptSubmit. The 30-minute auto-expiry (Section 4) provides the escape valve.
+- **LLM ignores rejection and doesn't re-present probe**: No issue — UserPromptSubmit keeps injecting the probe context every turn until it's answered or expired.
+- **Multiple rapid dismiss attempts**: Server keeps rejecting. The pending action stays. No state corruption.
+
+**Files**: `src/api/routes/mcp.ts` (dismiss endpoint), `plugin/skills/concept-detection/SKILL.md`, `src/mcp/server.ts` (dismiss handler)
+
 ## Files to Create/Modify
 
 | File | Change |
@@ -241,7 +309,8 @@ Before creating a `tutor_active` pending action, verify the tutor session row wa
 | `src/hooks/stop.ts` | Read userPrompt from cache for trivial detection, verify observe success not just invocation |
 | `src/hooks/session-end.ts` | Write local dismiss marker on API failure |
 | `src/mcp/server.ts` | Add `wrapToolError()`, update all catch blocks |
-| `src/api/routes/mcp.ts` | Stale action auto-expiry in pending-action endpoint, sessionId support, concurrent observe protection, tutor validation |
+| `src/api/routes/mcp.ts` | Stale action auto-expiry, concurrent observe protection, tutor validation, dismiss enforcement |
+| `plugin/skills/concept-detection/SKILL.md` | Add dismiss enforcement guidance |
 | `src/api/db/schema.ts` | Add `sessionId` column to `pending_actions` |
 | `src/dashboard/` | Health poll + status banner |
 | `tests/hooks/user-prompt-submit.test.ts` | Tests for timeout, API failure fallback, stale action handling, local dismiss retry |
@@ -262,8 +331,12 @@ Before creating a `tutor_active` pending action, verify the tutor session row wa
 8. Pending action auto-expiry for each action type
 9. Concurrent observe marks old token as superseded
 10. Orphan cleanup deletes expired tokens and stale actions
+11. Dismiss endpoint: `topic_change` rejected when enforcement is `enforce`
+12. Dismiss endpoint: `busy` and `claimed_expertise` still allowed under `enforce`
+13. Dismiss endpoint: `topic_change` allowed when enforcement is `remind` or `off`
 
 ### Integration Tests
-11. Full turn: API down → hooks skip silently → MCP tools return friendly error → recovery when API returns
-12. Full turn: stale probe from previous session → auto-dismissed → current session gets observe reminder
-13. Dashboard: health poll shows correct banner state
+14. Full turn: API down → hooks skip silently → MCP tools return friendly error → recovery when API returns
+15. Full turn: stale probe from previous session → auto-dismissed → current session gets observe reminder
+16. Full turn: probe issued → LLM dismisses as topic_change → rejected → probe re-appears next turn
+17. Dashboard: health poll shows correct banner state
