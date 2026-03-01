@@ -174,7 +174,7 @@ describe('entendi_get_zpd_frontier', () => {
     sm.save();
     sm = new StateManager(dataDir, userId);
 
-    const result = handleGetZPDFrontier(sm, userId);
+    const result = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     expect(result.frontier.length).toBeGreaterThan(0);
     const frontierIds = result.frontier.map(f => f.conceptId);
     expect(frontierIds).toContain('basics');
@@ -189,7 +189,7 @@ describe('entendi_get_zpd_frontier', () => {
     sm.save();
     sm = new StateManager(dataDir, userId);
 
-    const result = handleGetZPDFrontier(sm, userId);
+    const result = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     expect(result.frontier[0].fisherInfo).toBeDefined();
     expect(typeof result.frontier[0].fisherInfo).toBe('number');
     expect(result.frontier[0].fisherInfo).toBeGreaterThan(0);
@@ -222,7 +222,7 @@ describe('entendi_get_zpd_frontier', () => {
     sm.save();
     sm = new StateManager(dataDir, userId);
 
-    const result = handleGetZPDFrontier(sm, userId);
+    const result = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     expect(result.frontier[0].mastery).toBeDefined();
     expect(typeof result.frontier[0].mastery).toBe('number');
   });

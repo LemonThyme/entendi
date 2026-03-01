@@ -1024,42 +1024,74 @@ mcpRoutes.get('/zpd-frontier', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
 
-  const result = await db.execute(sql`
-    SELECT c.id, c.domain, c.specificity,
-           COALESCE(ucs.mu, 0) AS mu,
-           COALESCE(ucs.sigma, 1.5) AS sigma,
-           c.discrimination, c.threshold_1, c.threshold_2, c.threshold_3
-    FROM concepts c
-    LEFT JOIN user_concept_states ucs ON ucs.concept_id = c.id AND ucs.user_id = ${user.id}
-    WHERE (1.0 / (1.0 + EXP(-COALESCE(ucs.mu, 0)))) < 0.7
-      AND NOT EXISTS (
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10), 100);
+  const domain = c.req.query('domain');
+  const includeUnassessed = c.req.query('includeUnassessed') === 'true';
+
+  // Build dynamic WHERE conditions
+  const conditions: ReturnType<typeof sql>[] = [
+    sql`(1.0 / (1.0 + EXP(-COALESCE(ucs.mu, 0)))) < 0.7`,
+    sql`NOT EXISTS (
         SELECT 1 FROM concept_edges ce
         LEFT JOIN user_concept_states pucs ON pucs.concept_id = ce.target_id AND pucs.user_id = ${user.id}
         WHERE ce.source_id = c.id
           AND ce.edge_type = 'requires'
           AND (1.0 / (1.0 + EXP(-COALESCE(pucs.mu, 0)))) < 0.7
-      )
-    ORDER BY c.id
+      )`,
+  ];
+  if (!includeUnassessed) {
+    conditions.push(sql`COALESCE(ucs.assessment_count, 0) > 0`);
+  }
+  if (domain) {
+    conditions.push(sql`c.domain = ${domain}`);
+  }
+
+  const whereClause = conditions.reduce((acc, cond, i) =>
+    i === 0 ? cond : sql`${acc} AND ${cond}`
+  );
+
+  const result = await db.execute(sql`
+    SELECT c.id, c.domain, c.specificity,
+           COALESCE(ucs.mu, 0) AS mu,
+           COALESCE(ucs.sigma, 1.5) AS sigma,
+           COALESCE(ucs.assessment_count, 0) AS assessment_count,
+           ucs.updated_at,
+           c.discrimination, c.threshold_1, c.threshold_2, c.threshold_3
+    FROM concepts c
+    LEFT JOIN user_concept_states ucs ON ucs.concept_id = c.id AND ucs.user_id = ${user.id}
+    WHERE ${whereClause}
+    ORDER BY CASE WHEN COALESCE(ucs.assessment_count, 0) > 0 THEN 0 ELSE 1 END,
+             ucs.updated_at DESC NULLS LAST
+    LIMIT ${limit}
   `);
 
   const frontier = (result.rows as any[]).map(row => ({
     conceptId: row.id,
+    domain: row.domain,
     mastery: pMastery(Number(row.mu)),
+    assessmentCount: Number(row.assessment_count),
     fisherInfo: grmFisherInformation(Number(row.mu), {
       discrimination: row.discrimination ?? 1.0,
       thresholds: [row.threshold_1 ?? -1.0, row.threshold_2 ?? 0.0, row.threshold_3 ?? 1.0],
     }),
   }));
 
-  // Sort by Fisher info descending
-  frontier.sort((a, b) => b.fisherInfo - a.fisherInfo);
+  // Assessed concepts first, then by Fisher info descending
+  frontier.sort((a, b) => {
+    if (a.assessmentCount > 0 && b.assessmentCount === 0) return -1;
+    if (a.assessmentCount === 0 && b.assessmentCount > 0) return 1;
+    return b.fisherInfo - a.fisherInfo;
+  });
 
-  const allCount = await db.select({ id: concepts.id }).from(concepts);
-  const masteredStates = await db.select().from(userConceptStates)
-    .where(eq(userConceptStates.userId, user.id));
-  const masteredCount = masteredStates.filter(s => pMastery(s.mu) >= 0.7).length;
+  const [{ count: totalCount }] = await db.select({ count: sql<number>`count(*)` }).from(concepts);
+  const [{ count: masteredCount }] = await db.select({ count: sql<number>`count(*)` })
+    .from(userConceptStates)
+    .where(and(
+      eq(userConceptStates.userId, user.id),
+      sql`(1.0 / (1.0 + EXP(-${userConceptStates.mu}))) >= 0.7`
+    ));
 
-  return c.json({ frontier, totalConcepts: allCount.length, masteredCount });
+  return c.json({ frontier, totalConcepts: totalCount, masteredCount });
 });
 
 // --- GET /pending-action — check for pending action (used by hooks) ---

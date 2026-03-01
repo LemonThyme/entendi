@@ -386,11 +386,15 @@ export class EntendiApiClient {
     return result;
   }
 
-  async getZpdFrontier() {
-    const path = '/api/mcp/zpd-frontier';
+  async getZpdFrontier(params?: { limit?: number; domain?: string; includeUnassessed?: boolean }) {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.domain) query.set('domain', params.domain);
+    if (params?.includeUnassessed) query.set('includeUnassessed', 'true');
+    const qs = query.toString();
+    const path = `/api/mcp/zpd-frontier${qs ? `?${qs}` : ''}`;
     const cacheKey = ResponseCache.key('GET', path);
 
-    // Check cache first
     const cached = this.cache.get(cacheKey);
     if (cached !== undefined) {
       apiLog(`GET ${path} CACHE_HIT`);

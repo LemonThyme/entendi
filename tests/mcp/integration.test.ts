@@ -400,7 +400,7 @@ describe('MCP Integration: ZPD Frontier Update', () => {
     sm = new StateManager(dataDir, userId);
 
     // B should be in frontier (A mastered, B not mastered, B requires A)
-    let frontier = handleGetZPDFrontier(sm, userId);
+    let frontier = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     let frontierIds = frontier.frontier.map(f => f.conceptId);
     expect(frontierIds).toContain('concept-b');
     expect(frontierIds).not.toContain('concept-a'); // A is already mastered
@@ -436,7 +436,7 @@ describe('MCP Integration: ZPD Frontier Update', () => {
     expect(status.concept!.assessmentCount).toBe(2); // phase1 + phase4
 
     // Check frontier again: if B is mastered (>0.7), it should be gone
-    frontier = handleGetZPDFrontier(sm, userId);
+    frontier = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     frontierIds = frontier.frontier.map(f => f.conceptId);
     // B's mastery should be high enough to be mastered after two high scores
     if (status.concept!.mastery >= 0.7) {
@@ -464,7 +464,7 @@ describe('MCP Integration: ZPD Frontier Update', () => {
     sm.save();
     sm = new StateManager(dataDir, userId);
 
-    const frontier = handleGetZPDFrontier(sm, userId);
+    const frontier = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     const frontierIds = frontier.frontier.map(f => f.conceptId);
 
     // A should be in frontier (no prereqs), B should NOT (A not mastered)
@@ -486,7 +486,7 @@ describe('MCP Integration: ZPD Frontier Update', () => {
     sm = new StateManager(dataDir, userId);
 
     // Initially B not in frontier
-    let frontier = handleGetZPDFrontier(sm, userId);
+    let frontier = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     expect(frontier.frontier.map(f => f.conceptId)).not.toContain('concept-b');
 
     // Master concept-a through repeated high-score evaluations
@@ -506,7 +506,7 @@ describe('MCP Integration: ZPD Frontier Update', () => {
     expect(statusA.concept!.mastery).toBeGreaterThanOrEqual(0.7);
 
     // Now B should be in frontier
-    frontier = handleGetZPDFrontier(sm, userId);
+    frontier = handleGetZPDFrontier(sm, userId, { includeUnassessed: true });
     const frontierIds = frontier.frontier.map(f => f.conceptId);
     expect(frontierIds).toContain('concept-b');
     expect(frontierIds).not.toContain('concept-a');

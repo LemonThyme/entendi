@@ -305,11 +305,18 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   mcpServer.tool(
     'entendi_get_zpd_frontier',
     'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
-    {},
-    async () => {
-      mcpLog('tool:entendi_get_zpd_frontier called');
+    {
+      limit: z.coerce.number().int().min(1).max(100).optional()
+        .describe('Max concepts to return (default: 20)'),
+      domain: z.string().optional()
+        .describe('Filter by domain (e.g. "frontend", "databases")'),
+      includeUnassessed: z.boolean().optional()
+        .describe('Include never-assessed concepts (default: false — only in-progress)'),
+    },
+    async (args) => {
+      mcpLog('tool:entendi_get_zpd_frontier called', args);
       try {
-        const result = await api.getZpdFrontier();
+        const result = await api.getZpdFrontier(args);
         mcpLog('tool:entendi_get_zpd_frontier result', result);
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
