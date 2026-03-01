@@ -118,6 +118,7 @@ export function handleGetStatus(
 export function handleGetZPDFrontier(
   sm: StateManager,
   userId: string,
+  options?: { limit?: number; includeUnassessed?: boolean },
 ): GetZPDFrontierOutput {
   const kg = sm.getKnowledgeGraph();
   const allConcepts = kg.getAllConcepts();
@@ -132,7 +133,11 @@ export function handleGetZPDFrontier(
   }
 
   // Get ZPD frontier (already sorted by Fisher info descending)
-  const frontierIds = kg.getZPDFrontier(userId, MASTERY_THRESHOLD);
+  const frontierIds = kg.getZPDFrontier(userId, {
+    threshold: MASTERY_THRESHOLD,
+    limit: options?.limit,
+    includeUnassessed: options?.includeUnassessed,
+  });
 
   const frontier = frontierIds.map(conceptId => {
     const ucs = kg.getUserConceptState(userId, conceptId);

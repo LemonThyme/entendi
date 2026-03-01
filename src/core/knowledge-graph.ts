@@ -83,7 +83,15 @@ export class KnowledgeGraph {
    * Returns concept IDs where all prerequisites are mastered but the concept itself is not.
    * Concepts with no prerequisites and low mastery are also included.
    */
-  getZPDFrontier(userId: string, threshold: number = 0.7): string[] {
+  getZPDFrontier(userId: string, options?: {
+    threshold?: number;
+    limit?: number;
+    includeUnassessed?: boolean;
+  }): string[] {
+    const threshold = options?.threshold ?? 0.7;
+    const limit = options?.limit ?? 20;
+    const includeUnassessed = options?.includeUnassessed ?? false;
+
     const frontier: string[] = [];
 
     for (const concept of this.getAllConcepts()) {
@@ -92,6 +100,9 @@ export class KnowledgeGraph {
 
       // Already mastered — skip
       if (pm >= threshold) continue;
+
+      // Skip unassessed unless explicitly included
+      if (!includeUnassessed && ucs.assessmentCount === 0) continue;
 
       // Check prerequisites
       const prereqs = concept.relationships.filter(r => r.type === 'requires');
@@ -111,10 +122,14 @@ export class KnowledgeGraph {
       }
     }
 
-    // Sort by Fisher information descending (most informative first)
+    // Sort by Fisher information descending, assessed first
     frontier.sort((a, b) => {
       const ucsA = this.getUserConceptState(userId, a);
       const ucsB = this.getUserConceptState(userId, b);
+      // Assessed first
+      if (ucsA.assessmentCount > 0 && ucsB.assessmentCount === 0) return -1;
+      if (ucsA.assessmentCount === 0 && ucsB.assessmentCount > 0) return 1;
+      // Fisher info tiebreak
       const conceptA = this.getConcept(a);
       const conceptB = this.getConcept(b);
       const fisherA = grmFisherInformation(ucsA.mastery.mu, conceptA?.itemParams);
@@ -122,7 +137,7 @@ export class KnowledgeGraph {
       return fisherB - fisherA;
     });
 
-    return frontier;
+    return frontier.slice(0, limit);
   }
 
   toJSON(): string {

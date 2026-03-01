@@ -261,7 +261,7 @@ describe('KnowledgeGraph', () => {
         specificity: 'topic',
       }));
 
-      const frontier = graph.getZPDFrontier('user1');
+      const frontier = graph.getZPDFrontier('user1', { includeUnassessed: true });
       expect(frontier).toContain('intro-js');
       expect(frontier).toContain('intro-python');
     });
@@ -285,7 +285,7 @@ describe('KnowledgeGraph', () => {
       prereqState.mastery.mu = 2.0;
       graph.setUserConceptState('user1', 'basics', prereqState);
 
-      const frontier = graph.getZPDFrontier('user1');
+      const frontier = graph.getZPDFrontier('user1', { includeUnassessed: true });
       expect(frontier).toContain('advanced');
       // 'basics' should NOT be in the frontier since it's mastered
       expect(frontier).not.toContain('basics');
@@ -306,7 +306,7 @@ describe('KnowledgeGraph', () => {
       }));
 
       // Default mu=0 -> P=0.5, below threshold of 0.7
-      const frontier = graph.getZPDFrontier('user1');
+      const frontier = graph.getZPDFrontier('user1', { includeUnassessed: true });
       expect(frontier).toContain('prereq'); // no prereqs, low mastery
       expect(frontier).not.toContain('dependent'); // prereq not mastered
     });
@@ -324,7 +324,7 @@ describe('KnowledgeGraph', () => {
       state.mastery.mu = 2.0;
       graph.setUserConceptState('user1', 'mastered-concept', state);
 
-      const frontier = graph.getZPDFrontier('user1');
+      const frontier = graph.getZPDFrontier('user1', { includeUnassessed: true });
       expect(frontier).not.toContain('mastered-concept');
     });
 
@@ -342,11 +342,11 @@ describe('KnowledgeGraph', () => {
       graph.setUserConceptState('user1', 'mid-concept', state);
 
       // At threshold 0.7, this concept IS mastered (P~0.73 >= 0.7)
-      const frontierLow = graph.getZPDFrontier('user1', 0.7);
+      const frontierLow = graph.getZPDFrontier('user1', { threshold: 0.7, includeUnassessed: true });
       expect(frontierLow).not.toContain('mid-concept');
 
       // At threshold 0.8, this concept is NOT mastered (P~0.73 < 0.8)
-      const frontierHigh = graph.getZPDFrontier('user1', 0.8);
+      const frontierHigh = graph.getZPDFrontier('user1', { threshold: 0.8, includeUnassessed: true });
       expect(frontierHigh).toContain('mid-concept');
     });
 
@@ -373,7 +373,7 @@ describe('KnowledgeGraph', () => {
       stateB.mastery.mu = -3.0; // far below all thresholds => low Fisher info
       graph.setUserConceptState('user1', 'far-from-boundary', stateB);
 
-      const frontier = graph.getZPDFrontier('user1');
+      const frontier = graph.getZPDFrontier('user1', { includeUnassessed: true });
       expect(frontier.length).toBe(2);
       // The concept near the boundary (mu=0) should come first (higher Fisher info)
       expect(frontier[0]).toBe('near-boundary');
@@ -403,7 +403,7 @@ describe('KnowledgeGraph', () => {
       stateB.mastery.mu = 2.0;
       graph.setUserConceptState('user1', 'concept-b', stateB);
 
-      const frontier = graph.getZPDFrontier('user1');
+      const frontier = graph.getZPDFrontier('user1', { includeUnassessed: true });
       expect(frontier).toEqual([]);
     });
   });
