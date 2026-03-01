@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'fs';
-import { join } from 'path';
 import { randomBytes } from 'crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const HOOK_SCRIPT = join(process.cwd(), 'plugin/hooks/session-init');
 

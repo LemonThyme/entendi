@@ -15,9 +15,9 @@ import { historyRoutes } from './routes/history.js';
 import { hookRoutes } from './routes/hooks.js';
 import { masteryRoutes } from './routes/mastery.js';
 import { mcpRoutes } from './routes/mcp.js';
+import { openapiRoutes } from './routes/openapi.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
-import { openapiRoutes } from './routes/openapi.js';
 import { publicRoutes } from './routes/public.js';
 
 export type Env = {

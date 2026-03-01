@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdirSync, readFileSync, rmSync, existsSync } from 'fs';
-import { join } from 'path';
 import { randomBytes } from 'crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const HOOK_SCRIPT = join(process.cwd(), 'plugin/hooks/stop');
 const SUITE_DIR = join(process.cwd(), '.test-tmp', `stop-${randomBytes(4).toString('hex')}`);
