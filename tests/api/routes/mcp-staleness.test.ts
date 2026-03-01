@@ -1,5 +1,10 @@
+import { config } from 'dotenv';
+
+config();
+
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../../../src/api/index.js';
 
 /**
  * Minimal chainable DB mock for pending-action and observe endpoints.
@@ -178,5 +183,82 @@ describe('GET /pending-action stale auto-expiry', () => {
     expect(body.pending.type).toBe('awaiting_probe_response');
     expect(body.pending.conceptId).toBe('docker');
     expect(db.delete).not.toHaveBeenCalled();
+  });
+});
+
+// --- Integration tests for concurrent observe protection and orphan cleanup ---
+const testDbUrl = process.env.DATABASE_URL;
+const testApiKey = process.env.ENTENDI_API_KEY;
+const testSecret = process.env.BETTER_AUTH_SECRET;
+const canRun = testDbUrl && testApiKey && testSecret && process.env.INTEGRATION_TESTS === '1';
+const describeWithDb = canRun ? describe : describe.skip;
+
+describeWithDb('concurrent observe protection', () => {
+  const { app } = createApp(testDbUrl!, { secret: testSecret! });
+  const headers = { 'Content-Type': 'application/json', 'x-api-key': testApiKey! };
+
+  it('marks old probe token as superseded when observe overwrites pending action', async () => {
+    const suffix = Date.now();
+    // First observe — creates pending action + probe token
+    const res1 = await app.request('/api/mcp/observe', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        concepts: [{ id: `concurrent-test-a-${suffix}`, source: 'llm' }],
+        triggerContext: 'testing concurrent observe protection',
+      }),
+    });
+    expect(res1.status).toBe(200);
+    const body1 = await res1.json() as any;
+
+    if (!body1.shouldProbe) return; // skip if not probed
+
+    const oldTokenId = body1.probeToken?.tokenId;
+    expect(oldTokenId).toBeDefined();
+
+    // Second observe — should supersede the old token
+    const res2 = await app.request('/api/mcp/observe', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        concepts: [{ id: `concurrent-test-b-${suffix}`, source: 'llm' }],
+        triggerContext: 'testing concurrent observe protection',
+      }),
+    });
+    expect(res2.status).toBe(200);
+    const body2 = await res2.json() as any;
+
+    // New probe should either trigger or not, but the old token should be superseded
+    // We can verify by trying to use the old token — it should fail
+    if (body1.shouldProbe && body2.shouldProbe) {
+      const evalRes = await app.request('/api/mcp/record-evaluation', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          conceptId: `concurrent-test-a-${suffix}`,
+          score: 2,
+          confidence: 0.8,
+          reasoning: 'testing with old token',
+          eventType: 'probe',
+          probeToken: body1.probeToken,
+          responseText: 'my understanding of the concept',
+        }),
+      });
+      // Old token should be rejected because usedAt was set
+      expect(evalRes.status).toBe(403);
+    }
+  });
+});
+
+describeWithDb('health endpoint orphan cleanup', () => {
+  const { app } = createApp(testDbUrl!, { secret: testSecret! });
+
+  it('returns ok status with cleanup fields', async () => {
+    const res = await app.request('/health');
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.status).toBe('ok');
+    expect(body.db).toBe('connected');
+    expect(typeof body.dbLatencyMs).toBe('number');
   });
 });

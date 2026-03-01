@@ -290,6 +290,15 @@ mcpRoutes.post('/observe', async (c) => {
     },
   });
 
+  // Mark old probe token as superseded before overwriting pending action
+  const [existingAction] = await db.select().from(pendingActions)
+    .where(eq(pendingActions.userId, user.id));
+  if (existingAction?.probeTokenId) {
+    await db.update(probeTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(probeTokens.id, existingAction.probeTokenId));
+  }
+
   // Write pending action
   await db.insert(pendingActions).values({
     userId: user.id,

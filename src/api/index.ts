@@ -1,6 +1,8 @@
+import { and, eq, isNull, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createDb, type Database } from './db/connection.js';
+import { pendingActions, probeTokens } from './db/schema.js';
 import { type Auth, createAuth } from './lib/auth.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { analyticsRoutes } from './routes/analytics.js';
@@ -113,6 +115,9 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   });
 
   // Health check with DB connectivity and diagnostics
+  let lastCleanupTime = 0;
+  const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+
   app.get('/health', async (c) => {
     const uptimeMs = Date.now() - startedAt;
     const environment = process.env.ENVIRONMENT || 'production';
@@ -121,6 +126,23 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
       const dbStart = Date.now();
       await db.execute(sql`SELECT 1`);
       const dbLatencyMs = Date.now() - dbStart;
+
+      // Periodic orphan cleanup (fire and forget)
+      if (Date.now() - lastCleanupTime > CLEANUP_INTERVAL) {
+        lastCleanupTime = Date.now();
+        Promise.all([
+          db.delete(probeTokens).where(
+            and(isNull(probeTokens.usedAt), lt(probeTokens.expiresAt, new Date()))
+          ),
+          db.delete(pendingActions).where(
+            and(
+              eq(pendingActions.actionType, 'awaiting_probe_response'),
+              lt(pendingActions.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
+            )
+          ),
+        ]).catch(() => { /* non-critical cleanup */ });
+      }
+
       return c.json({
         status: 'ok',
         db: 'connected',
