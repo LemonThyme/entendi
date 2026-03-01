@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { detectLoginPattern, detectTeachMePattern, handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
@@ -302,6 +302,35 @@ describe('handleUserPromptSubmit (thin observer)', () => {
 
     const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
     expect(result).toBeNull();
+  });
+
+  it('retries dismiss from local marker file before fetching pending action', async () => {
+    // Write a pending-dismiss marker file
+    const markerPath = join(TEST_HOME, '.entendi', 'pending-dismiss.json');
+    writeFileSync(markerPath, JSON.stringify({ conceptId: 'oauth', reason: 'session_ended', ts: Date.now() }));
+
+    // Mock fetch: first call is dismiss retry (success), second is pending-action
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ acknowledged: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ pending: null, enforcement: 'remind' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await handleUserPromptSubmit(makeInput('hello world'));
+
+    // Verify dismiss was retried
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const dismissCall = fetchMock.mock.calls[0];
+    expect(dismissCall[0]).toContain('/api/mcp/dismiss');
+
+    // Verify marker was deleted
+    expect(existsSync(markerPath)).toBe(false);
+  });
+
+  it('proceeds normally when no marker file exists', async () => {
+    mockPendingAction(null, 'remind');
+    // No marker file — should just proceed to fetchPendingAction
+    await handleUserPromptSubmit(makeInput('hello world'));
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 });
 

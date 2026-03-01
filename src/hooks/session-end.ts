@@ -1,3 +1,6 @@
+import { writeFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { loadConfig } from '../shared/config.js';
 import { log, readStdin } from './shared.js';
 
@@ -7,7 +10,18 @@ import { log, readStdin } from './shared.js';
  * Never blocks shutdown (always exits 0).
  */
 
-async function cleanupSession(): Promise<void> {
+function writeDismissMarker(conceptId: string): void {
+  try {
+    const markerPath = join(homedir(), '.entendi', 'pending-dismiss.json');
+    writeFileSync(markerPath, JSON.stringify({
+      conceptId,
+      reason: 'session_ended',
+      ts: Date.now(),
+    }));
+  } catch { /* non-critical */ }
+}
+
+export async function cleanupSession(): Promise<void> {
   const config = loadConfig();
   const { apiUrl, apiKey } = config;
 
@@ -16,6 +30,7 @@ async function cleanupSession(): Promise<void> {
     return;
   }
 
+  let lastConceptId = 'unknown';
   try {
     // Check for pending actions
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
@@ -38,6 +53,7 @@ async function cleanupSession(): Promise<void> {
     }
 
     const { type, conceptId } = data.pending;
+    lastConceptId = conceptId ?? 'unknown';
     log('hook:session-end', 'cleaning up pending action', { type, conceptId });
 
     // Dismiss any pending probes or tutor offers (session ended = topic_change)
@@ -58,10 +74,12 @@ async function cleanupSession(): Promise<void> {
         log('hook:session-end', 'failed to dismiss pending action', {
           status: dismissRes.status,
         });
+        writeDismissMarker(lastConceptId);
       }
     }
   } catch (err) {
     log('hook:session-end', 'exception during cleanup', { error: String(err) });
+    writeDismissMarker(lastConceptId);
   }
 }
 

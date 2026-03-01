@@ -1,4 +1,4 @@
-import { writeFileSync } from 'fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { loadConfig } from '../shared/config.js';
@@ -89,12 +89,41 @@ async function fetchPendingAction(): Promise<PendingActionResult> {
   }
 }
 
+// --- Dismiss retry from local marker ---
+
+async function retryPendingDismiss(): Promise<void> {
+  const markerPath = join(homedir(), '.entendi', 'pending-dismiss.json');
+  try {
+    const raw = readFileSync(markerPath, 'utf-8');
+    const marker = JSON.parse(raw);
+    const config = loadConfig();
+    if (!config.apiKey) return;
+
+    const res = await fetch(`${config.apiUrl}/api/mcp/dismiss`, {
+      method: 'POST',
+      headers: { 'x-api-key': config.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: marker.reason ?? 'session_ended' }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      log('hook:user-prompt-submit', 'retried pending dismiss successfully');
+    }
+    unlinkSync(markerPath);
+  } catch {
+    // No marker file or retry failed — ignore
+  }
+}
+
 // --- Main handler ---
 
 export async function handleUserPromptSubmit(
   input: HookInput,
 ): Promise<UserPromptSubmitOutput | null> {
   const userPrompt = (input.prompt as string) ?? '';
+
+  // -1. Retry any pending dismiss from a previous session
+  await retryPendingDismiss();
 
   // 0. Check for login request (must run before pending action — user may not have an API key yet)
   if (detectLoginPattern(userPrompt)) {
