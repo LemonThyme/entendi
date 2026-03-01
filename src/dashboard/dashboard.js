@@ -148,6 +148,31 @@
       h("div", { className: "error-text", id: "auth-error" })
     ]);
     area.appendChild(box);
+
+    // Social login buttons: POST to Better Auth's social sign-in endpoint
+    var socialBtns = area.querySelectorAll(".btn-social[data-provider]");
+    socialBtns.forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var provider = btn.getAttribute("data-provider");
+        fetch("/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ provider: provider, callbackURL: "/" })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.url) {
+              window.location.href = data.url;
+            } else {
+              document.getElementById("auth-error").textContent = data.message || "Social login failed";
+            }
+          })
+          .catch(function() {
+            document.getElementById("auth-error").textContent = "Network error — is the API running?";
+          });
+      });
+    });
   }
 
   function doAuth(url) {
