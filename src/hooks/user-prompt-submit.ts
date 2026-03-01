@@ -71,10 +71,11 @@ async function fetchPendingAction(): Promise<PendingActionResult> {
     log('hook:user-prompt-submit', 'fetchPendingAction: calling API', { url: `${apiUrl}/api/mcp/pending-action` });
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
       headers: { 'x-api-key': apiKey },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
       log('hook:user-prompt-submit', 'fetchPendingAction: API error', { status: res.status });
-      return { pending: null, enforcement: 'off' };
+      return { pending: null, enforcement: 'remind' };
     }
     const data = await res.json() as { pending: any | null; enforcement?: string };
     log('hook:user-prompt-submit', 'fetchPendingAction: result', data);
@@ -83,7 +84,7 @@ async function fetchPendingAction(): Promise<PendingActionResult> {
     return { pending: data.pending, enforcement };
   } catch (err) {
     log('hook:user-prompt-submit', 'fetchPendingAction: exception', { error: String(err) });
-    return { pending: null, enforcement: 'off' };
+    return { pending: null, enforcement: 'remind' };
   }
 }
 
