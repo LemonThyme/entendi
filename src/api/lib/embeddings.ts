@@ -33,17 +33,21 @@ export async function findSimilarConcepts(
   limit: number = 5,
 ): Promise<EmbeddingResult[]> {
   const embeddingStr = `[${embedding.join(',')}]`;
-  const rows = await db.execute(sql`
-    SELECT concept_id, 1 - (embedding <=> ${embeddingStr}::vector) AS similarity
-    FROM concept_embeddings
-    WHERE 1 - (embedding <=> ${embeddingStr}::vector) > ${threshold}
-    ORDER BY embedding <=> ${embeddingStr}::vector
-    LIMIT ${limit}
-  `);
-  return (rows.rows || []).map((r: any) => ({
-    conceptId: r.concept_id,
-    similarity: parseFloat(r.similarity),
-  }));
+  try {
+    const rows = await db.execute(sql`
+      SELECT concept_id, 1 - (embedding <=> ${embeddingStr}::vector) AS similarity
+      FROM concept_embeddings
+      WHERE 1 - (embedding <=> ${embeddingStr}::vector) > ${threshold}
+      ORDER BY embedding <=> ${embeddingStr}::vector
+      LIMIT ${limit}
+    `);
+    return (rows.rows || []).map((r: any) => ({
+      conceptId: r.concept_id,
+      similarity: parseFloat(r.similarity),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -72,10 +76,15 @@ export async function conceptSimilarity(
   conceptB: string,
 ): Promise<number> {
   if (conceptA === conceptB) return 1.0;
-  const rows = await db.execute(sql`
-    SELECT 1 - (a.embedding <=> b.embedding) AS similarity
-    FROM concept_embeddings a, concept_embeddings b
-    WHERE a.concept_id = ${conceptA} AND b.concept_id = ${conceptB}
-  `);
-  return (rows.rows?.[0] as any)?.similarity ? parseFloat((rows.rows[0] as any).similarity) : 0;
+  try {
+    const rows = await db.execute(sql`
+      SELECT 1 - (a.embedding <=> b.embedding) AS similarity
+      FROM concept_embeddings a, concept_embeddings b
+      WHERE a.concept_id = ${conceptA} AND b.concept_id = ${conceptB}
+    `);
+    return (rows.rows?.[0] as any)?.similarity ? parseFloat((rows.rows[0] as any).similarity) : 0;
+  } catch {
+    // pgvector operator may not be available (e.g. column type mismatch)
+    return 0;
+  }
 }
