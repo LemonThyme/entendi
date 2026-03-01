@@ -315,6 +315,106 @@ describe('org routes (unit)', () => {
     expect(res.status).toBe(400);
   });
 
+  // --- GET /enforcement ---
+
+  it('GET /enforcement returns default "remind" when no metadata', async () => {
+    db._queueResult([{ metadata: null }]);
+
+    const { orgRoutes } = await import('../../../src/api/routes/org.js');
+    const app = createTestApp(db);
+    app.route('/', orgRoutes);
+
+    const res = await app.request('/enforcement');
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.enforcementLevel).toBe('remind');
+  });
+
+  it('GET /enforcement returns stored enforcement level', async () => {
+    db._queueResult([{ metadata: JSON.stringify({ enforcementLevel: 'enforce' }) }]);
+
+    const { orgRoutes } = await import('../../../src/api/routes/org.js');
+    const app = createTestApp(db);
+    app.route('/', orgRoutes);
+
+    const res = await app.request('/enforcement');
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.enforcementLevel).toBe('enforce');
+  });
+
+  // --- PUT /enforcement ---
+
+  it('PUT /enforcement updates enforcement level for org owner', async () => {
+    // membership check (role verification)
+    db._queueResult([{ role: 'owner' }]);
+    // org metadata fetch
+    db._queueResult([{ metadata: JSON.stringify({ integritySettings: {} }) }]);
+
+    const { orgRoutes } = await import('../../../src/api/routes/org.js');
+    const app = createTestApp(db);
+    app.route('/', orgRoutes);
+
+    const res = await app.request('/enforcement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enforcementLevel: 'enforce' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.enforcementLevel).toBe('enforce');
+  });
+
+  it('PUT /enforcement returns 403 for non-owner/admin', async () => {
+    // membership check returns member role
+    db._queueResult([{ role: 'member' }]);
+
+    const { orgRoutes } = await import('../../../src/api/routes/org.js');
+    const app = createTestApp(db);
+    app.route('/', orgRoutes);
+
+    const res = await app.request('/enforcement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enforcementLevel: 'enforce' }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('PUT /enforcement returns 400 for invalid level', async () => {
+    // membership check
+    db._queueResult([{ role: 'owner' }]);
+
+    const { orgRoutes } = await import('../../../src/api/routes/org.js');
+    const app = createTestApp(db);
+    app.route('/', orgRoutes);
+
+    const res = await app.request('/enforcement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enforcementLevel: 'invalid' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /enforcement allows admin role', async () => {
+    db._queueResult([{ role: 'admin' }]);
+    db._queueResult([{ metadata: null }]);
+
+    const { orgRoutes } = await import('../../../src/api/routes/org.js');
+    const app = createTestApp(db);
+    app.route('/', orgRoutes);
+
+    const res = await app.request('/enforcement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enforcementLevel: 'off' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.enforcementLevel).toBe('off');
+  });
+
   // --- Auth ---
 
   it('returns 401 for unauthenticated requests', async () => {

@@ -323,6 +323,62 @@ orgRoutes.get('/analytics', async (c) => {
   });
 });
 
+// --- Enforcement Level ---
+
+// GET /enforcement — get org enforcement level
+orgRoutes.get('/enforcement', async (c) => {
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No organization found' }, 400);
+
+  const db = c.get('db');
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+
+  let level = 'remind';
+  try {
+    const parsed = JSON.parse(org?.metadata ?? '{}');
+    if (['off', 'remind', 'enforce'].includes(parsed.enforcementLevel)) {
+      level = parsed.enforcementLevel;
+    }
+  } catch { /* ignore */ }
+
+  return c.json({ enforcementLevel: level });
+});
+
+// PUT /enforcement — update org enforcement level (owner/admin only)
+orgRoutes.put('/enforcement', async (c) => {
+  const db = c.get('db');
+  const currentUser = c.get('user')!;
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No organization found' }, 400);
+
+  // Verify user is owner or admin
+  const [membership] = await db.select({ role: member.role }).from(member)
+    .where(and(eq(member.userId, currentUser.id), eq(member.organizationId, orgId)));
+  if (!membership || !['owner', 'admin'].includes(membership.role)) {
+    return c.json({ error: 'Only org owners and admins can update enforcement level' }, 403);
+  }
+
+  const body = await c.req.json();
+  const level = body.enforcementLevel;
+  if (!['off', 'remind', 'enforce'].includes(level)) {
+    return c.json({ error: 'enforcementLevel must be off, remind, or enforce' }, 400);
+  }
+
+  const [org] = await db.select({ metadata: organization.metadata })
+    .from(organization).where(eq(organization.id, orgId));
+
+  let metadata: Record<string, unknown> = {};
+  try { metadata = JSON.parse(org?.metadata ?? '{}'); } catch { /* ignore */ }
+  metadata.enforcementLevel = level;
+
+  await db.update(organization)
+    .set({ metadata: JSON.stringify(metadata) })
+    .where(eq(organization.id, orgId));
+
+  return c.json({ enforcementLevel: level });
+});
+
 // --- Org Settings ---
 
 const rateLimitsSchema = z.object({
