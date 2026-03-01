@@ -55,6 +55,31 @@ export interface EntendiServer {
   getMcpServer(): McpServer;
 }
 
+export function wrapToolError(err: unknown): string {
+  const msg = String(err instanceof Error ? err.message : err);
+
+  if (msg.includes('Circuit breaker OPEN')) {
+    return 'Entendi is temporarily unavailable. Your work continues normally — concept tracking will resume automatically.';
+  }
+  if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('fetch failed') || msg.includes('AbortError') || msg.includes('operation was aborted')) {
+    return "Can't reach the Entendi API right now. This doesn't affect your work.";
+  }
+  if (/\b401\b/.test(msg) || /\b403\b/.test(msg) || msg.includes('Unauthorized') || msg.includes('Forbidden')) {
+    return 'Your Entendi session has expired. Run `entendi_login` to re-authenticate.';
+  }
+  if (/\b429\b/.test(msg) || msg.includes('Too Many Requests') || msg.includes('Rate limit')) {
+    return 'Rate limit reached. Try again later.';
+  }
+  if (/\b5\d{2}\b/.test(msg) || msg.includes('Internal Server Error') || msg.includes('Bad Gateway') || msg.includes('Service Unavailable')) {
+    return 'Entendi server error. Your work continues normally.';
+  }
+  if (msg.includes('token') && (msg.includes('expired') || msg.includes('invalid') || msg.includes('Expired'))) {
+    return 'This probe has expired. A new one will be issued next time.';
+  }
+
+  return 'Entendi encountered an unexpected error. Your work continues normally.';
+}
+
 export function createEntendiServer(options: EntendiServerOptions): EntendiServer {
   const mcpServer = new McpServer({
     name: 'entendi',
@@ -119,7 +144,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_observe error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );
@@ -166,7 +191,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_record_evaluation error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );
@@ -191,7 +216,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_start_tutor error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );
@@ -224,7 +249,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_advance_tutor error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );
@@ -249,7 +274,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_dismiss error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );
@@ -270,7 +295,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_get_status error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );
@@ -289,7 +314,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
       } catch (err) {
         mcpLog('tool:entendi_get_zpd_frontier error', { error: err });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: String(err) }) }], isError: true };
+        return { content: [{ type: 'text' as const, text: wrapToolError(err) }], isError: true };
       }
     },
   );

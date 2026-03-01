@@ -33,6 +33,7 @@ function getShellHTML(): string {
   <div class="container">
     <div id="auth-area"></div>
     <div id="content" style="display:none;">
+      <div id="health-banner" class="health-banner" style="display:none"></div>
       <div class="header">
         <h1>entend<svg class="logo-mark" viewBox="0 0 26 75" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 21 11 C 21 2 12 2 12 11 L 12 55" stroke="currentColor" stroke-width="6.5" stroke-linecap="round" fill="none"/><circle cx="12" cy="69" r="5" fill="currentColor"/></svg></h1>
         <div class="header-meta" id="header-meta"></div>

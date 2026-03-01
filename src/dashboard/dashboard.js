@@ -2772,4 +2772,33 @@
       else showAuth();
     });
   }
+
+  // Health poll
+  function checkHealth() {
+    var banner = document.getElementById('health-banner');
+    if (!banner) return;
+    var start = Date.now();
+    fetch('/health').then(function(res) {
+      var latency = Date.now() - start;
+      return res.json().then(function(data) {
+        if (!res.ok || data.status === 'degraded') {
+          banner.textContent = "Can't reach Entendi API. Data shown may be stale.";
+          banner.className = 'health-banner down';
+          banner.style.display = 'block';
+        } else if (latency > 2000) {
+          banner.textContent = 'API is responding slowly.';
+          banner.className = 'health-banner degraded';
+          banner.style.display = 'block';
+        } else {
+          banner.style.display = 'none';
+        }
+      });
+    }).catch(function() {
+      banner.textContent = "Can't reach Entendi API. Data shown may be stale.";
+      banner.className = 'health-banner down';
+      banner.style.display = 'block';
+    });
+  }
+  setInterval(checkHealth, 60000);
+  checkHealth();
 })();

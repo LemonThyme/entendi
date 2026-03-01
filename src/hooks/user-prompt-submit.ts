@@ -1,4 +1,4 @@
-import { writeFileSync } from 'fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { loadConfig } from '../shared/config.js';
@@ -49,10 +49,12 @@ interface PendingActionResult {
   enforcement: string;
 }
 
-function cacheEnforcement(enforcement: string): void {
+function cacheEnforcement(enforcement: string, userPrompt?: string): void {
   try {
     const cachePath = join(homedir(), '.entendi', 'enforcement-cache.json');
-    writeFileSync(cachePath, JSON.stringify({ enforcement, ts: Date.now() }));
+    const data: Record<string, unknown> = { enforcement, ts: Date.now() };
+    if (userPrompt) data.userPrompt = userPrompt;
+    writeFileSync(cachePath, JSON.stringify(data));
   } catch {
     // non-critical
   }
@@ -71,19 +73,45 @@ async function fetchPendingAction(): Promise<PendingActionResult> {
     log('hook:user-prompt-submit', 'fetchPendingAction: calling API', { url: `${apiUrl}/api/mcp/pending-action` });
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
       headers: { 'x-api-key': apiKey },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
       log('hook:user-prompt-submit', 'fetchPendingAction: API error', { status: res.status });
-      return { pending: null, enforcement: 'off' };
+      return { pending: null, enforcement: 'remind' };
     }
     const data = await res.json() as { pending: any | null; enforcement?: string };
     log('hook:user-prompt-submit', 'fetchPendingAction: result', data);
     const enforcement = data.enforcement ?? 'remind';
-    cacheEnforcement(enforcement);
     return { pending: data.pending, enforcement };
   } catch (err) {
     log('hook:user-prompt-submit', 'fetchPendingAction: exception', { error: String(err) });
-    return { pending: null, enforcement: 'off' };
+    return { pending: null, enforcement: 'remind' };
+  }
+}
+
+// --- Dismiss retry from local marker ---
+
+async function retryPendingDismiss(): Promise<void> {
+  const markerPath = join(homedir(), '.entendi', 'pending-dismiss.json');
+  try {
+    const raw = readFileSync(markerPath, 'utf-8');
+    const marker = JSON.parse(raw);
+    const config = loadConfig();
+    if (!config.apiKey) return;
+
+    const res = await fetch(`${config.apiUrl}/api/mcp/dismiss`, {
+      method: 'POST',
+      headers: { 'x-api-key': config.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: marker.reason ?? 'session_ended' }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      log('hook:user-prompt-submit', 'retried pending dismiss successfully');
+    }
+    unlinkSync(markerPath);
+  } catch {
+    // No marker file or retry failed — ignore
   }
 }
 
@@ -93,6 +121,9 @@ export async function handleUserPromptSubmit(
   input: HookInput,
 ): Promise<UserPromptSubmitOutput | null> {
   const userPrompt = (input.prompt as string) ?? '';
+
+  // -1. Retry any pending dismiss from a previous session
+  await retryPendingDismiss();
 
   // 0. Check for login request (must run before pending action — user may not have an API key yet)
   if (detectLoginPattern(userPrompt)) {
@@ -108,6 +139,7 @@ export async function handleUserPromptSubmit(
 
   // 1. Check for pending action via API
   const { pending, enforcement } = await fetchPendingAction();
+  cacheEnforcement(enforcement, userPrompt);
 
   if (pending) {
     switch (pending.type) {

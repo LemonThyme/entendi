@@ -1,14 +1,33 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { detectLoginPattern, detectTeachMePattern, handleUserPromptSubmit } from '../../src/hooks/user-prompt-submit.js';
 import type { PendingAction } from '../../src/schemas/types.js';
 import { loadConfig } from '../../src/shared/config.js';
+
+const { TEST_HOME } = vi.hoisted(() => ({
+  TEST_HOME: '/tmp/entendi-ups-test',
+}));
 
 vi.mock('../../src/shared/config.js', () => ({
   loadConfig: vi.fn(() => ({ apiUrl: 'http://localhost:3456', apiKey: 'test-key' })),
   saveConfig: vi.fn(),
 }));
 
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: () => TEST_HOME };
+});
+
 const mockLoadConfig = vi.mocked(loadConfig);
+
+beforeAll(() => {
+  mkdirSync(join(TEST_HOME, '.entendi'), { recursive: true });
+});
+
+afterAll(() => {
+  rmSync(TEST_HOME, { recursive: true, force: true });
+});
 
 function makeInput(prompt: string) {
   return {
@@ -240,12 +259,78 @@ describe('handleUserPromptSubmit (thin observer)', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('returns remind enforcement when API fetch times out', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('The operation was aborted', 'AbortError')));
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+    // Should fall back to 'remind' (not 'off'), so observe reminder is still injected
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('entendi_observe');
+    expect(ctx).toContain('MANDATORY');
+  });
+
+  it('returns remind enforcement when API returns 500', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('entendi_observe');
+    expect(ctx).toContain('MANDATORY');
+  });
+
+  it('passes AbortSignal.timeout to fetch', async () => {
+    mockPendingAction(null, 'remind');
+    await handleUserPromptSubmit(makeInput('hello'));
+    const fetchCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(fetchCall[1].signal).toBeDefined();
+  });
+
+  it('writes userPrompt to enforcement cache alongside enforcement level', async () => {
+    mockPendingAction(null, 'enforce');
+    await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+
+    const cachePath = join(TEST_HOME, '.entendi', 'enforcement-cache.json');
+    expect(existsSync(cachePath)).toBe(true);
+    const cached = JSON.parse(readFileSync(cachePath, 'utf-8'));
+    expect(cached.enforcement).toBe('enforce');
+    expect(cached.userPrompt).toBe('fix the OAuth redirect');
+  });
+
   it('returns null gracefully when API is unavailable', async () => {
     // No API key configured — enforcement defaults to 'off' (no API = no enforcement)
     mockLoadConfig.mockReturnValueOnce({ apiUrl: 'http://localhost:3456', apiKey: undefined });
 
     const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
     expect(result).toBeNull();
+  });
+
+  it('retries dismiss from local marker file before fetching pending action', async () => {
+    // Write a pending-dismiss marker file
+    const markerPath = join(TEST_HOME, '.entendi', 'pending-dismiss.json');
+    writeFileSync(markerPath, JSON.stringify({ conceptId: 'oauth', reason: 'session_ended', ts: Date.now() }));
+
+    // Mock fetch: first call is dismiss retry (success), second is pending-action
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ acknowledged: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ pending: null, enforcement: 'remind' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await handleUserPromptSubmit(makeInput('hello world'));
+
+    // Verify dismiss was retried
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const dismissCall = fetchMock.mock.calls[0];
+    expect(dismissCall[0]).toContain('/api/mcp/dismiss');
+
+    // Verify marker was deleted
+    expect(existsSync(markerPath)).toBe(false);
+  });
+
+  it('proceeds normally when no marker file exists', async () => {
+    mockPendingAction(null, 'remind');
+    // No marker file — should just proceed to fetchPendingAction
+    await handleUserPromptSubmit(makeInput('hello world'));
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 });
 
