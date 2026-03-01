@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 import { manifest } from '../../dashboard/manifest.js';
 import { pressMentions } from '../db/schema.js';
 import type { Env } from '../index.js';
-import { daysSinceLaunch, publicShell, type PageMeta } from './public-html.js';
+import { daysSinceLaunch, type PageMeta, publicShell } from './public-html.js';
 
 export const dashboardRoutes = new Hono<Env>();
 

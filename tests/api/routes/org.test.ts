@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Creates a chainable mock that supports: select().from().where().orderBy().limit()
@@ -25,6 +25,7 @@ function createDbMock() {
       innerJoin: vi.fn(() => makeLink()),
       orderBy: vi.fn(() => makeLink()),
       limit: vi.fn(() => Promise.resolve(nextResult())),
+      // biome-ignore lint/suspicious/noThenProperty: mock needs thenable interface for Drizzle query chain
       then(resolve: any, reject?: any) {
         if (!resolved) { resolved = true; return Promise.resolve(nextResult()).then(resolve, reject); }
         return Promise.resolve(undefined).then(resolve, reject);
