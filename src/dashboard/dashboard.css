@@ -700,3 +700,24 @@ body {
   .member-row > *:nth-child(3), .member-row > *:nth-child(4) { display: none; }
   .event-panel { width: 100%; }
 }
+
+/* Health banner */
+.health-banner {
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.health-banner.degraded {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+}
+.health-banner.down {
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1px solid var(--red);
+}
