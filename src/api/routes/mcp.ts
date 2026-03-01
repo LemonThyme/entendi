@@ -23,6 +23,7 @@ import type { Env } from '../index.js';
 import { resolveConceptId } from '../lib/concept-normalize.js';
 import { resolveConcept } from '../lib/concept-pipeline.js';
 import { conceptSimilarity } from '../lib/embeddings.js';
+import { resolveEnforcementLevel } from '../lib/enforcement.js';
 import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
 import { getOrgRateLimits } from '../lib/org-rate-limits.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -1049,13 +1050,16 @@ mcpRoutes.get('/pending-action', async (c) => {
   const [action] = await db.select().from(pendingActions)
     .where(eq(pendingActions.userId, user.id));
 
-  if (!action) return c.json({ pending: null });
+  const enforcement = await resolveEnforcementLevel(db, user.id);
+
+  if (!action) return c.json({ pending: null, enforcement });
 
   return c.json({
     pending: {
       type: action.actionType,
       ...(action.data as Record<string, unknown>),
     },
+    enforcement,
   });
 });
 
