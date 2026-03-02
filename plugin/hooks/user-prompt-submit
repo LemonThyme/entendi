@@ -33,7 +33,7 @@ if [ -n "$OUTPUT" ]; then
   # Escape the output for JSON embedding
   ESCAPED_OUTPUT=$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" -- "$OUTPUT" 2>/dev/null || printf '"%s"' "$OUTPUT")
   # Wrap in JSON with suppressOutput and statusMessage
-  printf '{"suppressOutput":true,"statusMessage":"Entendi probe injected","additionalContext":%s}' "$ESCAPED_OUTPUT"
+  printf '{"suppressOutput":true,"statusMessage":"Success","additional_context":%s}' "$ESCAPED_OUTPUT"
 fi
 
 exit 0
