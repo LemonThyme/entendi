@@ -13,7 +13,7 @@ const spec = {
     license: { name: 'MIT' },
   },
   servers: [
-    { url: 'https://entendi.dev', description: 'Production' },
+    { url: 'https://api.entendi.dev', description: 'Production' },
     { url: 'http://localhost:3456', description: 'Local development' },
   ],
   paths: {

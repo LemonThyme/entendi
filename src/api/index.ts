@@ -60,6 +60,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   // CORS — allow configured origins or sensible defaults
   const defaultOrigins = [
     'https://entendi.dev',
+    'https://api.entendi.dev',
     'https://entendi-api.tomaskorenblit.workers.dev',
     'http://localhost:3456',
   ];
