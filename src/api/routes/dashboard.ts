@@ -235,14 +235,18 @@ function getLandingHTML(): string {
     .hero { text-align: center; padding-top: 4rem; padding-bottom: 3rem; }
     .hero h1 { font-family: var(--font-display); font-size: 2.25rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; max-width: 600px; margin: 0 auto 1rem; }
     .hero .subtitle { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; max-width: 480px; margin: 0 auto 2rem; }
-    .install-block { max-width: 520px; margin: 0 auto 0.75rem; background: var(--accent); border-radius: 8px; overflow: hidden; }
-    .install-line { display: flex; align-items: center; }
-    .install-line + .install-line { border-top: 1px solid rgba(255,255,255,0.15); }
-    .install-line code { flex: 1; padding: 0.55rem 1rem; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem; color: white; user-select: all; white-space: nowrap; }
-    .install-line .copy-btn { padding: 0.55rem 0.85rem; background: none; border: none; border-left: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer; display: flex; align-items: center; }
-    .install-line .copy-btn:hover { background: rgba(255,255,255,0.1); }
-    .install-line .copy-btn svg { width: 16px; height: 16px; }
-    .install-line .step { padding: 0.55rem 0 0.55rem 1rem; color: rgba(255,255,255,0.5); font-size: 0.7rem; font-family: var(--font-body); white-space: nowrap; }
+    .terminal { max-width: 540px; margin: 0 auto 0.75rem; background: #1a1a2e; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+    .terminal-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: rgba(255,255,255,0.06); }
+    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .terminal-dot.r { background: #ff5f57; }
+    .terminal-dot.y { background: #febc2e; }
+    .terminal-dot.g { background: #28c840; }
+    .terminal-body { display: flex; align-items: center; padding: 0.85rem 1rem; }
+    .terminal-body .prompt { color: rgba(255,255,255,0.4); margin-right: 0.5rem; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem; user-select: none; }
+    .terminal-body code { flex: 1; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem; color: rgba(255,255,255,0.9); user-select: all; white-space: nowrap; overflow-x: auto; }
+    .terminal-body .copy-btn { padding: 0.4rem; margin-left: 0.5rem; background: none; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; flex-shrink: 0; }
+    .terminal-body .copy-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+    .terminal-body .copy-btn svg { width: 14px; height: 14px; }
     .cta-note { color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 3rem; text-align: center; }
     .cta-note a { color: var(--accent); text-decoration: none; }
     .cta-note a:hover { text-decoration: underline; }
@@ -263,19 +267,12 @@ function getLandingHTML(): string {
   <div class="hero">
     <h1>Actually understand what your AI writes.</h1>
     <p class="subtitle">An open-source Claude Code plugin. It watches what you build with AI and checks that you get it.</p>
-    <div class="install-block">
-      <div class="install-line">
-        <span class="step">1.</span>
-        <code>claude plugin marketplace add https://github.com/LemonThyme/entendi</code>
-        <button class="copy-btn" data-text="claude plugin marketplace add https://github.com/LemonThyme/entendi" aria-label="Copy to clipboard">
-          <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
-        </button>
-      </div>
-      <div class="install-line">
-        <span class="step">2.</span>
-        <code>claude plugin install entendi</code>
-        <button class="copy-btn" data-text="claude plugin install entendi" aria-label="Copy to clipboard">
+    <div class="terminal">
+      <div class="terminal-bar"><span class="terminal-dot r"></span><span class="terminal-dot y"></span><span class="terminal-dot g"></span></div>
+      <div class="terminal-body">
+        <span class="prompt">$</span>
+        <code>claude plugin marketplace add https://github.com/LemonThyme/entendi && claude plugin install entendi</code>
+        <button class="copy-btn" data-text="claude plugin marketplace add https://github.com/LemonThyme/entendi && claude plugin install entendi" aria-label="Copy to clipboard">
           <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
         </button>
@@ -310,19 +307,12 @@ function getLandingHTML(): string {
     </ol>
   </div>
   <div class="bottom-cta">
-    <div class="install-block">
-      <div class="install-line">
-        <span class="step">1.</span>
-        <code>claude plugin marketplace add https://github.com/LemonThyme/entendi</code>
-        <button class="copy-btn" data-text="claude plugin marketplace add https://github.com/LemonThyme/entendi" aria-label="Copy to clipboard">
-          <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
-        </button>
-      </div>
-      <div class="install-line">
-        <span class="step">2.</span>
-        <code>claude plugin install entendi</code>
-        <button class="copy-btn" data-text="claude plugin install entendi" aria-label="Copy to clipboard">
+    <div class="terminal">
+      <div class="terminal-bar"><span class="terminal-dot r"></span><span class="terminal-dot y"></span><span class="terminal-dot g"></span></div>
+      <div class="terminal-body">
+        <span class="prompt">$</span>
+        <code>claude plugin marketplace add https://github.com/LemonThyme/entendi && claude plugin install entendi</code>
+        <button class="copy-btn" data-text="claude plugin marketplace add https://github.com/LemonThyme/entendi && claude plugin install entendi" aria-label="Copy to clipboard">
           <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
         </button>
