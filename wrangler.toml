@@ -3,6 +3,7 @@ main = "src/api/worker.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+workers_dev = true
 routes = [
   { pattern = "api.entendi.dev", custom_domain = true }
 ]
