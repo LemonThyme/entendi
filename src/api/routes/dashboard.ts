@@ -241,10 +241,10 @@ function getLandingHTML(): string {
     .terminal-dot.r { background: #ff5f57; }
     .terminal-dot.y { background: #febc2e; }
     .terminal-dot.g { background: #28c840; }
-    .terminal-body { display: flex; align-items: center; padding: 0.85rem 1rem; }
-    .terminal-body .prompt { color: rgba(255,255,255,0.4); margin-right: 0.5rem; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem; user-select: none; }
+    .terminal-body { display: flex; align-items: flex-start; padding: 0.85rem 1rem; text-align: left; }
+    .terminal-body .prompt { color: rgba(255,255,255,0.4); margin-right: 0.5rem; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.75rem; line-height: 1.5; user-select: none; flex-shrink: 0; }
     .terminal-body code { flex: 1; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.75rem; color: rgba(255,255,255,0.9); user-select: all; word-break: break-all; line-height: 1.5; }
-    .terminal-body .copy-btn { padding: 0.4rem; margin-left: 0.5rem; background: none; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; flex-shrink: 0; }
+    .terminal-body .copy-btn { padding: 0.4rem; margin-left: 0.5rem; background: none; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; flex-shrink: 0; margin-top: 1px; }
     .terminal-body .copy-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
     .terminal-body .copy-btn svg { width: 14px; height: 14px; }
     .cta-note { color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 3rem; text-align: center; }
