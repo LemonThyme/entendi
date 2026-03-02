@@ -43,7 +43,7 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
 
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: true,
+      requireEmailVerification: !!process.env.RESEND_API_KEY,
     },
 
     emailVerification: {

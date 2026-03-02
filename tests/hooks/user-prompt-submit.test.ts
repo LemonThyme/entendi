@@ -43,9 +43,19 @@ function makeInput(prompt: string) {
  * The hook calls GET /api/mcp/pending-action which returns { pending, enforcement }.
  */
 function mockPendingAction(action: PendingAction | null, enforcement = 'remind') {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ pending: action, enforcement }),
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    if (typeof url === 'string' && url.includes('/observe')) {
+      // observe endpoint — return no-probe by default
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ shouldProbe: false }),
+      });
+    }
+    // pending-action endpoint
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ pending: action, enforcement }),
+    });
   }));
 }
 
@@ -186,8 +196,53 @@ describe('handleUserPromptSubmit (thin observer)', () => {
 
   // --- No pending action ---
 
-  it('injects observe reminder when no pending action and enforcement is remind', async () => {
+  it('returns null when observe says no probe needed', async () => {
     mockPendingAction(null, 'remind');
+    // 'fix the OAuth redirect' matches the 'oauth' keyword → observe is called → returns shouldProbe: false
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+    expect(result).toBeNull();
+  });
+
+  it('injects probe instruction when observe returns shouldProbe true', async () => {
+    // Override fetch to return a probe from observe
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/observe')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            shouldProbe: true,
+            conceptId: 'oauth',
+            depth: 2,
+            guidance: 'Ask about OAuth flows',
+            userProfile: 'intermediate',
+            mastery: 45,
+            probeToken: { tokenId: 'tok-1', signature: 'sig' },
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ pending: null, enforcement: 'remind' }),
+      });
+    }));
+    const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
+    expect(result).toBeDefined();
+    const ctx = result!.hookSpecificOutput?.additionalContext!;
+    expect(ctx).toContain('COMPREHENSION PROBE REQUIRED');
+    expect(ctx).toContain('oauth');
+  });
+
+  it('injects fallback MANDATORY reminder when observe fails', async () => {
+    // Override fetch so observe call fails
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/observe')) {
+        return Promise.resolve({ ok: false, status: 500 });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ pending: null, enforcement: 'remind' }),
+      });
+    }));
     const result = await handleUserPromptSubmit(makeInput('fix the OAuth redirect'));
     expect(result).toBeDefined();
     const ctx = result!.hookSpecificOutput?.additionalContext!;
