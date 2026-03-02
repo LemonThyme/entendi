@@ -290,7 +290,7 @@ export const probeTokens = pgTable('probe_tokens', {
 export const eventAnnotations = pgTable('event_annotations', {
   id: serial('id').primaryKey(),
   eventId: integer('event_id').notNull().references(() => assessmentEvents.id, { onDelete: 'cascade' }),
-  authorId: text('author_id').notNull().references(() => user.id),
+  authorId: text('author_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   text: text('text').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

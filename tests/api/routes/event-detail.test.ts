@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 
 config();
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../../src/api/index.js';
 
 const testDbUrl = process.env.DATABASE_URL;
@@ -137,6 +137,17 @@ describeWithDb('Event detail + annotations API (integration)', () => {
       }
     }
   }, 30_000);
+
+  afterAll(async () => {
+    // Clean up test users created by this test suite
+    const { createDb } = await import('../../../src/api/db/connection.js');
+    const { user } = await import('../../../src/api/db/schema.js');
+    const { like } = await import('drizzle-orm');
+    const db = createDb(testDbUrl!);
+    await db.delete(user).where(like(user.email, '%event-detail-%@test.entendi.dev'));
+    await db.delete(user).where(like(user.email, '%no-org-%@test.entendi.dev'));
+    await db.delete(user).where(like(user.email, '%non-author-%@test.entendi.dev'));
+  });
 
   // --- 1. GET /api/events/:eventId — user endpoint ---
 

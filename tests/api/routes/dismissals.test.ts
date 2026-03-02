@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 
 config();
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../../src/api/index.js';
 
 const testDbUrl = process.env.DATABASE_URL;
@@ -97,6 +97,15 @@ describeWithDb('Categorized dismissals (integration)', () => {
       }
     }
   }, 30_000);
+
+  afterAll(async () => {
+    // Clean up test users created by this test suite
+    const { createDb } = await import('../../../src/api/db/connection.js');
+    const { user } = await import('../../../src/api/db/schema.js');
+    const { like } = await import('drizzle-orm');
+    const db = createDb(testDbUrl!);
+    await db.delete(user).where(like(user.email, '%dismiss-%@test.entendi.dev'));
+  });
 
   // ===== POST /api/mcp/dismiss — categorized reasons =====
 
