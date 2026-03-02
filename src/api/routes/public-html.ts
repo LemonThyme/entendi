@@ -16,15 +16,16 @@ export interface PageMeta {
 }
 
 function nav(active: PageId): string {
+  const base = active === 'status' ? 'https://entendi.dev' : '';
   const link = (href: string, label: string, key: PageId) =>
-    `<a href="${href}" class="nav-link${active === key ? ' active' : ''}">${label}</a>`;
+    `<a href="${base}${href}" class="nav-link${active === key ? ' active' : ''}">${label}</a>`;
   return `<nav class="site-nav">
     ${link('/', 'entendi', 'home')}
     <span class="nav-sep">|</span>
     ${link('/press', 'press', 'press')}
     <span class="nav-sep">|</span>
     ${link('/contact', 'contact', 'contact')}
-    <a href="/login" class="nav-link nav-signin">sign in</a>
+    <a href="${base}/login" class="nav-link nav-signin">sign in</a>
   </nav>`;
 }
 

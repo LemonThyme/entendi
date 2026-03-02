@@ -71,9 +71,8 @@ function getApiStatusPage(): string {
       </div>
     </div>
     <div class="status-links">
-      <a href="/api/openapi">OpenAPI</a>
+      <a href="/api/openapi.json">OpenAPI</a>
       <a href="/health">Health JSON</a>
-      <a href="https://github.com/LemonThyme/entendi">GitHub</a>
     </div>
     <script>
       function setBadge(id, ok, label) {
