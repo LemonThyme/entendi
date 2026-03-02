@@ -25,8 +25,8 @@ adminStatsRoutes.get('/stats', requireAdmin, async (c) => {
     db.execute(sql`SELECT COUNT(*)::int AS count FROM assessment_events`),
     db.execute(sql`SELECT COUNT(*)::int AS count FROM tutor_sessions`),
     db.execute(sql`SELECT COUNT(*)::int AS count FROM dismissal_events`),
-    db.execute(sql`SELECT COUNT(*)::int AS count FROM assessment_events WHERE "createdAt" > NOW() - INTERVAL '24 hours'`),
-    db.execute(sql`SELECT COUNT(DISTINCT "userId")::int AS count FROM assessment_events WHERE "createdAt" > NOW() - INTERVAL '7 days'`),
+    db.execute(sql`SELECT COUNT(*)::int AS count FROM assessment_events WHERE created_at > NOW() - INTERVAL '24 hours'`),
+    db.execute(sql`SELECT COUNT(DISTINCT user_id)::int AS count FROM assessment_events WHERE created_at > NOW() - INTERVAL '7 days'`),
   ]);
 
   const count = (result: { rows: unknown[] }) =>
