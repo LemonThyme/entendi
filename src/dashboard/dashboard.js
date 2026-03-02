@@ -181,6 +181,7 @@
     var body = { email: email, password: pass };
     if (url.indexOf("sign-up") !== -1) body.name = email.split("@")[0];
 
+    var isSignUp = url.indexOf("sign-up") !== -1;
     fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -189,6 +190,11 @@
           localStorage.setItem("entendi_token", token);
           currentUser = data.user;
           showDashboard();
+        } else if (isSignUp && !data.token && data.user) {
+          // Signup succeeded but email verification required
+          var errEl = document.getElementById("auth-error");
+          errEl.style.color = "var(--accent, #4f46e5)";
+          errEl.textContent = "Check your email for a verification link.";
         } else {
           document.getElementById("auth-error").textContent = data.message || "Authentication failed";
         }

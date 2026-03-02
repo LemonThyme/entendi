@@ -35,7 +35,7 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
     secret: options?.secret || process.env.BETTER_AUTH_SECRET,
     baseURL,
     basePath: '/api/auth',
-    trustedOrigins: [baseURL, 'https://entendi.dev', 'https://entendi-api.tomaskorenblit.workers.dev'],
+    trustedOrigins: [baseURL, 'https://entendi.dev', 'https://api.entendi.dev', 'https://entendi-api.tomaskorenblit.workers.dev'],
 
     database: drizzleAdapter(db, {
       provider: 'pg',
@@ -43,6 +43,19 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
 
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: true,
+    },
+
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        void sendEmail({
+          to: user.email,
+          template: EmailTemplate.EmailVerification,
+          vars: { verifyLink: url },
+        });
+      },
     },
 
     ...(socialProviders ? { socialProviders } : {}),

@@ -42,6 +42,86 @@ export function detectTeachMePattern(prompt: string): string | null {
   return null;
 }
 
+// --- Lightweight concept extraction from user prompt ---
+
+const CONCEPT_KEYWORDS: Record<string, string[]> = {
+  'environment-variables': ['env var', 'environment variable', '.env', 'process.env', 'dotenv', 'secrets', 'config var'],
+  'deployment': ['deploy', 'production', 'staging', 'ship it', 'go live', 'release'],
+  'docker': ['docker', 'container', 'dockerfile', 'docker-compose', 'docker compose'],
+  'kubernetes': ['kubernetes', 'k8s', 'kubectl', 'helm', 'pod', 'kube'],
+  'ci-cd': ['ci/cd', 'ci cd', 'github actions', 'pipeline', 'continuous integration', 'continuous deployment'],
+  'database-migrations': ['migration', 'migrate', 'schema change', 'alter table', 'drizzle-kit'],
+  'authentication': ['auth', 'login', 'signup', 'sign up', 'session', 'jwt', 'oauth', 'password'],
+  'rate-limiting': ['rate limit', 'throttle', 'rate-limit'],
+  'caching': ['cache', 'caching', 'redis', 'memcache', 'memoize'],
+  'testing': ['test', 'unit test', 'integration test', 'e2e', 'vitest', 'jest'],
+  'api-design': ['rest api', 'graphql', 'endpoint', 'api route', 'api design'],
+  'database-indexing': ['index', 'indexing', 'query performance', 'slow query', 'explain analyze'],
+  'websockets': ['websocket', 'ws://', 'real-time', 'realtime', 'socket.io'],
+  'typescript': ['typescript', 'type safety', 'generics', 'type inference', 'tsconfig'],
+  'git': ['git', 'rebase', 'merge conflict', 'cherry-pick', 'git bisect'],
+  'cloudflare-workers': ['cloudflare', 'workers', 'wrangler', 'edge function'],
+  'sql': ['sql', 'query', 'join', 'subquery', 'cte', 'stored procedure'],
+  'react': ['react', 'usestate', 'useeffect', 'component', 'jsx', 'tsx'],
+  'css': ['css', 'flexbox', 'grid', 'responsive', 'media query', 'tailwind'],
+  'security': ['xss', 'csrf', 'sql injection', 'cors', 'helmet', 'sanitize'],
+  'error-handling': ['error handling', 'try catch', 'exception', 'error boundary'],
+  'logging': ['logging', 'log level', 'structured logging', 'observability'],
+  'dns': ['dns', 'domain', 'cname', 'a record', 'nameserver'],
+  'ssl-tls': ['ssl', 'tls', 'https', 'certificate', 'let\'s encrypt'],
+  'npm': ['npm', 'package.json', 'node_modules', 'dependency', 'semver'],
+};
+
+function extractConceptsFromPrompt(prompt: string): Array<{ id: string; source: 'llm' }> {
+  const lower = prompt.toLowerCase();
+  const found: Array<{ id: string; source: 'llm' }> = [];
+  for (const [conceptId, keywords] of Object.entries(CONCEPT_KEYWORDS)) {
+    if (keywords.some(kw => lower.includes(kw))) {
+      found.push({ id: conceptId, source: 'llm' });
+    }
+  }
+  return found;
+}
+
+// --- Observe API call ---
+
+interface ObserveResult {
+  shouldProbe: boolean;
+  conceptId?: string;
+  depth?: number;
+  intrusiveness?: string;
+  guidance?: string;
+  userProfile?: string;
+  mastery?: number;
+  urgency?: number;
+  probeToken?: Record<string, unknown>;
+}
+
+async function callObserve(concepts: Array<{ id: string; source: string }>): Promise<ObserveResult | null> {
+  const config = loadConfig();
+  if (!config.apiKey) return null;
+  try {
+    const primaryConceptId = concepts[0]?.id;
+    const res = await fetch(`${config.apiUrl}/api/mcp/observe`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': config.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ concepts, primaryConceptId }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      log('hook:user-prompt-submit', 'callObserve: API error', { status: res.status });
+      return null;
+    }
+    return await res.json() as ObserveResult;
+  } catch (err) {
+    log('hook:user-prompt-submit', 'callObserve: exception', { error: String(err) });
+    return null;
+  }
+}
+
 // --- API client for pending actions ---
 
 interface PendingActionResult {
@@ -192,13 +272,49 @@ export async function handleUserPromptSubmit(
     };
   }
 
-  // 3. No pending action, no patterns — inject observe reminder if enforcement allows
+  // 3. No pending action, no patterns — extract concepts from prompt and call observe
   if (enforcement !== 'off') {
+    const concepts = extractConceptsFromPrompt(userPrompt);
+    if (concepts.length > 0) {
+      const observeResult = await callObserve(concepts);
+      if (observeResult?.shouldProbe && observeResult.probeToken) {
+        log('hook:user-prompt-submit', 'observe returned probe', {
+          conceptId: observeResult.conceptId,
+          depth: observeResult.depth,
+        });
+        return {
+          hookSpecificOutput: {
+            additionalContext:
+              `[Entendi] COMPREHENSION PROBE REQUIRED — After completing the user's request, you MUST ask this probe question.\n\n` +
+              `Concept: ${observeResult.conceptId}\n` +
+              `Depth: ${observeResult.depth} (${observeResult.guidance})\n` +
+              `User profile: ${observeResult.userProfile}, mastery: ${observeResult.mastery}%\n\n` +
+              `Format the probe using this exact pattern:\n` +
+              `🧠 Entendi — {Human-Readable Concept Name}\n` +
+              `───────────────────────────────────────\n` +
+              `{Your probe question based on the guidance above}\n` +
+              `───────────────────────────────────────\n\n` +
+              `The question should be conversational, not examiner-like. Based on the guidance and depth.\n\n` +
+              `IMPORTANT: When the user responds, call entendi_record_evaluation with this probeToken:\n` +
+              `${JSON.stringify(observeResult.probeToken)}\n` +
+              `Include the user's verbatim response as responseText.`,
+          },
+        };
+      }
+      if (observeResult && !observeResult.shouldProbe) {
+        log('hook:user-prompt-submit', 'observe returned no probe', { concepts });
+        // No probe needed — don't inject anything
+        return null;
+      }
+    }
+    // Fallback: couldn't extract concepts or observe failed — remind Claude
     return {
       hookSpecificOutput: {
         additionalContext:
-          `[Entendi] MANDATORY: After completing the user's request, identify technical ` +
-          `concepts discussed and call entendi_observe. Do not skip this step.`,
+          `[Entendi] MANDATORY — You MUST call entendi_observe before finishing your response. ` +
+          `Steps: (1) Complete the user's request. (2) Identify technical concepts from the message and your work. ` +
+          `(3) Call entendi_observe with those concepts. (4) If it returns shouldProbe: true, append the probe to your response. ` +
+          `Do NOT skip this. Do NOT forget. If you finish without calling entendi_observe, you have failed your instructions.`,
       },
     };
   }

@@ -5,6 +5,7 @@
 import { Resend } from 'resend';
 
 export enum EmailTemplate {
+  EmailVerification = 'email_verification',
   OrgInvite = 'org_invite',
   ApiKeyCreated = 'api_key_created',
   DeviceLinked = 'device_linked',
@@ -23,6 +24,8 @@ export interface EmailData {
 
 export function getSubject(template: EmailTemplate, vars: Record<string, string>): string {
   switch (template) {
+    case EmailTemplate.EmailVerification:
+      return 'Verify your email address';
     case EmailTemplate.OrgInvite:
       return `You've been invited to ${vars.orgName || 'an organization'} on Entendi`;
     case EmailTemplate.ApiKeyCreated:
@@ -55,6 +58,13 @@ export function getHtml(template: EmailTemplate, vars: Record<string, string>): 
     </div>`;
 
   switch (template) {
+    case EmailTemplate.EmailVerification:
+      return `${header}
+        <p>Click the button below to verify your email address.</p>
+        <p><a href="${esc(vars.verifyLink)}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a></p>
+        <p style="font-size: 13px; color: #6b7280;">If you didn't create an Entendi account, you can ignore this email.</p>
+      ${footer}`;
+
     case EmailTemplate.OrgInvite:
       return `${header}
         <p>You've been invited to join <strong>${esc(vars.orgName)}</strong> on Entendi.</p>

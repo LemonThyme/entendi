@@ -81,6 +81,67 @@ function detectTeachMePattern(prompt) {
   }
   return null;
 }
+var CONCEPT_KEYWORDS = {
+  "environment-variables": ["env var", "environment variable", ".env", "process.env", "dotenv", "secrets", "config var"],
+  "deployment": ["deploy", "production", "staging", "ship it", "go live", "release"],
+  "docker": ["docker", "container", "dockerfile", "docker-compose", "docker compose"],
+  "kubernetes": ["kubernetes", "k8s", "kubectl", "helm", "pod", "kube"],
+  "ci-cd": ["ci/cd", "ci cd", "github actions", "pipeline", "continuous integration", "continuous deployment"],
+  "database-migrations": ["migration", "migrate", "schema change", "alter table", "drizzle-kit"],
+  "authentication": ["auth", "login", "signup", "sign up", "session", "jwt", "oauth", "password"],
+  "rate-limiting": ["rate limit", "throttle", "rate-limit"],
+  "caching": ["cache", "caching", "redis", "memcache", "memoize"],
+  "testing": ["test", "unit test", "integration test", "e2e", "vitest", "jest"],
+  "api-design": ["rest api", "graphql", "endpoint", "api route", "api design"],
+  "database-indexing": ["index", "indexing", "query performance", "slow query", "explain analyze"],
+  "websockets": ["websocket", "ws://", "real-time", "realtime", "socket.io"],
+  "typescript": ["typescript", "type safety", "generics", "type inference", "tsconfig"],
+  "git": ["git", "rebase", "merge conflict", "cherry-pick", "git bisect"],
+  "cloudflare-workers": ["cloudflare", "workers", "wrangler", "edge function"],
+  "sql": ["sql", "query", "join", "subquery", "cte", "stored procedure"],
+  "react": ["react", "usestate", "useeffect", "component", "jsx", "tsx"],
+  "css": ["css", "flexbox", "grid", "responsive", "media query", "tailwind"],
+  "security": ["xss", "csrf", "sql injection", "cors", "helmet", "sanitize"],
+  "error-handling": ["error handling", "try catch", "exception", "error boundary"],
+  "logging": ["logging", "log level", "structured logging", "observability"],
+  "dns": ["dns", "domain", "cname", "a record", "nameserver"],
+  "ssl-tls": ["ssl", "tls", "https", "certificate", "let's encrypt"],
+  "npm": ["npm", "package.json", "node_modules", "dependency", "semver"]
+};
+function extractConceptsFromPrompt(prompt) {
+  const lower = prompt.toLowerCase();
+  const found = [];
+  for (const [conceptId, keywords] of Object.entries(CONCEPT_KEYWORDS)) {
+    if (keywords.some((kw) => lower.includes(kw))) {
+      found.push({ id: conceptId, source: "llm" });
+    }
+  }
+  return found;
+}
+async function callObserve(concepts) {
+  const config = loadConfig();
+  if (!config.apiKey) return null;
+  try {
+    const primaryConceptId = concepts[0]?.id;
+    const res = await fetch(`${config.apiUrl}/api/mcp/observe`, {
+      method: "POST",
+      headers: {
+        "x-api-key": config.apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ concepts, primaryConceptId }),
+      signal: AbortSignal.timeout(5e3)
+    });
+    if (!res.ok) {
+      log("hook:user-prompt-submit", "callObserve: API error", { status: res.status });
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    log("hook:user-prompt-submit", "callObserve: exception", { error: String(err) });
+    return null;
+  }
+}
 function cacheEnforcement(enforcement, userPrompt) {
   try {
     const cachePath = join3(homedir3(), ".entendi", "enforcement-cache.json");
@@ -183,9 +244,44 @@ async function handleUserPromptSubmit(input) {
     };
   }
   if (enforcement !== "off") {
+    const concepts = extractConceptsFromPrompt(userPrompt);
+    if (concepts.length > 0) {
+      const observeResult = await callObserve(concepts);
+      if (observeResult?.shouldProbe && observeResult.probeToken) {
+        log("hook:user-prompt-submit", "observe returned probe", {
+          conceptId: observeResult.conceptId,
+          depth: observeResult.depth
+        });
+        return {
+          hookSpecificOutput: {
+            additionalContext: `[Entendi] COMPREHENSION PROBE REQUIRED \u2014 After completing the user's request, you MUST ask this probe question.
+
+Concept: ${observeResult.conceptId}
+Depth: ${observeResult.depth} (${observeResult.guidance})
+User profile: ${observeResult.userProfile}, mastery: ${observeResult.mastery}%
+
+Format the probe using this exact pattern:
+\u{1F9E0} Entendi \u2014 {Human-Readable Concept Name}
+\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+{Your probe question based on the guidance above}
+\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+The question should be conversational, not examiner-like. Based on the guidance and depth.
+
+IMPORTANT: When the user responds, call entendi_record_evaluation with this probeToken:
+${JSON.stringify(observeResult.probeToken)}
+Include the user's verbatim response as responseText.`
+          }
+        };
+      }
+      if (observeResult && !observeResult.shouldProbe) {
+        log("hook:user-prompt-submit", "observe returned no probe", { concepts });
+        return null;
+      }
+    }
     return {
       hookSpecificOutput: {
-        additionalContext: `[Entendi] MANDATORY: After completing the user's request, identify technical concepts discussed and call entendi_observe. Do not skip this step.`
+        additionalContext: `[Entendi] MANDATORY \u2014 You MUST call entendi_observe before finishing your response. Steps: (1) Complete the user's request. (2) Identify technical concepts from the message and your work. (3) Call entendi_observe with those concepts. (4) If it returns shouldProbe: true, append the probe to your response. Do NOT skip this. Do NOT forget. If you finish without calling entendi_observe, you have failed your instructions.`
       }
     };
   }

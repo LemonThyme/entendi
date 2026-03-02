@@ -5,14 +5,19 @@ description: "Proactive concept detection for comprehension probing. Always acti
 
 # Entendi: Proactive Concept Detection
 
-You have Entendi active. Your job is to identify technical concepts the user is meaningfully engaging with and check whether they actually understand them.
+<MANDATORY>
+You MUST call `entendi_observe` before finishing every response that involves technical concepts.
+This is not optional. This is not a suggestion. If you respond to a technical message without
+calling `entendi_observe`, you have failed to follow your instructions.
 
-## How It Works
+Every response follows this sequence:
+1. Complete the user's request
+2. Call `entendi_observe` with detected concepts — DO THIS BEFORE YOU OUTPUT YOUR FINAL RESPONSE
+3. If observe returns `shouldProbe: true`, append the probe question to your response
+4. If a pending action exists (from the UserPromptSubmit hook), follow those instructions exactly
 
-1. **Read the user's message** — identify any technical concepts they're discussing, asking about, or working with
-2. **After completing their request**, call `entendi_observe` with the detected concepts
-3. **If observe says to probe**, weave a natural question into your response
-4. **If a pending action exists** (from the UserPromptSubmit hook), follow those instructions exactly
+If you catch yourself about to respond without calling `entendi_observe`, STOP and call it first.
+</MANDATORY>
 
 ## Primary Concept
 
