@@ -21,6 +21,7 @@ import { openapiRoutes } from './routes/openapi.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
 import { publicRoutes } from './routes/public.js';
+import { publicShell } from './routes/public-html.js';
 
 export type Env = {
   Variables: {
@@ -32,40 +33,29 @@ export type Env = {
 };
 
 function getApiStatusPage(): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Entendi API</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a2e'/%3E%3Cpath d='M 19.5 7 C 19.5 3.5 15.5 3.5 15.5 7 L 15.5 22' stroke='white' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='15.5' cy='27' r='2' fill='white'/%3E%3C/svg%3E"/>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'DM Sans', system-ui, sans-serif; background: #F6F4F1; color: #1F1F1F; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .container { max-width: 480px; width: 100%; padding: 2rem; }
-    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .subtitle { color: #7A7268; font-size: 0.875rem; margin-bottom: 2rem; }
-    .status-card { background: #fff; border: 1px solid #E0DCD6; border-radius: 12px; padding: 1.25rem 1.5rem; }
-    .status-row { display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0; }
-    .status-row + .status-row { border-top: 1px solid #F0EDE8; }
-    .status-label { color: #7A7268; font-size: 0.8125rem; }
-    .status-value { font-size: 0.8125rem; font-weight: 500; }
-    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: 500; }
-    .badge-ok { background: #E8F5E9; color: #2E7D32; }
-    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-    .badge-err { background: #FBE9E7; color: #C62828; }
-    .badge-loading { background: #F0EDE8; color: #7A7268; }
-    .links { margin-top: 1.5rem; display: flex; gap: 1.25rem; justify-content: center; }
-    .links a { color: #7A7268; font-size: 0.8125rem; text-decoration: none; }
-    .links a:hover { color: #1F1F1F; }
-    .latency { color: #7A7268; font-size: 0.75rem; font-weight: 400; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Entendi API</h1>
-    <p class="subtitle">Comprehension accountability for AI-assisted work</p>
+  return publicShell('Entendi API', 'status', `
+    <style>
+      .status-header { margin: 3rem 0 2rem; }
+      .status-header h1 { font-family: var(--font-display); font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+      .status-header p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.875rem; }
+      .status-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; }
+      .status-row { display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0; }
+      .status-row + .status-row { border-top: 1px solid var(--border); }
+      .status-label { color: var(--text-secondary); font-size: 0.8125rem; }
+      .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: 500; }
+      .badge-ok { background: #E8F5E9; color: var(--green); }
+      .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .badge-err { background: #FBE9E7; color: var(--red); }
+      .badge-loading { background: var(--bg-card); color: var(--text-tertiary); }
+      .latency { color: var(--text-tertiary); font-size: 0.75rem; }
+      .status-links { margin-top: 1.5rem; display: flex; gap: 1.25rem; }
+      .status-links a { color: var(--text-secondary); font-size: 0.8125rem; text-decoration: none; }
+      .status-links a:hover { color: var(--text); }
+    </style>
+    <div class="status-header">
+      <h1>API Status</h1>
+      <p>api.entendi.dev</p>
+    </div>
     <div class="status-card">
       <div class="status-row">
         <span class="status-label">API</span>
@@ -80,40 +70,37 @@ function getApiStatusPage(): string {
         <span id="latency" class="latency">\u2014</span>
       </div>
     </div>
-    <div class="links">
-      <a href="https://entendi.dev">Home</a>
-      <a href="https://github.com/LemonThyme/entendi">GitHub</a>
+    <div class="status-links">
       <a href="/api/openapi">OpenAPI</a>
       <a href="/health">Health JSON</a>
+      <a href="https://github.com/LemonThyme/entendi">GitHub</a>
     </div>
-  </div>
-  <script>
-    function setBadge(id, ok, label) {
-      var el = document.getElementById(id);
-      el.textContent = label;
-      el.className = 'badge ' + (ok ? 'badge-ok' : 'badge-err');
-      var dot = document.createElement('span');
-      dot.className = 'badge-dot';
-      el.prepend(dot);
-    }
-    (async function() {
-      var start = Date.now();
-      try {
-        var res = await fetch('/health');
-        var ms = Date.now() - start;
-        var data = await res.json();
-        setBadge('api-status', data.status === 'ok', data.status === 'ok' ? 'Operational' : 'Degraded');
-        setBadge('db-status', data.db === 'connected', data.db === 'connected' ? 'Connected' : 'Unreachable');
-        document.getElementById('latency').textContent = ms + 'ms';
-      } catch(e) {
-        setBadge('api-status', false, 'Unreachable');
-        setBadge('db-status', false, 'Unknown');
-        document.getElementById('latency').textContent = '\u2014';
+    <script>
+      function setBadge(id, ok, label) {
+        var el = document.getElementById(id);
+        el.textContent = label;
+        el.className = 'badge ' + (ok ? 'badge-ok' : 'badge-err');
+        var dot = document.createElement('span');
+        dot.className = 'badge-dot';
+        el.prepend(dot);
       }
-    })();
-  </script>
-</body>
-</html>`;
+      (async function() {
+        var start = Date.now();
+        try {
+          var res = await fetch('/health');
+          var ms = Date.now() - start;
+          var data = await res.json();
+          setBadge('api-status', data.status === 'ok', data.status === 'ok' ? 'Operational' : 'Degraded');
+          setBadge('db-status', data.db === 'connected', data.db === 'connected' ? 'Connected' : 'Unreachable');
+          document.getElementById('latency').textContent = ms + 'ms';
+        } catch(e) {
+          setBadge('api-status', false, 'Unreachable');
+          setBadge('db-status', false, 'Unknown');
+          document.getElementById('latency').textContent = '\u2014';
+        }
+      })();
+    </script>
+  `);
 }
 
 export function createApp(databaseUrl: string, authOptions?: { secret?: string; baseURL?: string }) {

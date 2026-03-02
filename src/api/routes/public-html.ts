@@ -4,7 +4,7 @@ export function daysSinceLaunch(): number {
   return Math.floor((Date.now() - LAUNCH_DATE.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export type PageId = 'home' | 'press' | 'contact' | 'privacy' | 'terms';
+export type PageId = 'home' | 'press' | 'contact' | 'privacy' | 'terms' | 'status';
 
 export interface PageMeta {
   description?: string;
