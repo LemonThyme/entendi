@@ -1,25 +1,14 @@
 import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Env } from '../index.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 export const adminStatsRoutes = new Hono<Env>();
 
 /**
  * GET /stats — admin-only aggregate metrics.
- * Admin check: user.email must be in ADMIN_EMAILS env var (comma-separated).
  */
-adminStatsRoutes.get('/stats', async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
-  const adminEmails = (process.env.ADMIN_EMAILS || 'tomaskorenblit@gmail.com')
-    .split(',')
-    .map((e) => e.trim());
-
-  if (!adminEmails.includes(user.email)) {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
-
+adminStatsRoutes.get('/stats', requireAdmin, async (c) => {
   const db = c.get('db');
 
   const [

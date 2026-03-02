@@ -30,7 +30,7 @@ export type Env = {
   Variables: {
     db: Database;
     auth: Auth;
-    user: { id: string; name: string; email: string } | null;
+    user: { id: string; name: string; email: string; role?: string | null; banned?: boolean | null } | null;
     session: { id: string; userId: string; activeOrganizationId?: string | null } | null;
     requestId: string;
   };

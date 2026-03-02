@@ -22,6 +22,7 @@ vi.mock('better-auth/adapters/drizzle', () => ({
 }));
 
 vi.mock('better-auth/plugins', () => ({
+  admin: vi.fn(() => ({ id: 'admin' })),
   organization: mockOrganization,
   apiKey: vi.fn(() => ({ id: 'api-key' })),
   bearer: vi.fn(() => ({ id: 'bearer' })),
