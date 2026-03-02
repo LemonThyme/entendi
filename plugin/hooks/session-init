@@ -10,7 +10,7 @@ LOG_DIR="${HOME}/.entendi"
 LOG_FILE="${LOG_DIR}/debug.log"
 CONFIG_FILE="${HOME}/.entendi/config.json"
 VERSION_CACHE="${HOME}/.entendi/version-check.json"
-DEFAULT_API_URL="https://entendi-api.tomaskorenblit.workers.dev"
+DEFAULT_API_URL="https://api.entendi.dev"
 
 mkdir -p "$LOG_DIR"
 

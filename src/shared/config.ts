@@ -23,7 +23,7 @@ export function loadConfig(): EntendiConfig {
   }
 
   return {
-    apiUrl: process.env.ENTENDI_API_URL || fileConfig.apiUrl || 'http://localhost:3456',
+    apiUrl: process.env.ENTENDI_API_URL || fileConfig.apiUrl || 'https://api.entendi.dev',
     // Config file takes priority — it's written by entendi_login (canonical auth flow).
     // Env var is a fallback for manual setup or CI.
     apiKey: fileConfig.apiKey || process.env.ENTENDI_API_KEY || undefined,
