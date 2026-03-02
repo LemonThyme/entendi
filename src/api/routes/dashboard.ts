@@ -221,99 +221,107 @@ function getLinkShellHTML(safeCode: string, linkJsHref: string): string {
 }
 
 const landingMeta: PageMeta = {
-  description: 'Entendi is a comprehension accountability layer for AI-assisted work. It observes concepts as you code with AI and probes your understanding with Socratic questions.',
-  ogTitle: 'Entendi — Know what you know',
-  ogDescription: 'Comprehension accountability for AI-assisted work. Observes concepts, probes understanding, builds a Bayesian knowledge graph.',
+  description: 'An open-source Claude Code plugin that watches what you build with AI and checks that you understand it.',
+  ogTitle: 'Entendi',
+  ogDescription: 'An open-source Claude Code plugin that watches what you build with AI and checks that you understand it.',
   ogUrl: 'https://entendi.dev',
   ogType: 'website',
   twitterCard: 'summary',
 };
 
 function getLandingHTML(): string {
-  return publicShell('Entendi — Comprehension accountability for AI-assisted work', 'home', `
+  return publicShell('Entendi', 'home', `
   <style>
-    .landing { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 120px); text-align: center; }
-    .landing h1 { font-family: var(--font-display); font-size: 2.25rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; max-width: 600px; margin-bottom: 1.5rem; }
-    .landing .subtitle { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; max-width: 480px; margin-bottom: 2rem; }
-    .landing .bullets { list-style: none; text-align: left; max-width: 420px; margin-bottom: 2rem; }
-    .landing .bullets li { color: var(--text-secondary); font-size: 0.875rem; line-height: 1.5; padding: 0.35rem 0; padding-left: 1.25rem; position: relative; }
-    .landing .bullets li::before { content: '\\2014'; position: absolute; left: 0; color: var(--accent); }
-    .demo-placeholder {
-      width: 100%; max-width: 480px; height: 240px; background: var(--bg-card);
-      border: 1px dashed var(--border); border-radius: 8px; margin-bottom: 2rem;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--text-tertiary); font-size: 0.8rem;
-    }
-    .waitlist-form { display: flex; gap: 0.5rem; max-width: 400px; width: 100%; }
-    .waitlist-form input {
-      flex: 1; padding: 0.6rem 0.85rem; border: 1px solid var(--border); border-radius: 6px;
-      font-size: 0.85rem; font-family: var(--font-body); outline: none; background: white;
-    }
-    .waitlist-form input:focus { border-color: var(--accent); }
-    .waitlist-form button {
-      padding: 0.6rem 1.25rem; border: none; border-radius: 6px; background: var(--accent);
-      color: white; font-size: 0.85rem; font-weight: 600; font-family: var(--font-body);
-      cursor: pointer; white-space: nowrap;
-    }
-    .waitlist-form button:hover { background: var(--accent-hover); }
-    .waitlist-form button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .waitlist-msg { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.2em; }
-    .waitlist-msg.success { color: var(--green); }
-    .waitlist-msg.error { color: var(--red); }
+    .hero { text-align: center; padding-top: 4rem; padding-bottom: 3rem; }
+    .hero h1 { font-family: var(--font-display); font-size: 2.25rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; max-width: 600px; margin: 0 auto 1rem; }
+    .hero .subtitle { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; max-width: 480px; margin: 0 auto 2rem; }
+    .install-cta { display: flex; align-items: center; max-width: 420px; margin: 0 auto 0.75rem; background: var(--accent); border-radius: 8px; overflow: hidden; }
+    .install-cta code { flex: 1; padding: 0.7rem 1rem; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85rem; color: white; user-select: all; }
+    .install-cta .copy-btn { padding: 0.7rem 0.85rem; background: none; border: none; border-left: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer; display: flex; align-items: center; }
+    .install-cta .copy-btn:hover { background: rgba(255,255,255,0.1); }
+    .install-cta .copy-btn svg { width: 16px; height: 16px; }
+    .cta-note { color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 3rem; text-align: center; }
+    .demo-area { max-width: 640px; margin: 0 auto 4rem; background: #1a1a2e; border-radius: 8px; padding: 3rem 2rem; text-align: center; }
+    .demo-area p { color: rgba(255,255,255,0.5); font-size: 0.85rem; }
+    .audience-section { margin-bottom: 4rem; }
+    .audience-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+    .audience-block h3 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .audience-block p { color: var(--text-secondary); font-size: 0.875rem; line-height: 1.7; }
+    .how-section { margin-bottom: 4rem; }
+    .how-section h2 { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; margin-bottom: 1.25rem; }
+    .how-steps { list-style: none; counter-reset: steps; }
+    .how-steps li { counter-increment: steps; color: var(--text-secondary); font-size: 0.875rem; line-height: 1.7; padding: 0.4rem 0; padding-left: 2rem; position: relative; }
+    .how-steps li::before { content: counter(steps) '.'; position: absolute; left: 0; color: var(--accent); font-weight: 600; }
+    .bottom-cta { text-align: center; padding-bottom: 4rem; }
+    .bottom-cta p { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.75rem; line-height: 1.6; }
   </style>
-  <div class="landing">
-    <h1>Know what you know.</h1>
-    <p class="subtitle">Entendi is a comprehension accountability layer for AI-assisted work. It watches how you learn with AI and makes sure you actually understand what you're building.</p>
-    <ul class="bullets">
-      <li>Observes concepts as you work with AI tools</li>
-      <li>Probes your understanding with Socratic questions</li>
-      <li>Builds a Bayesian knowledge graph of what you actually know</li>
-    </ul>
-    <div class="demo-placeholder">demo gif coming soon</div>
-    <form class="waitlist-form" id="waitlist-form">
-      <input type="email" placeholder="you@example.com" required id="waitlist-email"/>
-      <button type="submit">Join the waitlist</button>
-    </form>
-    <div class="waitlist-msg" id="waitlist-msg"></div>
+  <div class="hero">
+    <h1>Actually understand what your AI writes.</h1>
+    <p class="subtitle">An open-source Claude Code plugin. It watches what you build with AI and checks that you get it.</p>
+    <div class="install-cta">
+      <code>claude plugin install entendi</code>
+      <button class="copy-btn" data-text="claude plugin install entendi" aria-label="Copy to clipboard">
+        <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+    </div>
+    <p class="cta-note">Free. Open source. Takes 30 seconds.</p>
+  </div>
+  <div class="demo-area">
+    <p>Terminal recording coming soon</p>
+  </div>
+  <div class="audience-section">
+    <div class="audience-block">
+      <h3>You</h3>
+      <p>You've accepted a hundred AI suggestions today. How many could you explain to someone? Entendi asks you about the concepts you're working with. Not every time. Just often enough that you notice what you actually know vs what you're trusting the machine on.</p>
+    </div>
+    <div class="audience-block">
+      <h3>Your team</h3>
+      <p>When someone on your team ships a feature they built with AI, do they understand the code well enough to debug it at 2am when something breaks? Entendi tracks what each engineer understands across the codebase. You see the gaps before they hit production.</p>
+    </div>
+    <div class="audience-block">
+      <h3>Your students</h3>
+      <p>Students are submitting AI-generated code. You know it. They know it. Banning AI isn't realistic and doesn't teach anything. Entendi sits inside the coding environment and asks questions as they work. Not a plagiarism detector. A tutor.</p>
+    </div>
+  </div>
+  <div class="how-section">
+    <h2>How it works</h2>
+    <ol class="how-steps">
+      <li>You code with Claude like normal</li>
+      <li>Entendi watches the technical concepts that come up</li>
+      <li>When something's worth checking, it asks you a question</li>
+      <li>Your answers build a knowledge profile over time</li>
+    </ol>
+  </div>
+  <div class="bottom-cta">
+    <div class="install-cta">
+      <code>claude plugin install entendi</code>
+      <button class="copy-btn" data-text="claude plugin install entendi" aria-label="Copy to clipboard">
+        <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+    </div>
+    <p>Open source on GitHub. Free for individuals. Team and university plans coming.</p>
   </div>
   <script>
-    document.getElementById('waitlist-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = e.target.querySelector('button');
-      const msg = document.getElementById('waitlist-msg');
-      const email = document.getElementById('waitlist-email').value;
-      btn.disabled = true;
-      msg.textContent = '';
-      msg.className = 'waitlist-msg';
-      try {
-        const res = await fetch('/api/waitlist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
+    document.querySelectorAll('.copy-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var text = btn.getAttribute('data-text');
+        navigator.clipboard.writeText(text).then(function() {
+          btn.querySelector('.icon-copy').style.display = 'none';
+          btn.querySelector('.icon-check').style.display = '';
+          setTimeout(function() {
+            btn.querySelector('.icon-copy').style.display = '';
+            btn.querySelector('.icon-check').style.display = 'none';
+          }, 1500);
         });
-        if (res.ok) {
-          msg.textContent = "You're on the list. We'll be in touch.";
-          msg.className = 'waitlist-msg success';
-          document.getElementById('waitlist-email').value = '';
-        } else if (res.status === 409) {
-          msg.textContent = "You're already on the list!";
-          msg.className = 'waitlist-msg success';
-        } else {
-          const body = await res.json();
-          msg.textContent = body.error || 'Something went wrong.';
-          msg.className = 'waitlist-msg error';
-        }
-      } catch {
-        msg.textContent = 'Network error. Try again.';
-        msg.className = 'waitlist-msg error';
-      }
-      btn.disabled = false;
+      });
     });
   </script>`, landingMeta);
 }
 
 function getPrivacyHTML(): string {
-  return publicShell('Privacy Policy — Entendi', 'privacy', `
+  return publicShell('Privacy Policy | Entendi', 'privacy', `
   <style>
     .legal-page { margin-top: 4rem; margin-bottom: 4rem; }
     .legal-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
@@ -335,12 +343,12 @@ function getPrivacyHTML(): string {
 
     <h3>Data We Collect</h3>
     <ul>
-      <li><strong>Account information</strong> — email address and display name when you sign up</li>
-      <li><strong>IP address</strong> — recorded in session logs for security and abuse prevention</li>
-      <li><strong>Probe responses</strong> — your text answers to comprehension probes</li>
-      <li><strong>Behavioral biometrics</strong> — response patterns (word count, typing speed, vocabulary complexity) and anomaly scores used to detect integrity issues</li>
-      <li><strong>Session cookies</strong> — used for authentication; expire after 7 days</li>
-      <li><strong>Concept and mastery data</strong> — which concepts you've encountered and your assessed understanding</li>
+      <li><strong>Account information</strong>: email address and display name when you sign up</li>
+      <li><strong>IP address</strong>: recorded in session logs for security and abuse prevention</li>
+      <li><strong>Probe responses</strong>: your text answers to comprehension probes</li>
+      <li><strong>Behavioral biometrics</strong>: response patterns (word count, typing speed, vocabulary complexity) and anomaly scores used to detect integrity issues</li>
+      <li><strong>Session cookies</strong>: used for authentication; expire after 7 days</li>
+      <li><strong>Concept and mastery data</strong>: which concepts you've encountered and your assessed understanding</li>
     </ul>
 
     <h3>How We Use Your Data</h3>
@@ -357,11 +365,17 @@ function getPrivacyHTML(): string {
 
     <h3>Contact</h3>
     <p>For privacy inquiries, use the <a href="/contact">contact form</a>.</p>
-  </div>`);
+  </div>`, {
+    description: 'How Entendi handles your data.',
+    ogTitle: 'Privacy Policy | Entendi',
+    ogUrl: 'https://entendi.dev/privacy',
+    ogType: 'website',
+    twitterCard: 'summary',
+  });
 }
 
 function getTermsHTML(): string {
-  return publicShell('Terms of Service — Entendi', 'terms', `
+  return publicShell('Terms of Service | Entendi', 'terms', `
   <style>
     .legal-page { margin-top: 4rem; margin-bottom: 4rem; }
     .legal-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
@@ -409,7 +423,13 @@ function getTermsHTML(): string {
 
     <h3>Contact</h3>
     <p>Questions about these terms? Use the <a href="/contact">contact form</a>.</p>
-  </div>`);
+  </div>`, {
+    description: 'Terms of service for using Entendi.',
+    ogTitle: 'Terms of Service | Entendi',
+    ogUrl: 'https://entendi.dev/terms',
+    ogType: 'website',
+    twitterCard: 'summary',
+  });
 }
 
 dashboardRoutes.get('/privacy', (c) => {
@@ -475,7 +495,13 @@ dashboardRoutes.get('/press', async (c) => {
       </div>`;
   }
 
-  return c.html(publicShell('Press \u2014 Entendi', 'press', content));
+  return c.html(publicShell('Press | Entendi', 'press', content, {
+    description: 'Press coverage and media mentions of Entendi.',
+    ogTitle: 'Press | Entendi',
+    ogUrl: 'https://entendi.dev/press',
+    ogType: 'website',
+    twitterCard: 'summary',
+  }));
 });
 
 dashboardRoutes.get('/contact', (c) => {
@@ -550,7 +576,13 @@ dashboardRoutes.get('/contact', (c) => {
       });
     </script>`;
 
-  return c.html(publicShell('Contact \u2014 Entendi', 'contact', content));
+  return c.html(publicShell('Contact | Entendi', 'contact', content, {
+    description: 'Get in touch with the Entendi team.',
+    ogTitle: 'Contact | Entendi',
+    ogUrl: 'https://entendi.dev/contact',
+    ogType: 'website',
+    twitterCard: 'summary',
+  }));
 });
 
 dashboardRoutes.get('/login', (c) => {

@@ -21,7 +21,7 @@ import { openapiRoutes } from './routes/openapi.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
 import { publicRoutes } from './routes/public.js';
-import { publicShell } from './routes/public-html.js';
+import { publicShell, type PageMeta } from './routes/public-html.js';
 
 export type Env = {
   Variables: {
@@ -67,7 +67,7 @@ function getApiStatusPage(): string {
       </div>
       <div class="status-row">
         <span class="status-label">Latency</span>
-        <span id="latency" class="latency">\u2014</span>
+        <span id="latency" class="latency">-</span>
       </div>
     </div>
     <div class="status-links">
@@ -95,11 +95,17 @@ function getApiStatusPage(): string {
         } catch(e) {
           setBadge('api-status', false, 'Unreachable');
           setBadge('db-status', false, 'Unknown');
-          document.getElementById('latency').textContent = '\u2014';
+          document.getElementById('latency').textContent = '-';
         }
       })();
     </script>
-  `);
+  `, {
+    description: 'Live status of the Entendi API.',
+    ogTitle: 'API Status | Entendi',
+    ogUrl: 'https://api.entendi.dev',
+    ogType: 'website',
+    twitterCard: 'summary',
+  });
 }
 
 export function createApp(databaseUrl: string, authOptions?: { secret?: string; baseURL?: string }) {
