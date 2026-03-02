@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { apiKey, bearer, organization } from 'better-auth/plugins';
+import { admin, apiKey, bearer, organization } from 'better-auth/plugins';
 import { and, eq } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import { invitation, member } from '../db/schema.js';
@@ -123,6 +123,7 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
         rateLimit: { enabled: false },
       }),
       bearer(),
+      admin(),
     ],
   });
 }
