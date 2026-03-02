@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 workers_dev = true
 routes = [
+  { pattern = "entendi.dev", custom_domain = true },
   { pattern = "api.entendi.dev", custom_domain = true }
 ]
 
