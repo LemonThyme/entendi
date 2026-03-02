@@ -2,13 +2,13 @@
 
 Comprehension accountability for AI-assisted work.
 
-> *"entendí"* — "I understood" in Italian and Spanish, from *intendere*.
+> *"entendí"* means "I understood" in Italian and Spanish, from *intendere*.
 
 ## Why
 
 Software engineering with LLMs moves faster than humans learn. Code assistants generate abstractions, design patterns, and infrastructure in seconds. Work that used to take days of learning now takes one prompt.
 
-People stop understanding what they ship. Not on purpose, but when an LLM writes your Bayesian update function, sets up your CI pipeline, and deploys it all in one session, there's no pressure to understand any of it. Junior developers ship patterns they can't debug. Researchers use statistical methods they can't explain. The code works. The human didn't grow.
+People stop understanding what they ship. When an LLM writes your Bayesian update function, sets up your CI pipeline, and deploys it all in one session, there's no pressure to understand any of it. Junior developers ship patterns they can't debug. Researchers use statistical methods they can't explain. The code works. The human didn't grow.
 
 The solution isn't to slow down the AI. It's to make sure the human keeps up.
 
@@ -34,21 +34,23 @@ It finishes your request first, then asks. If you know the material, it leaves y
 
 ### Pipeline
 
-1. **Detect** — LLM-level concept detection identifies what you're working with from conversation context
-2. **Decide** — Bayesian mastery tracking decides if a probe makes sense given your knowledge profile
-3. **Probe** — a question gets woven in naturally, scored on a 0–3 comprehension rubric
-4. **Teach** — low scores trigger a 4-phase Socratic tutor (assess, guide, correct, verify)
-5. **Track** — mastery updates go through a Graded Response Model with spaced repetition scheduling
+1. **Detect**: LLM-level concept detection identifies what you're working with from conversation context
+2. **Decide**: Bayesian mastery tracking decides if a probe makes sense given your knowledge profile
+3. **Probe**: a question gets woven in naturally, scored on a 0-3 comprehension rubric
+4. **Teach**: low scores trigger a 4-phase Socratic tutor (assess, guide, correct, verify)
+5. **Track**: mastery updates go through a Graded Response Model with spaced repetition scheduling
 
 ## Install
 
-### 1. Install the plugin
-
 ```bash
-claude plugin install entendi
+git clone https://github.com/LemonThyme/entendi.git
+cd entendi
+./setup.sh
 ```
 
-### 2. Link your account
+The setup script validates Node 22+, checks your `.env`, installs dependencies, builds everything, and installs the plugin.
+
+### Link your account
 
 Inside any Claude Code session:
 
@@ -58,23 +60,17 @@ You: "entendi login"
 
 This opens a browser window. Sign in (or create an account), click **Confirm Link**, and tell Claude you're done. Your API key is saved to `~/.entendi/config.json` automatically.
 
-### 3. Restart Claude Code
+### Restart Claude Code
 
 ```bash
 claude
 ```
 
-Entendi activates automatically on every session after that. You'll see concept detection in action as you work.
+Entendi activates automatically on every session after that.
 
 ## Dashboard
 
-View your knowledge profile at:
-
-```
-https://entendi-api.tomaskorenblit.workers.dev
-```
-
-Sign in with the same account you used during `entendi login`.
+View your knowledge profile at [entendi.dev](https://entendi.dev). Sign in with the same account you used during `entendi login`.
 
 ## Stack
 
@@ -92,8 +88,6 @@ git clone https://github.com/LemonThyme/entendi.git
 cd entendi
 ./setup.sh
 ```
-
-The setup script validates Node 22+, checks your `.env`, installs dependencies, builds everything, and installs the plugin. Run it once after cloning.
 
 ### After code changes
 
@@ -120,12 +114,6 @@ For isolated plugin testing (simulates a fresh user):
 1. Open the repo in VS Code/Cursor with the Dev Containers extension
 2. The container installs Node 22, Claude Code CLI, and the plugin automatically
 3. Run `.devcontainer/test-plugin.sh` to validate hooks and plugin structure
-
-### Deploy
-
-```bash
-npx wrangler deploy    # deploy API to Cloudflare Workers
-```
 
 ### Debug
 

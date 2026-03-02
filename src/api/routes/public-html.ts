@@ -79,7 +79,7 @@ export function publicShell(title: string, active: PageId, body: string, meta?: 
     .nav-sep { color: var(--border); user-select: none; }
     .nav-signin { margin-left: auto; }
     .page-body {
-      max-width: 700px; margin: 0 auto; padding: 0 2rem;
+      max-width: 800px; margin: 0 auto; padding: 0 2rem;
     }
   </style>
 </head>
