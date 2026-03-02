@@ -26,6 +26,7 @@ import { conceptSimilarity } from '../lib/embeddings.js';
 import { resolveEnforcementLevel } from '../lib/enforcement.js';
 import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
 import { getOrgRateLimits } from '../lib/org-rate-limits.js';
+import { logger } from '../lib/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 
 let _probeTokenSecret: string | undefined;
@@ -223,6 +224,7 @@ mcpRoutes.post('/observe', async (c) => {
 
   const selection = selectProbeCandidate(candidates, similarities, !!trunkId, trunkId ?? undefined);
   if (!selection) {
+    logger.info('mcp.observe.skip', { requestId: c.get('requestId'), userId: user.id, conceptCount: resolvedConcepts.length });
     return c.json({ shouldProbe: false, intrusiveness: 'skip', userProfile: 'unknown' });
   }
   // Recover the full candidate (with assessmentCount, daysSince, etc.) from the candidates array
@@ -362,6 +364,8 @@ mcpRoutes.post('/observe', async (c) => {
     probeTokenId: probeToken.tokenId,
   }).where(eq(pendingActions.userId, user.id));
 
+  logger.info('mcp.observe.probe', { requestId: c.get('requestId'), userId: user.id, conceptId: selected.conceptId, depth, mastery: masteryPct });
+
   return c.json({
     shouldProbe: true,
     conceptId: selected.conceptId,
@@ -392,6 +396,7 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   let evaluationCriteria: string | undefined;
   if (body.eventType === 'probe') {
     if (!body.probeToken) {
+      logger.info('mcp.evaluation.token_rejected', { requestId: c.get('requestId'), userId: user.id, reason: 'missing_token' });
       return c.json({ error: 'Probe token required for probe evaluations' }, 403);
     }
     if (!body.responseText) {
@@ -404,6 +409,7 @@ mcpRoutes.post('/record-evaluation', async (c) => {
       conceptId: body.conceptId,
     });
     if (!verification.valid) {
+      logger.info('mcp.evaluation.token_rejected', { requestId: c.get('requestId'), userId: user.id, reason: verification.reason });
       return c.json({ error: `Invalid probe token: ${verification.reason}` }, 403);
     }
 
@@ -411,9 +417,11 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     const [existingToken] = await db.select().from(probeTokens)
       .where(eq(probeTokens.id, body.probeToken.tokenId));
     if (!existingToken) {
+      logger.info('mcp.evaluation.token_rejected', { requestId: c.get('requestId'), userId: user.id, reason: 'not_found' });
       return c.json({ error: 'Invalid probe token: not found' }, 403);
     }
     if (existingToken.usedAt) {
+      logger.info('mcp.evaluation.token_rejected', { requestId: c.get('requestId'), userId: user.id, reason: 'already_used' });
       return c.json({ error: 'Invalid probe token: already used' }, 403);
     }
 
@@ -534,6 +542,8 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   const direction = result.newMastery > result.previousMastery ? 'improved'
     : result.newMastery < result.previousMastery ? 'decreased' : 'unchanged';
 
+  logger.info('mcp.evaluation.recorded', { requestId: c.get('requestId'), userId: user.id, conceptId: body.conceptId, score: body.score, newMastery: result.newMastery });
+
   return c.json({
     mastery: result.newMastery,
     previousMastery: result.previousMastery,
@@ -601,6 +611,8 @@ mcpRoutes.post('/tutor/start', async (c) => {
       data: { sessionId, conceptId: body.conceptId, phase: 'phase1', timestamp: new Date().toISOString() },
     },
   });
+
+  logger.info('mcp.tutor.started', { requestId: c.get('requestId'), userId: user.id, conceptId: body.conceptId, sessionId });
 
   return c.json({
     sessionId,
@@ -742,6 +754,8 @@ mcpRoutes.post('/tutor/advance', async (c) => {
     // Clear pending action
     await db.delete(pendingActions).where(eq(pendingActions.userId, user.id));
 
+    logger.info('mcp.tutor.completed', { requestId: c.get('requestId'), userId: user.id, sessionId: body.sessionId });
+
     return c.json({
       phase: 'complete',
       isComplete: true,
@@ -774,6 +788,8 @@ mcpRoutes.post('/tutor/advance', async (c) => {
       data: { sessionId: body.sessionId, conceptId: session.conceptId, phase: nextPhase, timestamp: new Date().toISOString() },
     },
   });
+
+  logger.info('mcp.tutor.phase_advanced', { requestId: c.get('requestId'), userId: user.id, sessionId: body.sessionId, phase: nextPhase });
 
   return c.json({
     phase: nextPhase,
@@ -939,6 +955,9 @@ mcpRoutes.post('/dismiss', async (c) => {
       },
     });
   }
+
+  const dismissedConceptId = action ? (action.data as { conceptId?: string })?.conceptId : undefined;
+  logger.info('mcp.dismiss', { requestId: c.get('requestId'), userId: user.id, conceptId: dismissedConceptId, reason });
 
   return c.json({ acknowledged: true, dismissalRecorded, autoScored, requeued });
 });

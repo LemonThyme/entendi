@@ -3,6 +3,7 @@
  * Caches the Hono app per isolate to avoid recreating on every request.
  */
 import { createApp } from './index.js';
+import { logger } from './lib/logger.js';
 
 /** Minimal R2 bucket interface (avoids @cloudflare/workers-types dependency) */
 interface R2BucketLike {
@@ -79,6 +80,9 @@ export default {
   },
 
   async scheduled(_event: unknown, env: WorkerEnv, _ctx: unknown): Promise<void> {
+    const jobRunId = crypto.randomUUID();
+    logger.info('cron.started', { jobRunId });
+
     process.env.DATABASE_URL = env.DATABASE_URL;
     if (env.RESEND_API_KEY) process.env.RESEND_API_KEY = env.RESEND_API_KEY;
     const { createDb } = await import('./db/connection.js');
@@ -86,19 +90,31 @@ export default {
     const db = createDb(env.DATABASE_URL);
 
     // Mastery summary emails
-    const result = await runMasterySummaryJob(db);
-    console.log(`[Entendi] Mastery summary job: sent=${result.sent} skipped=${result.skipped}`);
+    const result = await runMasterySummaryJob(db, jobRunId);
+    logger.info('cron.mastery_summary.complete', {
+      jobRunId,
+      sent: result.sent,
+      skipped: result.skipped,
+      errors: result.errors,
+    });
 
     // Database backup to R2
     if (!env.R2_BUCKET) {
-      console.log('[Entendi] Backup skipped: R2_BUCKET binding not configured');
+      logger.info('cron.backup.skipped', { jobRunId, reason: 'R2_BUCKET binding not configured' });
       return;
     }
     try {
       const backup = await runBackup(db, env.R2_BUCKET);
-      console.log(`[Entendi] Backup complete: ${backup.tables} tables, ${backup.totalRows} rows`);
+      logger.info('cron.backup.complete', {
+        jobRunId,
+        tables: backup.tables,
+        rows: backup.totalRows,
+      });
     } catch (err) {
-      console.error(`[Entendi] Backup failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error('cron.backup.failed', {
+        jobRunId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   },
 };

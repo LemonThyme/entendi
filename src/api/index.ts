@@ -4,7 +4,10 @@ import { cors } from 'hono/cors';
 import { createDb, type Database } from './db/connection.js';
 import { pendingActions, probeTokens } from './db/schema.js';
 import { type Auth, createAuth } from './lib/auth.js';
+import { logger } from './lib/logger.js';
 import { rateLimit } from './middleware/rate-limit.js';
+import { requestLogger } from './middleware/request-logger.js';
+import { adminStatsRoutes } from './routes/admin-stats.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { billingRoutes } from './routes/billing.js';
 import { conceptRoutes } from './routes/concepts.js';
@@ -29,6 +32,7 @@ export type Env = {
     auth: Auth;
     user: { id: string; name: string; email: string } | null;
     session: { id: string; userId: string; activeOrganizationId?: string | null } | null;
+    requestId: string;
   };
 };
 
@@ -117,19 +121,31 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   // Global error handler with structured logging
   app.onError((err, c) => {
     const status = 'status' in err && typeof err.status === 'number' ? err.status : 500;
+    const requestId = c.get('requestId');
+
     if (status >= 500) {
-      console.error(JSON.stringify({
-        level: 'error',
+      logger.error('request.error', {
+        requestId,
         method: c.req.method,
         path: c.req.path,
         status,
         message: err.message,
         stack: err.stack,
-        timestamp: new Date().toISOString(),
-      }));
+        userId: c.get('user')?.id,
+      });
+    } else if (status >= 400) {
+      logger.warn('request.client_error', {
+        requestId,
+        method: c.req.method,
+        path: c.req.path,
+        status,
+        message: err.message,
+        userId: c.get('user')?.id,
+      });
     }
+
     return c.json(
-      { error: status >= 500 ? 'Internal server error' : err.message },
+      { error: status >= 500 ? 'Internal server error' : err.message, requestId },
       status as any,
     );
   });
@@ -150,6 +166,9 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   }));
+
+  // Request ID and structured request logging
+  app.use('*', requestLogger);
 
   // Inject db and auth into context
   app.use('*', async (c, next) => {
@@ -173,8 +192,18 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     } catch (err) {
       // Surface API key rate limit as 429 instead of silently falling through to 401
       if (err instanceof Error && err.message?.includes('rate limit')) {
+        logger.warn('auth.api_key_rate_limit', {
+          requestId: c.get('requestId'),
+          ip: c.req.header('cf-connecting-ip'),
+          path: c.req.path,
+        });
         return c.json({ error: 'API key rate limit exceeded' }, 429);
       }
+      logger.debug('auth.session_resolution_failed', {
+        requestId: c.get('requestId'),
+        path: c.req.path,
+        error: err instanceof Error ? err.message : String(err),
+      });
       c.set('user', null);
       c.set('session', null);
     }
@@ -263,6 +292,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   });
 
   // Routes
+  app.route('/api/admin', adminStatsRoutes);
   app.route('/api/concepts', conceptRoutes);
   app.route('/api/mastery', masteryRoutes);
   app.route('/api/mcp', mcpRoutes);

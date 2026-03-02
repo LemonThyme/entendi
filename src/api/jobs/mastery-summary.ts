@@ -7,6 +7,7 @@ import { and, eq, gte, } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import { assessmentEvents, concepts, emailPreferences, user, userConceptStates } from '../db/schema.js';
 import { EmailTemplate, sendEmail } from '../lib/email.js';
+import { logger } from '../lib/logger.js';
 import { generateSparklineSvg } from '../lib/sparkline.js';
 
 export interface MasterySummaryResult {
@@ -15,7 +16,7 @@ export interface MasterySummaryResult {
   errors: number;
 }
 
-export async function runMasterySummaryJob(db: Database): Promise<MasterySummaryResult> {
+export async function runMasterySummaryJob(db: Database, jobRunId?: string): Promise<MasterySummaryResult> {
   const result: MasterySummaryResult = { sent: 0, skipped: 0, errors: 0 };
 
   // Get all users who have email preferences not set to 'off'
@@ -160,7 +161,11 @@ export async function runMasterySummaryJob(db: Database): Promise<MasterySummary
         result.errors++;
       }
     } catch (err) {
-      console.error(`[MasterySummary] Error for user ${u.id}:`, err);
+      logger.error('cron.mastery_summary.user_error', {
+        jobRunId,
+        userId: u.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
       result.errors++;
     }
   }

@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deviceCodes } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { logger } from '../lib/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const DEVICE_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -31,6 +32,8 @@ deviceCodeRoutes.post('/', async (c) => {
     status: 'pending',
     expiresAt,
   });
+
+  logger.info('auth.device_code.created', { requestId: c.get('requestId'), code });
 
   return c.json({ code, verifyUrl, expiresAt: expiresAt.toISOString() });
 });
@@ -107,6 +110,8 @@ deviceCodeRoutes.post('/:code/confirm', requireAuth, async (c) => {
       status: 'confirmed',
     })
     .where(eq(deviceCodes.code, code));
+
+  logger.info('auth.device_code.confirmed', { requestId: c.get('requestId'), userId: user!.id, code });
 
   return c.json({ status: 'confirmed' });
 });

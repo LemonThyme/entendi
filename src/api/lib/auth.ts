@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import { invitation, member } from '../db/schema.js';
 import { EmailTemplate, sendEmail } from './email.js';
+import { logger } from './logger.js';
 
 function buildSocialProviders(): Record<string, { clientId: string; clientSecret: string }> | undefined {
   const providers: Record<string, { clientId: string; clientSecret: string }> = {};
@@ -64,6 +65,7 @@ export function createAuth(db: Database, options?: { secret?: string; baseURL?: 
       user: {
         create: {
           after: async (user) => {
+            logger.info('auth.user_created', { userId: user.id, email: user.email });
             // Auto-accept pending org invitations matching the new user's email
             try {
               const pendingInvitations = await db.select()

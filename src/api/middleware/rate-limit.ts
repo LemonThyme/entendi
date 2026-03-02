@@ -1,5 +1,6 @@
 import type { Context, Next } from 'hono';
 import type { Env } from '../index.js';
+import { logger } from '../lib/logger.js';
 
 /**
  * Simple in-memory sliding-window rate limiter.
@@ -64,6 +65,12 @@ export function rateLimit(options: {
       c.header('Retry-After', String(retryAfter));
       c.header('X-RateLimit-Limit', String(max));
       c.header('X-RateLimit-Remaining', '0');
+      logger.warn('security.rate_limit_hit', {
+        key,
+        path: c.req.path,
+        method: c.req.method,
+        requestId: c.get('requestId'),
+      });
       return c.json({ error: 'Too many requests' }, 429);
     }
 
