@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { pendingActions } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { logger } from '../lib/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const hookRoutes = new Hono<Env>();
@@ -72,6 +73,7 @@ hookRoutes.post('/user-prompt-submit', async (c) => {
 
   // 1. Login pattern
   if (LOGIN_PATTERNS.some((p) => p.test(prompt))) {
+    logger.info('hook.login_detected', { requestId: c.get('requestId'), userId: user.id });
     return c.json({
       additionalContext:
         `[Entendi] The user wants to log in to Entendi. ` +
@@ -95,6 +97,7 @@ hookRoutes.post('/user-prompt-submit', async (c) => {
 
     switch (type) {
       case 'awaiting_probe_response':
+        logger.info('hook.probe_pending', { requestId: c.get('requestId'), userId: user.id, conceptId, actionType: type });
         return c.json({
           additionalContext:
             `[Entendi] There is a pending comprehension probe about '${conceptId}'. ` +
@@ -128,6 +131,7 @@ hookRoutes.post('/user-prompt-submit', async (c) => {
     if (match) {
       const conceptName = match[1].trim().replace(/[?.!]+$/, '').trim();
       if (conceptName) {
+        logger.info('hook.teach_me', { requestId: c.get('requestId'), userId: user.id, conceptName });
         return c.json({
           additionalContext:
             `[Entendi] The user is requesting to learn about '${conceptName}'. ` +
