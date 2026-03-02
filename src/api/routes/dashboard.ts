@@ -250,8 +250,8 @@ function getLandingHTML(): string {
     .cta-note { color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 3rem; text-align: center; }
     .cta-note a { color: var(--accent); text-decoration: none; }
     .cta-note a:hover { text-decoration: underline; }
-    .demo-area { max-width: 640px; margin: 0 auto 4rem; background: #1a1a2e; border-radius: 8px; padding: 3rem 2rem; text-align: center; }
-    .demo-area p { color: rgba(255,255,255,0.5); font-size: 0.85rem; }
+    .demo-area { max-width: 800px; margin: 0 auto 4rem; }
+    .demo-area video { width: 100%; display: block; }
     .audience-section { margin-bottom: 4rem; }
     .audience-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
     .audience-block h3 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
@@ -281,7 +281,9 @@ function getLandingHTML(): string {
     <p class="cta-note">Free and <a href="https://github.com/LemonThyme/entendi">open source</a>. Works with <a href="https://claude.com/claude-code">Claude Code</a>.</p>
   </div>
   <div class="demo-area">
-    <p>Terminal recording coming soon</p>
+    <video autoplay loop muted playsinline>
+      <source src="/demo.webm" type="video/webm">
+    </video>
   </div>
   <div class="audience-section">
     <div class="audience-block">
@@ -340,7 +342,7 @@ function getLandingHTML(): string {
 function getPrivacyHTML(): string {
   return publicShell('Privacy Policy | Entendi', 'privacy', `
   <style>
-    .legal-page { margin-top: 4rem; margin-bottom: 4rem; }
+    .legal-page { padding-top: 4rem; margin-bottom: 4rem; }
     .legal-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
     .legal-page h3 { font-size: 0.95rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
     .legal-page p, .legal-page li { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.7; }
@@ -394,7 +396,7 @@ function getPrivacyHTML(): string {
 function getTermsHTML(): string {
   return publicShell('Terms of Service | Entendi', 'terms', `
   <style>
-    .legal-page { margin-top: 4rem; margin-bottom: 4rem; }
+    .legal-page { padding-top: 4rem; margin-bottom: 4rem; }
     .legal-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
     .legal-page h3 { font-size: 0.95rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
     .legal-page p, .legal-page li { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.7; }
@@ -482,9 +484,9 @@ dashboardRoutes.get('/press', async (c) => {
     const days = daysSinceLaunch();
     content = `
       <style>
-        .press-empty { margin-top: 8rem; text-align: center; }
-        .press-empty h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
-        .press-empty p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; max-width: 400px; margin: 0 auto; }
+        .press-empty { padding-top: 4rem; }
+        .press-empty h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+        .press-empty p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
       </style>
       <div class="press-empty">
         <h2>Press</h2>
@@ -498,7 +500,7 @@ dashboardRoutes.get('/press', async (c) => {
       </li>`).join('');
     content = `
       <style>
-        .press-page { margin-top: 4rem; }
+        .press-page { padding-top: 4rem; }
         .press-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
         .press-list { list-style: none; }
         .press-item { padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
@@ -524,8 +526,9 @@ dashboardRoutes.get('/press', async (c) => {
 dashboardRoutes.get('/contact', (c) => {
   const content = `
     <style>
-      .contact-page { margin-top: 4rem; max-width: 480px; }
+      .contact-page { padding-top: 4rem; }
       .contact-page h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+      .contact-form { max-width: 480px; }
       .contact-form label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; margin-top: 1rem; }
       .contact-form label:first-child { margin-top: 0; }
       .contact-form input, .contact-form textarea {
