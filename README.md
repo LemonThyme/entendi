@@ -43,12 +43,9 @@ It finishes your request first, then asks. If you know the material, it leaves y
 ## Install
 
 ```bash
-git clone https://github.com/LemonThyme/entendi.git
-cd entendi
-./setup.sh
+claude plugin marketplace add https://github.com/LemonThyme/entendi
+claude plugin install entendi
 ```
-
-The setup script validates Node 22+, checks your `.env`, installs dependencies, builds everything, and installs the plugin.
 
 ### Link your account
 

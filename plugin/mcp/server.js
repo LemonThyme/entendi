@@ -30089,23 +30089,105 @@ var StdioServerTransport = class {
 };
 
 // src/mcp/server.ts
-import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync3 } from "fs";
 import { execFile } from "child_process";
+import { appendFileSync as appendFileSync2, existsSync, mkdirSync as mkdirSync3 } from "fs";
+import { homedir as homedir3, platform } from "os";
 import { join as join3 } from "path";
-import { homedir as homedir3 } from "os";
-import { platform } from "os";
+
+// src/shared/config.ts
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+var CONFIG_DIR = join(homedir(), ".entendi");
+var CONFIG_FILE = join(CONFIG_DIR, "config.json");
+function loadConfig() {
+  let fileConfig = {};
+  try {
+    fileConfig = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+  } catch {
+  }
+  return {
+    apiUrl: process.env.ENTENDI_API_URL || fileConfig.apiUrl || "https://api.entendi.dev",
+    // Config file takes priority — it's written by entendi_login (canonical auth flow).
+    // Env var is a fallback for manual setup or CI.
+    apiKey: fileConfig.apiKey || process.env.ENTENDI_API_KEY || void 0
+  };
+}
+function saveConfig(config2) {
+  let existing = {};
+  try {
+    existing = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+  } catch {
+  }
+  if (config2.apiUrl) existing.apiUrl = config2.apiUrl;
+  if (config2.apiKey) existing.apiKey = config2.apiKey;
+  mkdirSync(CONFIG_DIR, { recursive: true });
+  writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2) + "\n", { mode: 384 });
+}
 
 // src/mcp/api-client.ts
-import { appendFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
-var LOG_DIR = join(homedir(), ".entendi");
-var LOG_FILE = join(LOG_DIR, "debug.log");
+import { appendFileSync, mkdirSync as mkdirSync2 } from "fs";
+import { homedir as homedir2 } from "os";
+import { join as join2 } from "path";
+
+// src/mcp/response-cache.ts
+var ResponseCache = class {
+  cache = /* @__PURE__ */ new Map();
+  ttlMs;
+  constructor(options) {
+    this.ttlMs = options?.ttlMs ?? 6e4;
+  }
+  /** Build a cache key from method + path. */
+  static key(method, path) {
+    return `${method}:${path}`;
+  }
+  /** Get a cached value if it exists and hasn't expired. */
+  get(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return void 0;
+    if (Date.now() - entry.cachedAt > this.ttlMs) {
+      this.cache.delete(key);
+      return void 0;
+    }
+    return entry.data;
+  }
+  /** Store a value in the cache. */
+  set(key, data) {
+    this.cache.set(key, { data, cachedAt: Date.now() });
+  }
+  /** Invalidate a specific cache entry. */
+  invalidate(key) {
+    return this.cache.delete(key);
+  }
+  /** Invalidate all entries whose keys contain the given substring. */
+  invalidateMatching(substring) {
+    let count = 0;
+    for (const key of this.cache.keys()) {
+      if (key.includes(substring)) {
+        this.cache.delete(key);
+        count++;
+      }
+    }
+    return count;
+  }
+  /** Clear the entire cache. */
+  clear() {
+    this.cache.clear();
+  }
+  /** Number of entries currently in the cache (including potentially expired). */
+  get size() {
+    return this.cache.size;
+  }
+};
+
+// src/mcp/api-client.ts
+var LOG_DIR = join2(homedir2(), ".entendi");
+var LOG_FILE = join2(LOG_DIR, "debug.log");
 var logReady = false;
 function apiLog(message, data) {
   if (!logReady) {
     try {
-      mkdirSync(LOG_DIR, { recursive: true });
+      mkdirSync2(LOG_DIR, { recursive: true });
     } catch {
     }
     logReady = true;
@@ -30118,121 +30200,320 @@ function apiLog(message, data) {
   } catch {
   }
 }
+var CircuitBreaker = class {
+  state = "closed";
+  consecutiveFailures = 0;
+  openedAt = 0;
+  failureThreshold;
+  cooldownMs;
+  constructor(options) {
+    this.failureThreshold = options?.failureThreshold ?? 5;
+    this.cooldownMs = options?.cooldownMs ?? 3e4;
+  }
+  /** Current circuit state. */
+  getState() {
+    if (this.state === "open" && Date.now() - this.openedAt >= this.cooldownMs) {
+      this.transitionTo("half-open");
+    }
+    return this.state;
+  }
+  /** Check whether a request is allowed. Returns true if allowed. */
+  allowRequest() {
+    const current = this.getState();
+    return current === "closed" || current === "half-open";
+  }
+  /** Record a successful request. Resets the breaker to closed. */
+  recordSuccess() {
+    if (this.state !== "closed") {
+      this.transitionTo("closed");
+    }
+    this.consecutiveFailures = 0;
+  }
+  /** Record a failed request. May open the circuit. */
+  recordFailure() {
+    this.consecutiveFailures++;
+    if (this.state === "half-open") {
+      this.transitionTo("open");
+    } else if (this.consecutiveFailures >= this.failureThreshold) {
+      this.transitionTo("open");
+    }
+  }
+  /** Number of consecutive failures. */
+  getConsecutiveFailures() {
+    return this.consecutiveFailures;
+  }
+  transitionTo(newState) {
+    const prev = this.state;
+    this.state = newState;
+    if (newState === "open") {
+      this.openedAt = Date.now();
+    }
+    if (newState === "closed") {
+      this.consecutiveFailures = 0;
+    }
+    apiLog(`circuit-breaker ${prev} -> ${newState}`, {
+      consecutiveFailures: this.consecutiveFailures
+    });
+  }
+};
+function isRetryableStatus(status) {
+  return status === 429 || status >= 500 && status <= 599;
+}
+function isNetworkError(err) {
+  if (err instanceof TypeError) return true;
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return msg.includes("fetch") || msg.includes("network") || msg.includes("econnrefused") || msg.includes("econnreset") || msg.includes("etimedout") || msg.includes("abort");
+  }
+  return false;
+}
+function computeBackoffDelay(attempt, baseDelayMs, jitterFactor) {
+  const exponentialDelay = baseDelayMs * 2 ** attempt;
+  const jitter = exponentialDelay * jitterFactor * (2 * Math.random() - 1);
+  return Math.max(0, exponentialDelay + jitter);
+}
 var EntendiApiClient = class {
   apiUrl;
   apiKey;
+  maxRetries;
+  baseDelayMs;
+  jitterFactor;
+  defaultTimeoutMs;
+  circuitBreaker;
+  cache;
   constructor(options) {
     this.apiUrl = options.apiUrl.replace(/\/$/, "");
     this.apiKey = options.apiKey;
-    apiLog("initialized", { apiUrl: this.apiUrl });
+    this.maxRetries = options.retry?.maxRetries ?? 3;
+    this.baseDelayMs = options.retry?.baseDelayMs ?? 1e3;
+    this.jitterFactor = options.retry?.jitterFactor ?? 0.25;
+    this.defaultTimeoutMs = options.retry?.timeoutMs ?? 1e4;
+    this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
+    this.cache = new ResponseCache({ ttlMs: options.cacheTtlMs ?? 6e4 });
+    apiLog("initialized", { apiUrl: this.apiUrl, maxRetries: this.maxRetries, timeoutMs: this.defaultTimeoutMs });
   }
   getApiUrl() {
     return this.apiUrl;
   }
-  async request(method, path, body) {
+  /** Expose circuit breaker for testing / monitoring. */
+  getCircuitBreaker() {
+    return this.circuitBreaker;
+  }
+  /** Expose cache for testing / monitoring. */
+  getCache() {
+    return this.cache;
+  }
+  async request(method, path, body, opts) {
+    if (!this.circuitBreaker.allowRequest()) {
+      const msg = `Circuit breaker OPEN \u2014 failing fast for ${method} ${path}`;
+      apiLog(msg);
+      throw new Error(msg);
+    }
     const url2 = `${this.apiUrl}${path}`;
-    const init = {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey
-      }
-    };
-    if (body) {
-      init.body = JSON.stringify(body);
-    }
+    const timeoutMs = opts?.timeoutMs ?? this.defaultTimeoutMs;
     apiLog(`${method} ${path}`, body ? { body } : void 0);
-    const start = Date.now();
-    const res = await fetch(url2, init);
-    if (!res.ok) {
-      const text = await res.text();
-      apiLog(`${method} ${path} FAILED`, { status: res.status, elapsed: Date.now() - start, error: text });
-      throw new Error(`API ${method} ${path} failed (${res.status}): ${text}`);
+    const overallStart = Date.now();
+    let lastError;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = computeBackoffDelay(attempt - 1, this.baseDelayMs, this.jitterFactor);
+        apiLog(`${method} ${path} retry ${attempt}/${this.maxRetries} after ${Math.round(delay)}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const init = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": this.apiKey
+          },
+          signal: controller.signal
+        };
+        if (body) {
+          init.body = JSON.stringify(body);
+        }
+        const start = Date.now();
+        const res = await fetch(url2, init);
+        clearTimeout(timer);
+        if (!res.ok) {
+          const text = await res.text();
+          const elapsed2 = Date.now() - start;
+          apiLog(`${method} ${path} FAILED`, { status: res.status, elapsed: elapsed2, attempt, error: text });
+          if (isRetryableStatus(res.status) && attempt < this.maxRetries) {
+            lastError = new Error(`API ${method} ${path} failed (${res.status}): ${text}`);
+            continue;
+          }
+          if (isRetryableStatus(res.status)) {
+            this.circuitBreaker.recordFailure();
+          }
+          throw new Error(`API ${method} ${path} failed (${res.status}): ${text}`);
+        }
+        const result = await res.json();
+        const elapsed = Date.now() - overallStart;
+        if (attempt > 0) {
+          apiLog(`${method} ${path} OK after ${attempt} retries`, { status: res.status, elapsed, result });
+        } else {
+          apiLog(`${method} ${path} OK`, { status: res.status, elapsed, result });
+        }
+        this.circuitBreaker.recordSuccess();
+        return result;
+      } catch (err) {
+        clearTimeout(timer);
+        if (err instanceof Error && err.name === "AbortError") {
+          lastError = new Error(`API ${method} ${path} timed out after ${timeoutMs}ms`);
+          apiLog(`${method} ${path} TIMEOUT`, { timeoutMs, attempt });
+          if (attempt < this.maxRetries) continue;
+          this.circuitBreaker.recordFailure();
+          throw lastError;
+        }
+        if (isNetworkError(err) && attempt < this.maxRetries) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          apiLog(`${method} ${path} NETWORK_ERROR`, { error: String(err), attempt });
+          continue;
+        }
+        if (isNetworkError(err)) {
+          this.circuitBreaker.recordFailure();
+        }
+        throw err;
+      }
     }
-    const result = await res.json();
-    apiLog(`${method} ${path} OK`, { status: res.status, elapsed: Date.now() - start, result });
-    return result;
+    this.circuitBreaker.recordFailure();
+    throw lastError ?? new Error(`API ${method} ${path} failed after ${this.maxRetries} retries`);
   }
   async observe(input) {
-    return this.request("POST", "/api/mcp/observe", input);
+    const result = await this.request("POST", "/api/mcp/observe", input);
+    this.cache.invalidateMatching("/api/mcp/status");
+    this.cache.invalidateMatching("/api/mcp/zpd-frontier");
+    return result;
   }
   async recordEvaluation(input) {
-    return this.request("POST", "/api/mcp/record-evaluation", input);
+    const result = await this.request("POST", "/api/mcp/record-evaluation", input);
+    this.cache.invalidateMatching("/api/mcp/status");
+    this.cache.invalidateMatching("/api/mcp/zpd-frontier");
+    return result;
   }
   async startTutor(input) {
     return this.request("POST", "/api/mcp/tutor/start", input);
   }
   async advanceTutor(input) {
-    return this.request("POST", "/api/mcp/tutor/advance", input);
+    const result = await this.request("POST", "/api/mcp/tutor/advance", input);
+    this.cache.invalidateMatching("/api/mcp/status");
+    this.cache.invalidateMatching("/api/mcp/zpd-frontier");
+    return result;
   }
   async dismiss(input) {
-    return this.request("POST", "/api/mcp/dismiss", input ?? {});
+    return this.request("POST", "/api/mcp/dismiss", input);
   }
   async getStatus(conceptId) {
     const query = conceptId ? `?conceptId=${encodeURIComponent(conceptId)}` : "";
-    return this.request("GET", `/api/mcp/status${query}`);
+    const path = `/api/mcp/status${query}`;
+    const cacheKey = ResponseCache.key("GET", path);
+    const cached2 = this.cache.get(cacheKey);
+    if (cached2 !== void 0) {
+      apiLog(`GET ${path} CACHE_HIT`);
+      return cached2;
+    }
+    const result = await this.request("GET", path);
+    this.cache.set(cacheKey, result);
+    return result;
   }
-  async getZpdFrontier() {
-    return this.request("GET", "/api/mcp/zpd-frontier");
+  async getZpdFrontier(params) {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.domain) query.set("domain", params.domain);
+    if (params?.includeUnassessed) query.set("includeUnassessed", "true");
+    const qs = query.toString();
+    const path = `/api/mcp/zpd-frontier${qs ? `?${qs}` : ""}`;
+    const cacheKey = ResponseCache.key("GET", path);
+    const cached2 = this.cache.get(cacheKey);
+    if (cached2 !== void 0) {
+      apiLog(`GET ${path} CACHE_HIT`);
+      return cached2;
+    }
+    const result = await this.request("GET", path);
+    this.cache.set(cacheKey, result);
+    return result;
+  }
+  /** Check API health (no auth required). Returns { status, db } from /health. */
+  async healthCheck() {
+    const url2 = `${this.apiUrl}/health`;
+    apiLog("GET /health (unauthenticated)");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+    try {
+      const res = await fetch(url2, {
+        method: "GET",
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      return res.json();
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(`Health check timed out after ${this.defaultTimeoutMs}ms`);
+      }
+      throw err;
+    }
+  }
+  /** Verify auth by calling /api/me. Returns user info or throws. */
+  async verifyAuth() {
+    return this.request("GET", "/api/me");
   }
   /** Create a device code for CLI-first auth (no auth required). */
   async createDeviceCode() {
     const url2 = `${this.apiUrl}/api/auth/device-code`;
     apiLog("POST /api/auth/device-code (unauthenticated)");
-    const res = await fetch(url2, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" }
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Device code creation failed (${res.status}): ${text}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+    try {
+      const res = await fetch(url2, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Device code creation failed (${res.status}): ${text}`);
+      }
+      return res.json();
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(`Device code creation timed out after ${this.defaultTimeoutMs}ms`);
+      }
+      throw err;
     }
-    return res.json();
   }
   /** Poll device code status (no auth required). */
   async pollDeviceCode(code) {
     const url2 = `${this.apiUrl}/api/auth/device-code/${encodeURIComponent(code)}`;
     apiLog(`GET /api/auth/device-code/${code} (unauthenticated)`);
-    const res = await fetch(url2, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" }
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Device code poll failed (${res.status}): ${text}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+    try {
+      const res = await fetch(url2, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Device code poll failed (${res.status}): ${text}`);
+      }
+      return res.json();
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(`Device code poll timed out after ${this.defaultTimeoutMs}ms`);
+      }
+      throw err;
     }
-    return res.json();
   }
 };
-
-// src/shared/config.ts
-import { readFileSync, writeFileSync, mkdirSync as mkdirSync2 } from "fs";
-import { join as join2 } from "path";
-import { homedir as homedir2 } from "os";
-var CONFIG_DIR = join2(homedir2(), ".entendi");
-var CONFIG_FILE = join2(CONFIG_DIR, "config.json");
-function loadConfig() {
-  let fileConfig = {};
-  try {
-    fileConfig = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
-  } catch {
-  }
-  return {
-    apiUrl: process.env.ENTENDI_API_URL || fileConfig.apiUrl || "http://localhost:3456",
-    apiKey: process.env.ENTENDI_API_KEY || fileConfig.apiKey || void 0
-  };
-}
-function saveConfig(config2) {
-  let existing = {};
-  try {
-    existing = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
-  } catch {
-  }
-  if (config2.apiUrl) existing.apiUrl = config2.apiUrl;
-  if (config2.apiKey) existing.apiKey = config2.apiKey;
-  mkdirSync2(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2) + "\n", { mode: 384 });
-}
 
 // src/mcp/server.ts
 var MCP_LOG_DIR = join3(homedir3(), ".entendi");
@@ -30247,12 +30528,49 @@ function mcpLog(message, data) {
     mcpLogReady = true;
   }
   const ts = (/* @__PURE__ */ new Date()).toISOString();
-  const dataStr = data !== void 0 ? ` ${JSON.stringify(data)}` : "";
+  let dataStr = "";
+  if (data !== void 0) {
+    if (data instanceof Error) {
+      dataStr = ` ${JSON.stringify({ error: data.message, stack: data.stack })}`;
+    } else if (typeof data === "object" && data !== null && "error" in data) {
+      const d = data;
+      const err = d.error;
+      if (err instanceof Error) {
+        dataStr = ` ${JSON.stringify({ ...d, error: err.message, stack: err.stack })}`;
+      } else {
+        dataStr = ` ${JSON.stringify(data)}`;
+      }
+    } else {
+      dataStr = ` ${JSON.stringify(data)}`;
+    }
+  }
   try {
     appendFileSync2(MCP_LOG_FILE, `[${ts}] [mcp] ${message}${dataStr}
 `);
   } catch {
   }
+}
+function wrapToolError(err) {
+  const msg = String(err instanceof Error ? err.message : err);
+  if (msg.includes("Circuit breaker OPEN")) {
+    return "Entendi is temporarily unavailable. Your work continues normally \u2014 concept tracking will resume automatically.";
+  }
+  if (msg.includes("ECONNREFUSED") || msg.includes("ETIMEDOUT") || msg.includes("fetch failed") || msg.includes("AbortError") || msg.includes("operation was aborted")) {
+    return "Can't reach the Entendi API right now. This doesn't affect your work.";
+  }
+  if (/\b401\b/.test(msg) || /\b403\b/.test(msg) || msg.includes("Unauthorized") || msg.includes("Forbidden")) {
+    return "Your Entendi session has expired. Run `entendi_login` to re-authenticate.";
+  }
+  if (/\b429\b/.test(msg) || msg.includes("Too Many Requests") || msg.includes("Rate limit")) {
+    return "Rate limit reached. Try again later.";
+  }
+  if (/\b5\d{2}\b/.test(msg) || msg.includes("Internal Server Error") || msg.includes("Bad Gateway") || msg.includes("Service Unavailable")) {
+    return "Entendi server error. Your work continues normally.";
+  }
+  if (msg.includes("token") && (msg.includes("expired") || msg.includes("invalid") || msg.includes("Expired"))) {
+    return "This probe has expired. A new one will be issued next time.";
+  }
+  return "Entendi encountered an unexpected error. Your work continues normally.";
 }
 function createEntendiServer(options) {
   const mcpServer = new McpServer({
@@ -30270,24 +30588,48 @@ function createEntendiServer(options) {
       "entendi_observe",
       "Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.",
       {
-        concepts: external_exports3.array(external_exports3.object({
-          id: external_exports3.string(),
-          source: external_exports3.enum(["package", "ast", "llm"])
-        })),
-        triggerContext: external_exports3.string()
+        concepts: external_exports3.preprocess(
+          (v) => typeof v === "string" ? JSON.parse(v) : v,
+          external_exports3.array(external_exports3.object({
+            id: external_exports3.string(),
+            source: external_exports3.enum(["package", "ast", "llm"])
+          }))
+        ),
+        triggerContext: external_exports3.string(),
+        primaryConceptId: external_exports3.preprocess(
+          (v) => v === "" || v === null ? void 0 : v,
+          external_exports3.string().optional()
+        )
       },
-      async (args) => {
+      async (args, extra) => {
         mcpLog("tool:entendi_observe called", args);
+        const progressToken = extra._meta?.progressToken;
         try {
           const result = await api.observe({
             concepts: args.concepts,
-            triggerContext: args.triggerContext
+            triggerContext: args.triggerContext,
+            primaryConceptId: args.primaryConceptId
           });
+          if (progressToken !== void 0 && args.concepts.length > 1) {
+            try {
+              await extra.sendNotification({
+                method: "notifications/progress",
+                params: {
+                  progressToken,
+                  progress: args.concepts.length,
+                  total: args.concepts.length,
+                  message: `Processed ${args.concepts.length} concepts`
+                }
+              });
+            } catch (notifErr) {
+              mcpLog("tool:entendi_observe progress notification failed", { error: String(notifErr) });
+            }
+          }
           mcpLog("tool:entendi_observe result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_observe error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_observe error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
@@ -30301,16 +30643,19 @@ function createEntendiServer(options) {
         confidence: external_exports3.coerce.number().min(0).max(1),
         reasoning: external_exports3.string(),
         eventType: external_exports3.enum(["probe", "tutor_phase1", "tutor_phase4"]),
-        probeToken: external_exports3.object({
-          tokenId: external_exports3.string(),
-          userId: external_exports3.string(),
-          conceptId: external_exports3.string(),
-          depth: external_exports3.coerce.number(),
-          evaluationCriteria: external_exports3.string(),
-          issuedAt: external_exports3.string(),
-          expiresAt: external_exports3.string(),
-          signature: external_exports3.string()
-        }).optional(),
+        probeToken: external_exports3.preprocess(
+          (v) => typeof v === "string" ? JSON.parse(v) : v,
+          external_exports3.object({
+            tokenId: external_exports3.string(),
+            userId: external_exports3.string(),
+            conceptId: external_exports3.string(),
+            depth: external_exports3.coerce.number(),
+            evaluationCriteria: external_exports3.string(),
+            issuedAt: external_exports3.string(),
+            expiresAt: external_exports3.string(),
+            signature: external_exports3.string()
+          }).optional()
+        ),
         responseText: external_exports3.string().optional()
       },
       async (args) => {
@@ -30328,8 +30673,8 @@ function createEntendiServer(options) {
           mcpLog("tool:entendi_record_evaluation result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_record_evaluation error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_record_evaluation error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
@@ -30351,8 +30696,8 @@ function createEntendiServer(options) {
           mcpLog("tool:entendi_start_tutor result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_start_tutor error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_start_tutor error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
@@ -30382,29 +30727,31 @@ function createEntendiServer(options) {
           mcpLog("tool:entendi_advance_tutor result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_advance_tutor error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_advance_tutor error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
     registeredTools.push({ name: "entendi_advance_tutor" });
     mcpServer.tool(
       "entendi_dismiss",
-      "Cancel a pending probe, tutor offer, or abandon a tutor session.",
+      "Dismiss a pending probe or tutor session with a categorized reason. topic_change: no penalty. busy: re-queues probe for next session (auto-scores 0 after 3 deferrals). claimed_expertise: auto-scores 0 immediately.",
       {
-        reason: external_exports3.enum(["user_declined", "topic_changed", "timeout"]).optional()
+        reason: external_exports3.enum(["topic_change", "busy", "claimed_expertise"]).describe("Why the probe is being dismissed"),
+        note: external_exports3.string().max(500).optional().describe("Optional context about the dismissal")
       },
       async (args) => {
         mcpLog("tool:entendi_dismiss called", args);
         try {
           const result = await api.dismiss({
-            reason: args.reason
+            reason: args.reason,
+            note: args.note
           });
           mcpLog("tool:entendi_dismiss result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_dismiss error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_dismiss error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
@@ -30422,8 +30769,8 @@ function createEntendiServer(options) {
           mcpLog("tool:entendi_get_status result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_get_status error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_get_status error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
@@ -30431,16 +30778,20 @@ function createEntendiServer(options) {
     mcpServer.tool(
       "entendi_get_zpd_frontier",
       "Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.",
-      {},
-      async () => {
-        mcpLog("tool:entendi_get_zpd_frontier called");
+      {
+        limit: external_exports3.coerce.number().int().min(1).max(100).optional().describe("Max concepts to return (default: 20)"),
+        domain: external_exports3.string().optional().describe('Filter by domain (e.g. "frontend", "databases")'),
+        includeUnassessed: external_exports3.boolean().optional().describe("Include never-assessed concepts (default: false \u2014 only in-progress)")
+      },
+      async (args) => {
+        mcpLog("tool:entendi_get_zpd_frontier called", args);
         try {
-          const result = await api.getZpdFrontier();
+          const result = await api.getZpdFrontier(args);
           mcpLog("tool:entendi_get_zpd_frontier result", result);
           return { content: [{ type: "text", text: JSON.stringify(result) }] };
         } catch (err) {
-          mcpLog("tool:entendi_get_zpd_frontier error", { error: String(err) });
-          return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
+          mcpLog("tool:entendi_get_zpd_frontier error", { error: err });
+          return { content: [{ type: "text", text: wrapToolError(err) }], isError: true };
         }
       }
     );
@@ -30462,7 +30813,7 @@ function createEntendiServer(options) {
           const openCmd = os === "darwin" ? "open" : os === "win32" ? "cmd" : "xdg-open";
           const openArgs = os === "win32" ? ["/c", "start", verifyUrl] : [verifyUrl];
           execFile(openCmd, openArgs, (err) => {
-            if (err) mcpLog("tool:entendi_login browser open failed", { error: String(err) });
+            if (err) mcpLog("tool:entendi_login browser open failed", { error: err });
           });
           const instructions = [
             `A browser window has been opened. Please sign in and click "Confirm Link".`,
@@ -30486,6 +30837,12 @@ function createEntendiServer(options) {
             } catch (saveErr) {
               mcpLog("tool:entendi_login config save failed", { error: String(saveErr) });
             }
+            try {
+              mcpServer.sendToolListChanged();
+              mcpLog("tool:entendi_login sent tools/list_changed notification");
+            } catch (notifErr) {
+              mcpLog("tool:entendi_login list_changed notification failed", { error: String(notifErr) });
+            }
             const lines = [
               "Device linked successfully!",
               "",
@@ -30503,12 +30860,60 @@ function createEntendiServer(options) {
         }
         return { content: [{ type: "text", text: `Code "${code}" is still pending. Make sure you confirmed in the browser, then call entendi_login with this code again.` }] };
       } catch (err) {
-        mcpLog("tool:entendi_login error", { error: String(err) });
+        mcpLog("tool:entendi_login error", { error: err });
         return { content: [{ type: "text", text: JSON.stringify({ error: String(err) }) }], isError: true };
       }
     }
   );
   registeredTools.push({ name: "entendi_login" });
+  mcpServer.tool(
+    "entendi_health_check",
+    "Check Entendi system health: config file, API key, API reachability, auth validity, and DB connectivity. Works before login to show what is missing.",
+    {},
+    async () => {
+      mcpLog("tool:entendi_health_check called");
+      const configPath = join3(homedir3(), ".entendi", "config.json");
+      const checks = {};
+      const configExists = existsSync(configPath);
+      checks.config = {
+        ok: configExists,
+        detail: configExists ? configPath : "Not found. Run entendi_login to create."
+      };
+      const hasApiKey = !!options.apiKey;
+      checks.apiKey = {
+        ok: hasApiKey,
+        detail: hasApiKey ? "Present" : "Missing. Run entendi_login to authenticate."
+      };
+      try {
+        const health = await api.healthCheck();
+        checks.apiReachable = { ok: true, detail: `${options.apiUrl} (status: ${health.status})` };
+        checks.database = {
+          ok: health.db === "connected",
+          detail: health.db === "connected" ? "Connected" : `${health.db}: ${health.error ?? "unknown"}`
+        };
+      } catch (err) {
+        checks.apiReachable = { ok: false, detail: `${options.apiUrl} \u2014 ${String(err)}` };
+        checks.database = { ok: false, detail: "Cannot check (API unreachable)" };
+      }
+      if (hasApiKey && checks.apiReachable.ok) {
+        try {
+          const me = await api.verifyAuth();
+          checks.auth = { ok: true, detail: `Authenticated as ${me.user.email ?? "unknown"}` };
+        } catch (err) {
+          checks.auth = { ok: false, detail: `Auth failed: ${String(err)}` };
+        }
+      } else if (!hasApiKey) {
+        checks.auth = { ok: false, detail: "Skipped (no API key)" };
+      } else {
+        checks.auth = { ok: false, detail: "Skipped (API unreachable)" };
+      }
+      const allOk = Object.values(checks).every((c) => c.ok);
+      const result = { healthy: allOk, checks };
+      mcpLog("tool:entendi_health_check result", result);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+  registeredTools.push({ name: "entendi_health_check" });
   return {
     close: async () => {
       await mcpServer.close();
@@ -30531,6 +30936,24 @@ async function main() {
   await server.getMcpServer().connect(transport);
   process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl}, authenticated: ${!!apiKey})
 `);
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    mcpLog(`shutdown initiated by ${signal}`);
+    process.stderr.write(`[Entendi MCP] Received ${signal}, shutting down...
+`);
+    try {
+      await transport.close();
+      await server.close();
+      mcpLog(`shutdown complete (${signal})`);
+    } catch (err) {
+      mcpLog(`shutdown error`, { error: err });
+    }
+    process.exit(0);
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 var isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"));
 if (isMainModule) {
@@ -30541,5 +30964,6 @@ if (isMainModule) {
   });
 }
 export {
-  createEntendiServer
+  createEntendiServer,
+  wrapToolError
 };

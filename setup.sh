@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Entendi setup — validates prerequisites, builds, and installs the plugin.
-# Run this once after cloning, or any time you want a clean install.
+# Entendi developer setup — for contributors who want to run the full stack locally.
+# End users should install via: claude plugin marketplace add https://github.com/LemonThyme/entendi
 set -euo pipefail
 
 RED='\033[0;31m'

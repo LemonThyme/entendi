@@ -103,6 +103,10 @@ for (const file of hookEntrypoints) {
   if (existsSync(src)) {
     copyFileSync(src, join(pluginDir, 'hooks', file));
     chmodSync(join(pluginDir, 'hooks', file), 0o755);
+    // Also update the source plugin/ directory so marketplace installs stay current
+    const pluginSrc = join('plugin', 'hooks', file);
+    copyFileSync(src, pluginSrc);
+    chmodSync(pluginSrc, 0o755);
   }
 }
 
@@ -125,6 +129,9 @@ const mcpSrc = join('dist', 'mcp', 'server.js');
 if (existsSync(mcpSrc)) {
   copyFileSync(mcpSrc, join(pluginDir, 'mcp', 'server.js'));
   chmodSync(join(pluginDir, 'mcp', 'server.js'), 0o755);
+  // Also update source plugin/ directory
+  copyFileSync(mcpSrc, join('plugin', 'mcp', 'server.js'));
+  chmodSync(join('plugin', 'mcp', 'server.js'), 0o755);
 }
 
 // --- Dashboard asset build ---
