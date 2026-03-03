@@ -57,9 +57,10 @@
             btn.disabled = false;
             btn.textContent = "Confirm Link";
           } else {
-            status.textContent = "Device linked successfully! You can close this page.";
+            status.textContent = "Device linked successfully!";
             status.className = "status success";
             btn.style.display = "none";
+            setTimeout(function() { window.close(); }, 1500);
           }
         })
         .catch(function() {
