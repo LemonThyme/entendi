@@ -3,9 +3,40 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { admin, apiKey, bearer, organization } from 'better-auth/plugins';
 import { and, eq } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
-import { invitation, member } from '../db/schema.js';
+import { invitation, member, orgRolePermissions, orgRoles } from '../db/schema.js';
 import { EmailTemplate, sendEmail } from './email.js';
 import { logger } from './logger.js';
+
+const ADMIN_PERMISSIONS = [
+  'codebases.create', 'codebases.edit', 'codebases.delete', 'codebases.view_progress',
+  'syllabi.create', 'syllabi.edit', 'syllabi.delete', 'syllabi.view_progress',
+  'members.invite', 'members.manage_roles', 'members.view',
+  'org.settings',
+];
+
+const MEMBER_PERMISSIONS = ['members.view'];
+
+export async function ensureBuiltInRoles(db: Database, orgId: string) {
+  const existing = await db.select({ id: orgRoles.id })
+    .from(orgRoles)
+    .where(and(eq(orgRoles.orgId, orgId), eq(orgRoles.isDefault, true)))
+    .limit(1);
+
+  if (existing.length > 0) return;
+
+  const adminRoleId = crypto.randomUUID();
+  const memberRoleId = crypto.randomUUID();
+
+  await db.insert(orgRoles).values([
+    { id: adminRoleId, orgId, name: 'Admin', isDefault: true },
+    { id: memberRoleId, orgId, name: 'Member', isDefault: true },
+  ]);
+
+  const adminPerms = ADMIN_PERMISSIONS.map(p => ({ roleId: adminRoleId, permission: p }));
+  const memberPerms = MEMBER_PERMISSIONS.map(p => ({ roleId: memberRoleId, permission: p }));
+
+  await db.insert(orgRolePermissions).values([...adminPerms, ...memberPerms]);
+}
 
 function buildSocialProviders(): Record<string, { clientId: string; clientSecret: string }> | undefined {
   const providers: Record<string, { clientId: string; clientSecret: string }> = {};
