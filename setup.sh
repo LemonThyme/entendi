@@ -73,8 +73,7 @@ ok "commit-msg hook installed (enforces Conventional Commits)"
 # ── 4. Clean stale artifacts ──────────────────────────────────────────
 info "Cleaning stale build artifacts..."
 rm -rf dist
-rm -rf ~/.claude/plugins/cache/entendi
-ok "Build output and plugin cache cleared"
+ok "Build output cleared"
 
 # ── 5. npm install ───────────────────────────────────────────────────
 info "Installing dependencies..."
