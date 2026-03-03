@@ -27,6 +27,7 @@ import { roleRoutes } from './routes/roles.js';
 import { publicRoutes } from './routes/public.js';
 import { type PageMeta, publicShell } from './routes/public-html.js';
 import { githubRoutes } from './routes/github.js';
+import { createMcpRemoteRoutes } from './routes/mcp-remote.js';
 import { syllabiRoutes } from './routes/syllabi.js';
 
 export type Env = {
@@ -342,6 +343,9 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api', openapiRoutes);
   app.route('/api', publicRoutes);
 
+  // Remote MCP endpoint (Streamable HTTP transport)
+  app.route('/mcp', createMcpRemoteRoutes(app));
+
   // Cache static assets with immutable headers
   app.get('/assets/*', async (c, next) => {
     await next();
@@ -354,7 +358,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     if (!host.startsWith('api.')) return next();
     // Let API routes, health, auth pages, and assets pass through
     const path = new URL(c.req.url).pathname;
-    if (path.startsWith('/api/') || path === '/health' || path === '/link' || path.startsWith('/assets/')) {
+    if (path.startsWith('/api/') || path === '/health' || path === '/link' || path === '/mcp' || path.startsWith('/assets/')) {
       return next();
     }
     // Serve status page for everything else on the api subdomain
