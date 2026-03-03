@@ -1,4 +1,4 @@
-import { boolean, date, index, integer, jsonb, pgTable, primaryKey, real, serial, smallint, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, pgTable, primaryKey, real, serial, smallint, text, timestamp, unique } from 'drizzle-orm/pg-core';
 
 // --- Auth (Better Auth) ---
 
@@ -75,6 +75,7 @@ export const member = pgTable('member', {
   userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
   organizationId: text('organizationId').notNull().references(() => organization.id, { onDelete: 'cascade' }),
   role: text('role').notNull(),
+  roleId: text('role_id').references(() => orgRoles.id, { onDelete: 'set null' }),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 }, (table) => [
   index('idx_member_user').on(table.userId),
@@ -92,6 +93,27 @@ export const invitation = pgTable('invitation', {
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 }, (table) => [
   index('idx_invitation_org').on(table.organizationId),
+]);
+
+// --- Custom Roles ---
+
+export const orgRoles = pgTable('org_roles', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  isDefault: boolean('is_default').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_org_roles_org').on(table.orgId),
+  unique('uq_org_roles_name').on(table.orgId, table.name),
+]);
+
+export const orgRolePermissions = pgTable('org_role_permissions', {
+  roleId: text('role_id').notNull().references(() => orgRoles.id, { onDelete: 'cascade' }),
+  permission: text('permission').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.roleId, table.permission] }),
 ]);
 
 // --- Auth: API Key plugin ---
@@ -376,6 +398,106 @@ export const courseEnrollments = pgTable('course_enrollments', {
 }, (table) => [
   index('idx_course_enrollments_user').on(table.userId),
   index('idx_course_enrollments_course_user').on(table.courseId, table.userId),
+]);
+
+// --- GitHub Installations ---
+
+export const githubInstallations = pgTable('github_installations', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  githubOrgLogin: text('github_org_login').notNull(),
+  installedBy: text('installed_by').notNull().references(() => user.id),
+  accessToken: text('access_token'),
+  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_github_installations_org').on(table.orgId),
+]);
+
+// --- Codebases ---
+
+export const codebases = pgTable('codebases', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  githubRepoOwner: text('github_repo_owner'),
+  githubRepoName: text('github_repo_name'),
+  githubRepoId: text('github_repo_id'),
+  githubInstallationId: text('github_installation_id').references(() => githubInstallations.id),
+  lastSyncCommit: text('last_sync_commit'),
+  lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+  syncStatus: text('sync_status').notNull().default('idle'),
+  status: text('status').notNull().default('draft'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_codebases_org').on(table.orgId),
+]);
+
+export const codebaseConcepts = pgTable('codebase_concepts', {
+  codebaseId: text('codebase_id').notNull().references(() => codebases.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  importance: text('importance').notNull().default('supporting'),
+  learningObjective: text('learning_objective'),
+  autoExtracted: boolean('auto_extracted').notNull().default(true),
+  curatedBy: text('curated_by').references(() => user.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.codebaseId, table.conceptId] }),
+]);
+
+export const codebaseEnrollments = pgTable('codebase_enrollments', {
+  codebaseId: text('codebase_id').notNull().references(() => codebases.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('active'),
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.codebaseId, table.userId] }),
+]);
+
+// --- Syllabi ---
+
+export const syllabi = pgTable('syllabi', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('draft'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_syllabi_org').on(table.orgId),
+]);
+
+export const syllabusSources = pgTable('syllabus_sources', {
+  id: text('id').primaryKey(),
+  syllabusId: text('syllabus_id').notNull().references(() => syllabi.id, { onDelete: 'cascade' }),
+  sourceType: text('source_type').notNull(),
+  sourceUrl: text('source_url'),
+  fileName: text('file_name'),
+  extractionStatus: text('extraction_status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_syllabus_sources_syllabus').on(table.syllabusId),
+]);
+
+export const syllabusConcepts = pgTable('syllabus_concepts', {
+  syllabusId: text('syllabus_id').notNull().references(() => syllabi.id, { onDelete: 'cascade' }),
+  conceptId: text('concept_id').notNull().references(() => concepts.id, { onDelete: 'cascade' }),
+  importance: text('importance').notNull().default('supporting'),
+  learningObjective: text('learning_objective'),
+  autoExtracted: boolean('auto_extracted').notNull().default(true),
+  curatedBy: text('curated_by').references(() => user.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.syllabusId, table.conceptId] }),
+]);
+
+export const syllabusEnrollments = pgTable('syllabus_enrollments', {
+  syllabusId: text('syllabus_id').notNull().references(() => syllabi.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('active'),
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.syllabusId, table.userId] }),
 ]);
 
 // --- Device Codes (CLI-first auth linking) ---

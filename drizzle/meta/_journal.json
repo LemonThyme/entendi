@@ -43,6 +43,13 @@
       "when": 1772541013069,
       "tag": "0005_fixed_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772553783442,
+      "tag": "0006_nebulous_lily_hollister",
+      "breakpoints": true
     }
   ]
 }
