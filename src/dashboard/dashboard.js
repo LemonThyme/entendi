@@ -190,8 +190,20 @@
         if (data.token) {
           token = data.token;
           localStorage.setItem("entendi_token", token);
-          currentUser = data.user;
-          showDashboard();
+          // Fetch full user data (onboardingCompletedAt, hasApiKey, pendingInvitations)
+          fetch("/api/me", { headers: getHeaders() })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(me) {
+              if (me) {
+                currentUser = me.user;
+                userHasApiKey = !!me.hasApiKey;
+                pendingInvitations = me.pendingInvitations || [];
+              } else {
+                currentUser = data.user;
+              }
+              showDashboard();
+            })
+            .catch(function() { currentUser = data.user; showDashboard(); });
         } else if (isSignUp && !data.token && data.user) {
           // Signup succeeded but email verification required
           var errEl = document.getElementById("auth-error");
