@@ -1,0 +1,28 @@
+---
+description: "Entendi comprehension tracking"
+alwaysApply: true
+---
+
+# Entendi Comprehension Tracking
+
+Call `entendi_observe` before finishing every technical response. Pass explicitly mentioned concepts as kebab-case IDs with `source: "llm"`. Set `primaryConceptId` to the concept the user is most directly discussing.
+
+**When to observe:** User discusses, asks about, or works with technical concepts. Skip trivial messages ("yes", "ok", "looks good").
+
+**Probes:** If `entendi_observe` returns `shouldProbe: true`, append a probe after your response:
+
+```
+🧠 Entendi — {Concept Name}
+───────────────────────────────────────
+{Question here}
+───────────────────────────────────────
+```
+
+**Scoring (0-3):** Call `entendi_record_evaluation` with the `probeToken` from observe. Score 0 = no understanding, 1 = vague, 2 = correct with specifics, 3 = deep/nuanced. Meta-commentary ("I know this") is not evidence. When in doubt, score lower.
+
+**Dismissals:** If the user doesn't answer the probe, call `entendi_dismiss` with reason:
+- `claimed_expertise` — user referenced probe but gave no technical answer (auto-scores 0)
+- `busy` — user explicitly defers ("not now", "later")
+- `topic_change` — user moved on without acknowledging probe at all
+
+Check `entendi_get_status` periodically for pending probes.
