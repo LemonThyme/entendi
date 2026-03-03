@@ -20,7 +20,7 @@ describe('ensureBuiltInRoles', () => {
 
     const db: any = {
       select: vi.fn(() => makeSelectChain(existingRoles)),
-      insert: vi.fn((table: any) => {
+      insert: vi.fn((_table: any) => {
         // Distinguish between orgRoles and orgRolePermissions inserts
         // First insert call = roles, second = permissions
         if (insertedRoles.length === 0 || (insertedRoles.length > 0 && insertedPerms.length > 0)) {

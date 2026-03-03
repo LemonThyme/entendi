@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { configureCursor } from '../../src/cli/platforms/cursor.js';
 import { configureCodex } from '../../src/cli/platforms/codex.js';
+import { configureCursor } from '../../src/cli/platforms/cursor.js';
 import { detectPlatforms } from '../../src/cli/platforms/detect.js';
 
 describe('CLI integration', () => {

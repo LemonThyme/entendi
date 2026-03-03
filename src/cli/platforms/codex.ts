@@ -58,7 +58,7 @@ export function configureCodex(projectDir: string, opts: CodexOptions): ConfigRe
   if (toml.includes(ENTENDI_TOML_SECTION)) {
     // Replace existing entendi section: from [mcp_servers.entendi] to next section or EOF
     toml = toml.replace(
-      /\[mcp_servers\.entendi\][^\[]*(?=\[|$)/s,
+      /\[mcp_servers\.entendi\][^[]*(?=\[|$)/s,
       ententdiTomlBlock(opts) + '\n',
     );
   } else {

@@ -3,7 +3,6 @@ import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { updateAnalyticsSnapshots } from '../../core/analytics-snapshots.js';
-import { resolveOrgId } from '../lib/resolve-org.js';
 import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
 import {decayPrior,fsrsDifficultyUpdate,fsrsStabilityAfterSuccess, grmFisherInformation, 
   grmUpdate, 
@@ -15,9 +14,9 @@ import { probeUrgency } from '../../core/probe-urgency.js';
 import { computeIntegrityScore, extractResponseFeatures, type UserResponseProfile, updateResponseProfile } from '../../core/response-integrity.js';
 import { type GRMItemParams, pMastery, type RubricScore } from '../../schemas/types.js';
 import type { Database } from '../db/connection.js';
-import {assessmentEvents,codebaseConcepts, codebases, codebaseEnrollments, conceptEdges,
-  concepts, dismissalEvents, member, pendingActions,probeSessions,
-  probeTokens, responseProfiles, syllabusConcepts, syllabi, syllabusEnrollments, tutorExchanges,
+import {assessmentEvents,codebaseConcepts, codebases, conceptEdges,
+  concepts, dismissalEvents, pendingActions,probeSessions,
+  probeTokens, responseProfiles, tutorExchanges,
   tutorSessions, userConceptStates,
 } from '../db/schema.js';
 import type { Env } from '../index.js';
@@ -28,6 +27,7 @@ import { resolveEnforcementLevel } from '../lib/enforcement.js';
 import { logger } from '../lib/logger.js';
 import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
 import { getOrgRateLimits } from '../lib/org-rate-limits.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 
 let _probeTokenSecret: string | undefined;

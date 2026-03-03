@@ -90,8 +90,12 @@ info "Installing Claude Code plugin..."
 if ! command -v claude &>/dev/null; then
   warn "Claude Code CLI not found — skipping plugin install"
   echo "  Install it with: npm install -g @anthropic-ai/claude-code"
-  echo "  Then run: claude plugin install entendi"
+  echo "  Then run:"
+  echo "    claude plugin marketplace add ."
+  echo "    claude plugin install entendi"
 else
+  claude plugin marketplace add .
+  ok "Marketplace added"
   claude plugin install entendi
   ok "Plugin installed"
 fi

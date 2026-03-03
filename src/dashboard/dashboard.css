@@ -858,6 +858,7 @@ body {
   transition: height 0.25s ease;
   overflow: hidden;
 }
+/* biome-ignore lint/suspicious/noEmptyBlock: placeholder for wizard-step animations */
 .wizard-step { }
 
 /* Step content styles */

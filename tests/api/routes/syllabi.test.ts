@@ -12,7 +12,7 @@ const canRun = testDbUrl && testApiKey && testSecret && process.env.INTEGRATION_
 const describeWithDb = canRun ? describe : describe.skip;
 
 describeWithDb('Syllabi API routes (integration)', () => {
-  const { app, db } = createApp(testDbUrl!, { secret: testSecret! });
+  const { app, db: _db } = createApp(testDbUrl!, { secret: testSecret! });
   const headers = { 'Content-Type': 'application/json', 'x-api-key': testApiKey! };
 
   let syllabusId: string;
