@@ -356,7 +356,8 @@
                 connectionEl.classList.add("connected");
                 if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
               }
-            });
+            })
+            .catch(function() { /* poll silently — will retry next interval */ });
         }, 5000);
       }
 
@@ -390,7 +391,11 @@
           method: "POST",
           headers: getHeaders(),
           body: JSON.stringify({ name: name, slug: slug })
-        }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
+        }).then(function(r) {
+            return r.json()
+              .then(function(body) { return { status: r.status, body: body }; })
+              .catch(function() { return { status: r.status, body: { message: "Server error" } }; });
+          })
           .then(function(res) {
             if (res.status === 200 && res.body.id) {
               fetch("/api/auth/organization/set-active", {
@@ -420,6 +425,20 @@
         ])
       ]));
     }
+
+    // Trap focus inside the modal for keyboard accessibility
+    overlay.addEventListener("keydown", function(e) {
+      if (e.key !== "Tab") return;
+      var focusable = modal.querySelectorAll("button, input, [tabindex]:not([tabindex='-1'])");
+      if (focusable.length === 0) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
 
     renderStep();
     document.body.appendChild(overlay);
