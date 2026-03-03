@@ -3,6 +3,7 @@
   var token = localStorage.getItem("entendi_token");
   var currentUser = null;
   var userHasApiKey = false;
+  var pendingInvitations = [];
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -438,9 +439,55 @@
     }
 
     function renderOrg(wrapper) {
+      var errEl = h("div", { className: "error-text" });
+
+      // If there are pending invitations, show them instead of the create form
+      if (pendingInvitations.length > 0) {
+        var inv = pendingInvitations[0];
+        wrapper.appendChild(h("div", { className: "wizard-title" }, "You\u2019ve been invited"));
+        wrapper.appendChild(h("div", { className: "wizard-subtitle" }, "Join " + inv.orgName + " to track your team\u2019s learning together."));
+        wrapper.appendChild(errEl);
+
+        function acceptInvite(btn) {
+          btn.disabled = true;
+          btn.textContent = "Joining\u2026";
+          fetch("/api/auth/organization/accept-invitation", {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify({ invitationId: inv.id })
+          }).then(function(r) {
+              return r.json()
+                .then(function(body) { return { status: r.status, body: body }; })
+                .catch(function() { return { status: r.status, body: { message: "Server error" } }; });
+            })
+            .then(function(res) {
+              if (res.status === 200) {
+                finishOnboarding();
+              } else {
+                btn.disabled = false;
+                btn.textContent = "Join " + inv.orgName;
+                errEl.textContent = res.body.message || "Failed to accept invitation.";
+              }
+            })
+            .catch(function() {
+              btn.disabled = false;
+              btn.textContent = "Join " + inv.orgName;
+              errEl.textContent = "Network error. Please try again.";
+            });
+        }
+
+        var joinBtn = h("button", { className: "btn-primary" }, "Join " + inv.orgName);
+        joinBtn.onclick = function() { acceptInvite(joinBtn); };
+        wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+          joinBtn,
+          h("button", { className: "btn-link", onclick: finishOnboarding }, "skip for now")
+        ]));
+        return;
+      }
+
+      // No invitations — show create org form
       var nameInput = h("input", { type: "text", id: "wiz-org-name", placeholder: "My Team" });
       var slugInput = h("input", { type: "text", id: "wiz-org-slug", placeholder: "my-team" });
-      var errEl = h("div", { className: "error-text" });
 
       nameInput.addEventListener("input", function() {
         slugInput.value = nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -3062,6 +3109,7 @@
         if (data.user) {
           currentUser = data.user;
           userHasApiKey = !!data.hasApiKey;
+          pendingInvitations = data.pendingInvitations || [];
           return true;
         }
         return false;
@@ -3075,7 +3123,7 @@
         if (r.ok) return r.json();
         throw new Error("Unauthorized");
       })
-      .then(function(data) { currentUser = data.user; userHasApiKey = !!data.hasApiKey; showDashboard(); })
+      .then(function(data) { currentUser = data.user; userHasApiKey = !!data.hasApiKey; pendingInvitations = data.pendingInvitations || []; showDashboard(); })
       .catch(function() {
         localStorage.removeItem("entendi_token"); token = null;
         // Try session-based auth (OAuth callback case)

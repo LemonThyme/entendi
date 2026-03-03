@@ -272,15 +272,24 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.get('/api/me', async (c) => {
     const currentUser = c.get('user');
     if (!currentUser) return c.json({ error: 'Unauthorized' }, 401);
-    const { eq } = await import('drizzle-orm');
-    const { apikey, user: userTable } = await import('./db/schema.js');
-    const [keys, userRow] = await Promise.all([
+    const { and, eq } = await import('drizzle-orm');
+    const { apikey, invitation, organization: orgTable, user: userTable } = await import('./db/schema.js');
+    const [keys, userRow, pendingInvites] = await Promise.all([
       db.select({ id: apikey.id }).from(apikey).where(eq(apikey.userId, currentUser.id)).limit(1),
       db.select({ onboardingCompletedAt: userTable.onboardingCompletedAt }).from(userTable).where(eq(userTable.id, currentUser.id)).limit(1),
+      db.select({
+        id: invitation.id,
+        orgName: orgTable.name,
+        role: invitation.role,
+      })
+        .from(invitation)
+        .innerJoin(orgTable, eq(invitation.organizationId, orgTable.id))
+        .where(and(eq(invitation.email, currentUser.email), eq(invitation.status, 'pending'))),
     ]);
     return c.json({
       user: { ...currentUser, onboardingCompletedAt: userRow[0]?.onboardingCompletedAt ?? null },
       hasApiKey: keys.length > 0,
+      pendingInvitations: pendingInvites,
     });
   });
 

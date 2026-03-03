@@ -2,8 +2,8 @@
 
 // src/hooks/stop.ts
 import { readFileSync as readFileSync2 } from "fs";
-import { join as join3 } from "path";
 import { homedir as homedir3 } from "os";
+import { join as join3 } from "path";
 
 // src/shared/config.ts
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -25,8 +25,39 @@ function loadConfig() {
   };
 }
 
+// src/hooks/shared.ts
+import { appendFileSync, mkdirSync as mkdirSync2 } from "fs";
+import { homedir as homedir2 } from "os";
+import { join as join2 } from "path";
+async function readStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf-8");
+}
+var LOG_DIR = join2(homedir2(), ".entendi");
+var LOG_FILE = join2(LOG_DIR, "debug.log");
+var logDirCreated = false;
+function log(component, message, data) {
+  if (!logDirCreated) {
+    try {
+      mkdirSync2(LOG_DIR, { recursive: true });
+    } catch {
+    }
+    logDirCreated = true;
+  }
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const dataStr = data !== void 0 ? ` ${JSON.stringify(data)}` : "";
+  try {
+    appendFileSync(LOG_FILE, `[${ts}] [${component}] ${message}${dataStr}
+`);
+  } catch {
+  }
+}
+
 // src/hooks/transcript.ts
-import { openSync, readSync, fstatSync, closeSync } from "fs";
+import { closeSync, fstatSync, openSync, readSync } from "fs";
 var TAIL_BYTES = 50 * 1024;
 function readTail(path) {
   try {
@@ -129,37 +160,6 @@ function isTrivialMessage(msg) {
   const trimmed = msg.trim();
   if (trimmed.length < 15) return true;
   return TRIVIAL_PATTERNS.some((p) => p.test(trimmed));
-}
-
-// src/hooks/shared.ts
-import { appendFileSync, mkdirSync as mkdirSync2 } from "fs";
-import { homedir as homedir2 } from "os";
-import { join as join2 } from "path";
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("utf-8");
-}
-var LOG_DIR = join2(homedir2(), ".entendi");
-var LOG_FILE = join2(LOG_DIR, "debug.log");
-var logDirCreated = false;
-function log(component, message, data) {
-  if (!logDirCreated) {
-    try {
-      mkdirSync2(LOG_DIR, { recursive: true });
-    } catch {
-    }
-    logDirCreated = true;
-  }
-  const ts = (/* @__PURE__ */ new Date()).toISOString();
-  const dataStr = data !== void 0 ? ` ${JSON.stringify(data)}` : "";
-  try {
-    appendFileSync(LOG_FILE, `[${ts}] [${component}] ${message}${dataStr}
-`);
-  } catch {
-  }
 }
 
 // src/hooks/stop.ts

@@ -2,8 +2,8 @@
 
 // src/hooks/user-prompt-submit.ts
 import { readFileSync as readFileSync2, unlinkSync, writeFileSync as writeFileSync2 } from "fs";
-import { join as join3 } from "path";
 import { homedir as homedir3 } from "os";
+import { join as join3 } from "path";
 
 // src/shared/config.ts
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
