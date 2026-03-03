@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('requirePermission middleware', () => {
   function createDbMock(memberResult: any[], permResult: any[]) {
@@ -11,6 +11,7 @@ describe('requirePermission middleware', () => {
         where: vi.fn(() => makeLink()),
         innerJoin: vi.fn(() => makeLink()),
         limit: vi.fn(() => Promise.resolve(queue.length > 0 ? queue.shift() : [])),
+        // biome-ignore lint/suspicious/noThenProperty: simulates Drizzle thenable query
         then(resolve: any, reject?: any) {
           if (!resolved) { resolved = true; return Promise.resolve(queue.length > 0 ? queue.shift() : []).then(resolve, reject); }
           return Promise.resolve(undefined).then(resolve, reject);

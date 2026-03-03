@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../../src/api/index.js';
 
 function createDbMock(resultQueues: { select?: any[][]; insert?: any[][]; update?: any[][]; delete?: any[][] } = {}) {
@@ -16,6 +16,7 @@ function createDbMock(resultQueues: { select?: any[][]; insert?: any[][]; update
       values: vi.fn(() => makeLink(queue)),
       returning: vi.fn(() => makeLink(queue)),
       limit: vi.fn(() => Promise.resolve(queue.length > 0 ? queue.shift() : [])),
+      // biome-ignore lint/suspicious/noThenProperty: simulates Drizzle thenable query
       then(resolve: any, reject?: any) {
         return Promise.resolve(queue.length > 0 ? queue.shift() : []).then(resolve, reject);
       },

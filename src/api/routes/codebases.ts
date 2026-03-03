@@ -13,8 +13,8 @@ import {
   userConceptStates,
 } from '../db/schema.js';
 import type { Env } from '../index.js';
-import { GitHubClient } from '../lib/github.js';
 import { extractCodebaseConcepts } from '../lib/codebase-extraction.js';
+import { GitHubClient } from '../lib/github.js';
 import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -122,7 +122,6 @@ codebaseRoutes.get('/', async (c) => {
   const db = c.get('db');
   const rows = await db.select().from(codebases).where(eq(codebases.orgId, orgId));
 
-  // biome-ignore lint/suspicious/noExplicitAny: codebase row type from drizzle
   const result = await Promise.all(rows.map(async (cb: any) => {
     const conceptRows = await db.select().from(codebaseConcepts)
       .where(eq(codebaseConcepts.codebaseId, cb.id));
@@ -299,7 +298,6 @@ codebaseRoutes.get('/:id/concepts', async (c) => {
   const conceptRows = await db.select().from(codebaseConcepts)
     .where(eq(codebaseConcepts.codebaseId, codebaseId));
 
-  // biome-ignore lint/suspicious/noExplicitAny: codebase concept row type
   const withMastery = await Promise.all(conceptRows.map(async (cc: any) => {
     const [ucs] = await db.select().from(userConceptStates)
       .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, cc.conceptId)));
@@ -377,7 +375,6 @@ codebaseRoutes.get('/:id/members', requirePermission('codebases.view_progress'),
   const enrollments = await db.select().from(codebaseEnrollments)
     .where(eq(codebaseEnrollments.codebaseId, codebaseId));
 
-  // biome-ignore lint/suspicious/noExplicitAny: enrollment row type
   const members = await Promise.all(enrollments.map(async (e: any) => {
     const progress = await buildProgress(db, codebaseId, e.userId);
     return { userId: e.userId, enrolledAt: e.enrolledAt, status: e.status, completionRatio: progress.completionRatio };
@@ -453,7 +450,6 @@ codebaseRoutes.post('/:id/extract', requirePermission('codebases.edit'), async (
 
 // --- Shared progress helper ---
 
-// biome-ignore lint/suspicious/noExplicitAny: db type is complex, private helper
 async function buildProgress(db: any, codebaseId: string, userId: string) {
   const conceptRows = await db.select().from(codebaseConcepts)
     .where(eq(codebaseConcepts.codebaseId, codebaseId));
@@ -462,7 +458,6 @@ async function buildProgress(db: any, codebaseId: string, userId: string) {
     return { codebaseId, userId, concepts: [], completionRatio: 0 };
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: codebase concept row type
   const conceptProgress = await Promise.all(conceptRows.map(async (cc: any) => {
     const [ucs] = await db.select().from(userConceptStates)
       .where(and(eq(userConceptStates.userId, userId), eq(userConceptStates.conceptId, cc.conceptId)));
@@ -479,7 +474,6 @@ async function buildProgress(db: any, codebaseId: string, userId: string) {
     };
   }));
 
-  // biome-ignore lint/suspicious/noExplicitAny: progress item type
   const metCount = conceptProgress.filter((cp: any) => cp.met).length;
   const completionRatio = metCount / conceptProgress.length;
 
