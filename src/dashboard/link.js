@@ -57,7 +57,7 @@
             btn.disabled = false;
             btn.textContent = "Confirm Link";
           } else {
-            status.textContent = "Device linked successfully!";
+            status.textContent = "Device linked successfully! You can close this tab.";
             status.className = "status success";
             btn.style.display = "none";
             setTimeout(function() { window.close(); }, 1500);
