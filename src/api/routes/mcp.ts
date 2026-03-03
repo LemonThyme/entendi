@@ -24,9 +24,9 @@ import { resolveConceptId } from '../lib/concept-normalize.js';
 import { resolveConcept } from '../lib/concept-pipeline.js';
 import { conceptSimilarity } from '../lib/embeddings.js';
 import { resolveEnforcementLevel } from '../lib/enforcement.js';
+import { logger } from '../lib/logger.js';
 import { getOrgIntegritySettings } from '../lib/org-integrity-settings.js';
 import { getOrgRateLimits } from '../lib/org-rate-limits.js';
-import { logger } from '../lib/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 
 let _probeTokenSecret: string | undefined;

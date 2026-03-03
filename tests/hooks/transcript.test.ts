@@ -1,6 +1,6 @@
 import { mkdtempSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 import { findLastUserMessage, hasObserveCallInCurrentTurn } from '../../src/hooks/transcript.js';
 
