@@ -30599,6 +30599,10 @@ function createEntendiServer(options) {
         primaryConceptId: external_exports3.preprocess(
           (v) => v === "" || v === null ? void 0 : v,
           external_exports3.string().optional()
+        ),
+        repoUrl: external_exports3.preprocess(
+          (v) => v === "" || v === null ? void 0 : v,
+          external_exports3.string().url().optional()
         )
       },
       async (args, extra) => {
@@ -30608,7 +30612,8 @@ function createEntendiServer(options) {
           const result = await api.observe({
             concepts: args.concepts,
             triggerContext: args.triggerContext,
-            primaryConceptId: args.primaryConceptId
+            primaryConceptId: args.primaryConceptId,
+            repoUrl: args.repoUrl
           });
           if (progressToken !== void 0 && args.concepts.length > 1) {
             try {
