@@ -114,6 +114,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
         (v) => (v === '' || v === null ? undefined : v),
         z.string().optional(),
       ),
+      repoUrl: z.preprocess(
+        (v) => (v === '' || v === null ? undefined : v),
+        z.string().url().optional(),
+      ),
     },
     async (args, extra) => {
       mcpLog('tool:entendi_observe called', args);
@@ -123,6 +127,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
           concepts: args.concepts,
           triggerContext: args.triggerContext,
           primaryConceptId: args.primaryConceptId,
+          repoUrl: args.repoUrl,
         });
         // Emit progress notification if token was provided and multiple concepts were sent
         if (progressToken !== undefined && args.concepts.length > 1) {

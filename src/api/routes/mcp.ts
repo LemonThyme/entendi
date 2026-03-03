@@ -14,10 +14,10 @@ import { probeUrgency } from '../../core/probe-urgency.js';
 import { computeIntegrityScore, extractResponseFeatures, type UserResponseProfile, updateResponseProfile } from '../../core/response-integrity.js';
 import { type GRMItemParams, pMastery, type RubricScore } from '../../schemas/types.js';
 import type { Database } from '../db/connection.js';
-import {assessmentEvents,conceptEdges, 
-  concepts, dismissalEvents, pendingActions,probeSessions, 
-  probeTokens, responseProfiles,tutorExchanges, 
-  tutorSessions, userConceptStates, 
+import {assessmentEvents,codebaseConcepts, codebases, codebaseEnrollments, conceptEdges,
+  concepts, dismissalEvents, member, pendingActions,probeSessions,
+  probeTokens, responseProfiles, syllabusConcepts, syllabi, syllabusEnrollments, tutorExchanges,
+  tutorSessions, userConceptStates,
 } from '../db/schema.js';
 import type { Env } from '../index.js';
 import { resolveConceptId } from '../lib/concept-normalize.js';
@@ -55,6 +55,7 @@ const observeSchema = z.object({
   })).min(1).max(50),
   triggerContext: z.string().max(1000).default(''),
   primaryConceptId: z.string().max(200).optional(),
+  repoUrl: z.string().url().max(500).optional(),
 });
 
 const recordEvaluationSchema = z.object({
@@ -205,6 +206,39 @@ mcpRoutes.post('/observe', async (c) => {
           assessmentCount: prereqCount,
         });
         candidateIds.add(edge.targetId);
+      }
+    }
+  }
+
+  // Codebase/syllabus probe scoping: boost urgency for concepts in enrolled codebases/syllabi
+  if (body.repoUrl) {
+    const repoMatch = body.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (repoMatch) {
+      const [, repoOwner, repoName] = repoMatch;
+      const cleanName = repoName.replace(/\.git$/, '');
+      // Look up codebase by repo owner/name within user's org
+      const session = c.get('session');
+      const orgId = session?.activeOrganizationId;
+      if (orgId) {
+        const [codebase] = await db.select({ id: codebases.id }).from(codebases)
+          .where(and(
+            eq(codebases.orgId, orgId),
+            eq(codebases.githubRepoOwner, repoOwner),
+            eq(codebases.githubRepoName, cleanName),
+          )).limit(1);
+        if (codebase) {
+          // Get all concepts in this codebase
+          const cbConcepts = await db.select({ conceptId: codebaseConcepts.conceptId })
+            .from(codebaseConcepts)
+            .where(eq(codebaseConcepts.codebaseId, codebase.id));
+          const codebaseConceptIds = new Set(cbConcepts.map(c => c.conceptId));
+          // Boost urgency by 0.3 for candidates that are in this codebase
+          for (const candidate of candidates) {
+            if (codebaseConceptIds.has(candidate.conceptId)) {
+              candidate.urgency = Math.min(1.0, candidate.urgency + 0.3);
+            }
+          }
+        }
       }
     }
   }

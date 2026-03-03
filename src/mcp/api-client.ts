@@ -310,6 +310,7 @@ export class EntendiApiClient {
     concepts: Array<{ id: string; source: 'package' | 'ast' | 'llm' }>;
     triggerContext: string;
     primaryConceptId?: string;
+    repoUrl?: string;
   }) {
     const result = await this.request('POST', '/api/mcp/observe', input);
     // Invalidate status cache after observe (new concepts may have been created)
