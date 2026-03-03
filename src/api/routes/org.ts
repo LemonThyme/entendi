@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { pMastery } from '../../schemas/types.js';

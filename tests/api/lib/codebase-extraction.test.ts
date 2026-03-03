@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { selectFilesForTier, extractCodebaseConcepts } from '../../../src/api/lib/codebase-extraction.js';
 import type { ExtractedConcept } from '../../../src/api/lib/codebase-extraction.js';
+import { extractCodebaseConcepts, selectFilesForTier } from '../../../src/api/lib/codebase-extraction.js';
 
 const sampleTree = [
   { path: 'README.md', type: 'blob' },
@@ -224,7 +224,7 @@ describe('extractCodebaseConcepts', () => {
         ],
         truncated: false,
       }),
-      getFileContent: async (owner: string, repo: string, path: string) => {
+      getFileContent: async (_owner: string, _repo: string, path: string) => {
         if (path === 'package.json') return '{}';
         return 'export const users = pgTable("users", {});';
       },
@@ -262,7 +262,7 @@ describe('extractCodebaseConcepts', () => {
         ],
         truncated: false,
       }),
-      getFileContent: async (owner: string, repo: string, path: string) => {
+      getFileContent: async (_owner: string, _repo: string, path: string) => {
         if (path === 'README.md') throw new Error('404');
         return '{}';
       },

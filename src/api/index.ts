@@ -16,18 +16,18 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { deviceCodeRoutes } from './routes/device-code.js';
 import { eventRoutes } from './routes/events.js';
 import { eventDetailRoutes } from './routes/events-detail.js';
+import { githubRoutes } from './routes/github.js';
 import { historyRoutes } from './routes/history.js';
 import { hookRoutes } from './routes/hooks.js';
 import { masteryRoutes } from './routes/mastery.js';
 import { mcpRoutes } from './routes/mcp.js';
+import { createMcpRemoteRoutes } from './routes/mcp-remote.js';
 import { openapiRoutes } from './routes/openapi.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
-import { roleRoutes } from './routes/roles.js';
 import { publicRoutes } from './routes/public.js';
-import { type PageMeta, publicShell } from './routes/public-html.js';
-import { githubRoutes } from './routes/github.js';
-import { createMcpRemoteRoutes } from './routes/mcp-remote.js';
+import { publicShell } from './routes/public-html.js';
+import { roleRoutes } from './routes/roles.js';
 import { syllabiRoutes } from './routes/syllabi.js';
 
 export type Env = {

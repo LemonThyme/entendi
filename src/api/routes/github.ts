@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { codebases, githubInstallations, member } from '../db/schema.js';
 import type { Env } from '../index.js';
-import { GitHubClient, createInstallationToken, refreshInstallationToken } from '../lib/github.js';
+import { createInstallationToken, GitHubClient, refreshInstallationToken } from '../lib/github.js';
 import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 
