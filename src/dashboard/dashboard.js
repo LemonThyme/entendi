@@ -1822,8 +1822,44 @@
 
   function showCreateCodebaseModal() {
     var nameInput = h("input", { type: "text", placeholder: "e.g. My Project" });
-    var repoInput = h("input", { type: "text", placeholder: "e.g. owner/repo (optional)" });
+    var repoSelect = h("select", { className: "form-select" }, [
+      h("option", { value: "" }, "Loading repositories...")
+    ]);
+    var repoHint = h("div", { className: "form-hint" });
     var errEl = h("div", { className: "error-text" });
+
+    // Fetch repos from GitHub installation
+    fetch("/api/github/repos", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        repoSelect.textContent = "";
+        if (data.error) {
+          repoSelect.appendChild(h("option", { value: "" }, "No repository (manual)"));
+          repoHint.textContent = "Connect GitHub in your org settings to select a repository.";
+          return;
+        }
+        repoSelect.appendChild(h("option", { value: "" }, "None (manual tracking)"));
+        var repos = Array.isArray(data) ? data : [];
+        repos.forEach(function(repo) {
+          repoSelect.appendChild(h("option", { value: repo.fullName }, repo.fullName));
+        });
+        if (repos.length === 0) {
+          repoHint.textContent = "No repositories found. Check your GitHub App permissions.";
+        }
+      })
+      .catch(function() {
+        repoSelect.textContent = "";
+        repoSelect.appendChild(h("option", { value: "" }, "None (manual tracking)"));
+        repoHint.textContent = "Could not load repositories.";
+      });
+
+    // Auto-fill name from selected repo
+    repoSelect.addEventListener("change", function() {
+      if (repoSelect.value && !nameInput.value.trim()) {
+        var parts = repoSelect.value.split("/");
+        nameInput.value = parts[parts.length - 1];
+      }
+    });
 
     var saveBtn = h("button", { className: "btn-sm primary", onclick: function() {
       var name = nameInput.value.trim();
@@ -1832,7 +1868,7 @@
       saveBtn.textContent = "Creating...";
 
       var body = { name: name };
-      var repo = repoInput.value.trim();
+      var repo = repoSelect.value;
       if (repo && repo.indexOf("/") !== -1) {
         var parts = repo.split("/");
         body.githubRepoOwner = parts[0];
@@ -1863,8 +1899,8 @@
     } }, "Create");
 
     var modal = showModal("New Codebase", [
+      h("div", { className: "form-group" }, [h("label", null, "GitHub Repository"), repoSelect, repoHint]),
       h("div", { className: "form-group" }, [h("label", null, "Name"), nameInput]),
-      h("div", { className: "form-group" }, [h("label", null, "GitHub Repository"), repoInput]),
       errEl
     ], { footer: [saveBtn] });
   }
@@ -2682,6 +2718,80 @@
         // Default to remind
         optionEls[1].classList.add("active");
       });
+
+    // GitHub Integration
+    var ghStatusEl = h("div", { className: "gh-status" }, "Checking...");
+    var ghActionEl = h("div");
+
+    function loadGitHubStatus() {
+      fetch("/api/github/repos", { headers: getHeaders() })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          ghStatusEl.textContent = "";
+          ghActionEl.textContent = "";
+          if (data.error && (data.error.indexOf("No GitHub installation") !== -1 || data.error.indexOf("not configured") !== -1)) {
+            ghStatusEl.appendChild(h("div", { className: "gh-not-connected" }, [
+              h("span", { className: "status-dot status-dot-off" }),
+              "Not connected"
+            ]));
+            var connectBtn = h("button", { className: "btn-sm primary", onclick: function() {
+              connectBtn.disabled = true;
+              connectBtn.textContent = "Loading...";
+              fetch("/api/github/install-url", { headers: getHeaders() })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                  if (d.url) {
+                    window.open(d.url, "_blank");
+                    connectBtn.textContent = "Waiting for install...";
+                    // Poll for connection
+                    var poll = setInterval(function() {
+                      fetch("/api/github/repos", { headers: getHeaders() })
+                        .then(function(r) { return r.json(); })
+                        .then(function(check) {
+                          if (!check.error || check.error.indexOf("No GitHub installation") === -1) {
+                            clearInterval(poll);
+                            loadGitHubStatus();
+                          }
+                        });
+                    }, 3000);
+                    setTimeout(function() { clearInterval(poll); connectBtn.disabled = false; connectBtn.textContent = "Connect GitHub"; }, 120000);
+                  } else {
+                    connectBtn.textContent = "GitHub App not configured on server";
+                    connectBtn.disabled = false;
+                  }
+                })
+                .catch(function() { connectBtn.textContent = "Connect GitHub"; connectBtn.disabled = false; });
+            } }, "Connect GitHub");
+            ghActionEl.appendChild(connectBtn);
+          } else {
+            var repos = Array.isArray(data) ? data : [];
+            ghStatusEl.appendChild(h("div", { className: "gh-connected" }, [
+              h("span", { className: "status-dot status-dot-on" }),
+              "Connected \u00B7 " + repos.length + " repositor" + (repos.length === 1 ? "y" : "ies") + " accessible"
+            ]));
+            var manageBtn = h("button", { className: "btn-sm", onclick: function() {
+              fetch("/api/github/install-url", { headers: getHeaders() })
+                .then(function(r) { return r.json(); })
+                .then(function(d) { if (d.url) window.open(d.url, "_blank"); });
+            } }, "Manage on GitHub");
+            ghActionEl.appendChild(manageBtn);
+          }
+        })
+        .catch(function() {
+          ghStatusEl.textContent = "Could not check GitHub status.";
+        });
+    }
+
+    var ghSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "GitHub Integration"),
+        h("div", { className: "section-subtitle" }, "Connect repositories to track codebase concepts")
+      ]),
+      ghStatusEl,
+      ghActionEl
+    ]);
+    area.appendChild(ghSection);
+    loadGitHubStatus();
 
     var inviteSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
