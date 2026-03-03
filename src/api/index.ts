@@ -12,7 +12,6 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { billingRoutes } from './routes/billing.js';
 import { codebaseRoutes } from './routes/codebases.js';
 import { conceptRoutes } from './routes/concepts.js';
-import { courseRoutes } from './routes/courses.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { deviceCodeRoutes } from './routes/device-code.js';
 import { eventRoutes } from './routes/events.js';
@@ -27,6 +26,7 @@ import { preferencesRoutes } from './routes/preferences.js';
 import { roleRoutes } from './routes/roles.js';
 import { publicRoutes } from './routes/public.js';
 import { type PageMeta, publicShell } from './routes/public-html.js';
+import { githubRoutes } from './routes/github.js';
 import { syllabiRoutes } from './routes/syllabi.js';
 
 export type Env = {
@@ -333,7 +333,7 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/org/roles', roleRoutes);
   app.route('/api/codebases', codebaseRoutes);
   app.route('/api/syllabi', syllabiRoutes);
-  app.route('/api/courses', courseRoutes);
+  app.route('/api/github', githubRoutes);
   app.route('/api/billing', billingRoutes);
   app.route('/api/preferences', preferencesRoutes);
   app.route('/api/events', eventRoutes);
