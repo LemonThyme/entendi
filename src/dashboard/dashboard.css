@@ -690,6 +690,94 @@ body {
   outline: none;
 }
 
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.modal-dialog {
+  max-width: 480px; width: 100%;
+  background: var(--bg-card); border-radius: 12px;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+}
+.modal-title { font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
+.modal-close {
+  background: none; border: none; font-size: 1.25rem;
+  color: var(--text-tertiary); cursor: pointer; padding: 0.25rem; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 1.25rem; }
+.modal-footer {
+  padding: 0.75rem 1.25rem; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 0.5rem;
+}
+
+/* Codebase / syllabus cards */
+.cb-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.cb-card {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.75rem 1rem; background: var(--bg-card); border-radius: 8px;
+  cursor: pointer; transition: background 0.15s;
+}
+.cb-card:hover { background: var(--bg); }
+.cb-card-main { flex: 1; min-width: 0; }
+.cb-name { font-weight: 500; font-size: 0.9rem; }
+.cb-repo { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-card-meta { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
+.cb-stat { font-size: 0.75rem; color: var(--text-tertiary); white-space: nowrap; }
+
+/* Status badges */
+.status-badge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 600; text-transform: lowercase;
+}
+.status-green { background: var(--green-bg); color: var(--green); }
+.status-amber { background: var(--amber-bg); color: var(--amber); }
+.status-red { background: var(--red-bg); color: var(--red); }
+.status-default { background: var(--bg); color: var(--text-tertiary); border: 1px solid var(--border); }
+
+/* Importance badges */
+.importance-badge {
+  display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px;
+  font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  margin-left: 0.35rem;
+}
+.importance-core { background: var(--accent-light); color: var(--accent); }
+.importance-supporting { background: var(--amber-bg); color: var(--amber); }
+.importance-peripheral { background: var(--bg); color: var(--text-tertiary); border: 1px solid var(--border); }
+
+/* Importance select in concept rows */
+.importance-select {
+  padding: 0.2rem 0.35rem; border: 1px solid var(--border); border-radius: 4px;
+  font-size: 0.7rem; background: var(--bg); color: var(--text); outline: none;
+}
+.importance-select:focus { border-color: var(--accent); }
+
+/* Permission checkboxes */
+.perm-groups { display: flex; flex-direction: column; gap: 0.75rem; }
+.perm-group-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary); font-weight: 600; margin-bottom: 0.25rem;
+}
+.perm-checkbox {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.8rem; color: var(--text); cursor: pointer; padding: 0.15rem 0;
+}
+.perm-checkbox input[type=checkbox] { accent-color: var(--accent); }
+
+/* Focus styles for new elements */
+.modal-close:focus-visible,
+.cb-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }

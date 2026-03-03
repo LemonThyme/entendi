@@ -45,6 +45,8 @@ function getShellHTML(): string {
         <button class="tab-btn" data-tab="analytics" role="tab" aria-selected="false" aria-controls="tab-analytics" id="tabBtn-analytics" tabindex="-1">Analytics</button>
         <button class="tab-btn" data-tab="concepts" role="tab" aria-selected="false" aria-controls="tab-concepts" id="tabBtn-concepts" tabindex="-1">Concepts</button>
         <button class="tab-btn" data-tab="integrity" role="tab" aria-selected="false" aria-controls="tab-integrity" id="tabBtn-integrity" tabindex="-1">Integrity</button>
+        <button class="tab-btn" data-tab="codebases" role="tab" aria-selected="false" aria-controls="tab-codebases" id="tabBtn-codebases" tabindex="-1">Codebases</button>
+        <button class="tab-btn" data-tab="syllabi" role="tab" aria-selected="false" aria-controls="tab-syllabi" id="tabBtn-syllabi" tabindex="-1">Syllabi</button>
         <button class="tab-btn" data-tab="organization" role="tab" aria-selected="false" aria-controls="tab-organization" id="tabBtn-organization" tabindex="-1">Organization</button>
         <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" id="tabBtn-settings" tabindex="-1">Settings</button>
       </div>
@@ -116,6 +118,14 @@ function getShellHTML(): string {
           </div>
           <div id="integrity-dismissals"></div>
         </div>
+      </div>
+
+      <div class="tab-content" id="tab-codebases" role="tabpanel" aria-labelledby="tabBtn-codebases" tabindex="0">
+        <div id="codebases-area"></div>
+      </div>
+
+      <div class="tab-content" id="tab-syllabi" role="tabpanel" aria-labelledby="tabBtn-syllabi" tabindex="0">
+        <div id="syllabi-area"></div>
       </div>
 
       <div class="tab-content" id="tab-organization" role="tabpanel" aria-labelledby="tabBtn-organization" tabindex="0">

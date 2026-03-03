@@ -90,6 +90,8 @@
     if (tab === "analytics") renderAnalytics();
     if (tab === "concepts") renderConceptsTab();
     if (tab === "integrity") renderIntegrity();
+    if (tab === "codebases") renderCodebasesTab();
+    if (tab === "syllabi") renderSyllabiTab();
     if (tab === "settings") renderSettings();
     if (tab === "organization") renderOrganization();
   }
@@ -1714,6 +1716,794 @@
     }).catch(function() {});
   }
 
+  // --- Modal helper ---
+
+  function showModal(title, contentEls, opts) {
+    var overlay = h("div", { className: "modal-overlay" });
+    var modal = h("div", { className: "modal-dialog", role: "dialog", "aria-modal": "true", "aria-label": title });
+    var header = h("div", { className: "modal-header" }, [
+      h("div", { className: "modal-title" }, title),
+      h("button", { className: "modal-close", onclick: closeThis }, "\u00D7")
+    ]);
+    var body = h("div", { className: "modal-body" }, contentEls);
+    modal.appendChild(header);
+    modal.appendChild(body);
+    if (opts && opts.footer) {
+      modal.appendChild(h("div", { className: "modal-footer" }, opts.footer));
+    }
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) closeThis(); });
+    document.body.appendChild(overlay);
+    var firstInput = modal.querySelector("input, select, textarea");
+    if (firstInput) firstInput.focus();
+
+    function closeThis() { overlay.remove(); }
+    return { close: closeThis, overlay: overlay };
+  }
+
+  // --- Status badge helper ---
+
+  function statusBadge(status) {
+    var cls = "status-badge";
+    if (status === "active" || status === "synced" || status === "complete") cls += " status-green";
+    else if (status === "syncing" || status === "pending" || status === "draft") cls += " status-amber";
+    else if (status === "error") cls += " status-red";
+    else cls += " status-default";
+    return h("span", { className: cls }, status);
+  }
+
+  function importanceBadge(importance) {
+    var cls = "importance-badge importance-" + importance;
+    return h("span", { className: cls }, importance);
+  }
+
+  // --- Codebases Tab ---
+
+  function renderCodebasesTab() {
+    var area = document.getElementById("codebases-area");
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:200px" }, ""));
+
+    fetch("/api/codebases", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { renderNoOrgMessage(area, "codebases"); return; }
+        renderCodebasesList(area, Array.isArray(data) ? data : []);
+      })
+      .catch(function() {
+        area.textContent = "";
+        area.appendChild(h("div", { className: "empty-state" }, "Failed to load codebases."));
+      });
+  }
+
+  function renderNoOrgMessage(area, noun) {
+    area.textContent = "";
+    area.appendChild(h("div", { className: "empty-state" }, "Join or create an organization to manage " + noun + "."));
+  }
+
+  function renderCodebasesList(area, codebases) {
+    area.textContent = "";
+
+    var createBtn = h("button", { className: "btn-sm primary", onclick: function() { showCreateCodebaseModal(); } }, "+ New Codebase");
+    var header = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Codebases"),
+        createBtn
+      ])
+    ]);
+    area.appendChild(header);
+
+    if (codebases.length === 0) {
+      area.appendChild(h("div", { className: "empty-state" }, "No codebases yet. Create one to start tracking concepts."));
+      return;
+    }
+
+    var list = h("div", { className: "cb-list" });
+    codebases.forEach(function(cb) {
+      var repoInfo = cb.githubRepoOwner && cb.githubRepoName
+        ? h("div", { className: "cb-repo" }, cb.githubRepoOwner + "/" + cb.githubRepoName)
+        : h("div", { className: "cb-repo text-tertiary" }, "No repo linked");
+      var syncStatus = cb.syncStatus || cb.status || "draft";
+      var row = h("div", { className: "cb-card", onclick: function() { openCodebaseDetail(cb.id); } }, [
+        h("div", { className: "cb-card-main" }, [
+          h("div", { className: "cb-name" }, cb.name),
+          repoInfo
+        ]),
+        h("div", { className: "cb-card-meta" }, [
+          statusBadge(syncStatus),
+          h("span", { className: "cb-stat" }, (cb.conceptCount || 0) + " concepts"),
+          h("span", { className: "cb-stat" }, (cb.enrollmentCount || 0) + " enrolled")
+        ])
+      ]);
+      list.appendChild(row);
+    });
+    area.appendChild(list);
+  }
+
+  function showCreateCodebaseModal() {
+    var nameInput = h("input", { type: "text", placeholder: "e.g. My Project" });
+    var repoInput = h("input", { type: "text", placeholder: "e.g. owner/repo (optional)" });
+    var errEl = h("div", { className: "error-text" });
+
+    var saveBtn = h("button", { className: "btn-sm primary", onclick: function() {
+      var name = nameInput.value.trim();
+      if (!name) { errEl.textContent = "Name is required"; return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Creating...";
+
+      var body = { name: name };
+      var repo = repoInput.value.trim();
+      if (repo && repo.indexOf("/") !== -1) {
+        var parts = repo.split("/");
+        body.githubRepoOwner = parts[0];
+        body.githubRepoName = parts[1];
+      }
+
+      fetch("/api/codebases", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(body)
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            errEl.textContent = data.error;
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Create";
+          } else {
+            modal.close();
+            renderCodebasesTab();
+          }
+        })
+        .catch(function() {
+          errEl.textContent = "Network error";
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Create";
+        });
+    } }, "Create");
+
+    var modal = showModal("New Codebase", [
+      h("div", { className: "form-group" }, [h("label", null, "Name"), nameInput]),
+      h("div", { className: "form-group" }, [h("label", null, "GitHub Repository"), repoInput]),
+      errEl
+    ], { footer: [saveBtn] });
+  }
+
+  function openCodebaseDetail(codebaseId) {
+    var area = document.getElementById("codebases-area");
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:300px" }, ""));
+
+    Promise.all([
+      fetch("/api/codebases/" + codebaseId, { headers: getHeaders() }).then(function(r) { return r.json(); }),
+      fetch("/api/codebases/" + codebaseId + "/concepts", { headers: getHeaders() }).then(function(r) { return r.json(); }),
+      fetch("/api/codebases/" + codebaseId + "/progress", { headers: getHeaders() }).then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var cb = results[0];
+      var concepts = Array.isArray(results[1]) ? results[1] : [];
+      var progress = results[2];
+      renderCodebaseDetail(area, cb, concepts, progress);
+    }).catch(function() {
+      area.textContent = "";
+      area.appendChild(h("div", { className: "empty-state" }, "Failed to load codebase."));
+    });
+  }
+
+  function renderCodebaseDetail(area, cb, conceptsData, progress) {
+    area.textContent = "";
+
+    area.appendChild(h("button", { className: "btn-back", onclick: function() { renderCodebasesTab(); } }, "\u2190 Back to codebases"));
+
+    var repoStr = cb.githubRepoOwner && cb.githubRepoName ? cb.githubRepoOwner + "/" + cb.githubRepoName : "";
+    var headerInfo = [
+      h("h2", { style: "font-family:var(--font-display)" }, cb.name),
+      statusBadge(cb.status || "draft")
+    ];
+    if (repoStr) {
+      headerInfo.push(h("span", { className: "cb-repo", style: "font-size:0.8rem" }, repoStr));
+    }
+    area.appendChild(h("div", { className: "concept-detail-header" }, headerInfo));
+
+    // Action buttons
+    var actions = h("div", { style: "display:flex;gap:0.5rem;margin-bottom:1.5rem" });
+    var enrolled = progress && progress.concepts && progress.concepts.length > 0;
+    if (!enrolled) {
+      actions.appendChild(h("button", { className: "btn-sm primary", onclick: function() {
+        fetch("/api/codebases/" + cb.id + "/enroll", { method: "POST", headers: getHeaders() })
+          .then(function(r) { return r.json(); })
+          .then(function() { openCodebaseDetail(cb.id); });
+      }}, "Enroll"));
+    }
+    actions.appendChild(h("button", { className: "btn-sm", onclick: function() {
+      var newName = prompt("Rename codebase:", cb.name);
+      if (newName && newName.trim() !== cb.name) {
+        fetch("/api/codebases/" + cb.id, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({ name: newName.trim() })
+        }).then(function() { openCodebaseDetail(cb.id); });
+      }
+    }}, "Edit"));
+    actions.appendChild(h("button", { className: "btn-sm", style: "color:var(--red);border-color:var(--red)", onclick: function() {
+      if (confirm("Delete this codebase?")) {
+        fetch("/api/codebases/" + cb.id, { method: "DELETE", headers: getHeaders() })
+          .then(function() { renderCodebasesTab(); });
+      }
+    }}, "Delete"));
+    area.appendChild(actions);
+
+    // Progress section
+    if (progress && progress.concepts && progress.concepts.length > 0) {
+      var completionPct = Math.round((progress.completionRatio || 0) * 100);
+      var progressSection = h("div", { className: "section" }, [
+        h("div", { className: "section-header" }, [
+          h("div", { className: "section-title" }, "Your Progress"),
+          h("div", { className: "section-subtitle" }, completionPct + "% complete")
+        ])
+      ]);
+      var progressList = h("div", { className: "concept-list" });
+      progress.concepts.forEach(function(cp) {
+        var pct = Math.round(cp.mastery * 100);
+        var threshPct = Math.round(cp.threshold * 100);
+        var color = cp.met ? "var(--green)" : pct > threshPct * 0.5 ? "var(--amber)" : "var(--red)";
+        var displayName = cp.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+        progressList.appendChild(h("div", { className: "concept-row", style: "grid-template-columns:1fr 120px 80px" }, [
+          h("div", null, [
+            h("div", { className: "concept-name" }, displayName),
+            importanceBadge(cp.importance)
+          ]),
+          h("div", { className: "mastery-cell" }, [
+            h("div", { className: "mastery-bar-bg" }, [
+              (function() {
+                var fill = h("div", { className: "mastery-bar-fill" });
+                fill.style.width = pct + "%";
+                fill.style.background = color;
+                return fill;
+              })()
+            ]),
+            h("div", { className: "mastery-pct" }, pct + "%")
+          ]),
+          h("div", { style: "font-size:0.7rem;color:var(--text-tertiary);text-align:right" }, "need " + threshPct + "%")
+        ]));
+      });
+      progressSection.appendChild(progressList);
+      area.appendChild(progressSection);
+    }
+
+    // Concepts section
+    var conceptsSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Concepts"),
+        h("div", { className: "section-subtitle" }, conceptsData.length + " concepts")
+      ])
+    ]);
+
+    if (conceptsData.length === 0) {
+      conceptsSection.appendChild(h("div", { className: "empty-state" }, "No concepts yet. Concepts are added via code analysis or manual curation."));
+    } else {
+      var conceptList = h("div", { className: "concept-list" });
+      conceptsData.forEach(function(cc) {
+        var pct = Math.round((cc.mastery || 0) * 100);
+        var displayName = cc.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+        var row = h("div", { className: "concept-row", style: "grid-template-columns:1fr 80px 80px" }, [
+          h("div", null, [
+            h("div", { className: "concept-name" }, displayName),
+            importanceBadge(cc.importance)
+          ]),
+          h("div", { className: "mastery-pct" }, pct + "%"),
+          h("div", null, [
+            h("select", { className: "importance-select", onchange: function() {
+              fetch("/api/codebases/" + cb.id + "/concepts/" + encodeURIComponent(cc.conceptId), {
+                method: "PUT",
+                headers: getHeaders(),
+                body: JSON.stringify({ importance: this.value })
+              }).then(function() { openCodebaseDetail(cb.id); });
+            } }, [
+              h("option", { value: "core" }, "Core"),
+              h("option", { value: "supporting" }, "Supporting"),
+              h("option", { value: "peripheral" }, "Peripheral")
+            ])
+          ])
+        ]);
+        // Set correct selected value
+        var sel = row.querySelector("select");
+        if (sel) sel.value = cc.importance;
+        conceptList.appendChild(row);
+      });
+      conceptsSection.appendChild(conceptList);
+    }
+    area.appendChild(conceptsSection);
+  }
+
+  // --- Syllabi Tab ---
+
+  function renderSyllabiTab() {
+    var area = document.getElementById("syllabi-area");
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:200px" }, ""));
+
+    fetch("/api/syllabi", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { renderNoOrgMessage(area, "syllabi"); return; }
+        renderSyllabiList(area, Array.isArray(data) ? data : []);
+      })
+      .catch(function() {
+        area.textContent = "";
+        area.appendChild(h("div", { className: "empty-state" }, "Failed to load syllabi."));
+      });
+  }
+
+  function renderSyllabiList(area, syllabiData) {
+    area.textContent = "";
+
+    var createBtn = h("button", { className: "btn-sm primary", onclick: function() { showCreateSyllabusModal(); } }, "+ New Syllabus");
+    var header = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Syllabi"),
+        createBtn
+      ])
+    ]);
+    area.appendChild(header);
+
+    if (syllabiData.length === 0) {
+      area.appendChild(h("div", { className: "empty-state" }, "No syllabi yet. Create one to define learning objectives."));
+      return;
+    }
+
+    var list = h("div", { className: "cb-list" });
+    syllabiData.forEach(function(s) {
+      var desc = s.description ? (s.description.length > 80 ? s.description.slice(0, 80) + "\u2026" : s.description) : "No description";
+      var row = h("div", { className: "cb-card", onclick: function() { openSyllabusDetail(s.id); } }, [
+        h("div", { className: "cb-card-main" }, [
+          h("div", { className: "cb-name" }, s.name),
+          h("div", { className: "cb-repo text-tertiary" }, desc)
+        ]),
+        h("div", { className: "cb-card-meta" }, [
+          statusBadge(s.status || "draft")
+        ])
+      ]);
+      list.appendChild(row);
+    });
+    area.appendChild(list);
+  }
+
+  function showCreateSyllabusModal() {
+    var nameInput = h("input", { type: "text", placeholder: "e.g. Frontend Fundamentals" });
+    var descInput = h("textarea", { placeholder: "Brief description (optional)", style: "width:100%;min-height:60px;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.9rem;font-family:var(--font-body);background:var(--bg);color:var(--text);resize:vertical;outline:none" });
+    var errEl = h("div", { className: "error-text" });
+
+    var saveBtn = h("button", { className: "btn-sm primary", onclick: function() {
+      var name = nameInput.value.trim();
+      if (!name) { errEl.textContent = "Name is required"; return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Creating...";
+
+      fetch("/api/syllabi", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ name: name, description: descInput.value.trim() })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            errEl.textContent = data.error;
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Create";
+          } else {
+            modal.close();
+            renderSyllabiTab();
+          }
+        })
+        .catch(function() {
+          errEl.textContent = "Network error";
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Create";
+        });
+    } }, "Create");
+
+    var modal = showModal("New Syllabus", [
+      h("div", { className: "form-group" }, [h("label", null, "Name"), nameInput]),
+      h("div", { className: "form-group" }, [h("label", null, "Description"), descInput]),
+      errEl
+    ], { footer: [saveBtn] });
+  }
+
+  function openSyllabusDetail(syllabusId) {
+    var area = document.getElementById("syllabi-area");
+    area.textContent = "";
+    area.appendChild(h("div", { className: "skeleton", style: "height:300px" }, ""));
+
+    Promise.all([
+      fetch("/api/syllabi/" + syllabusId, { headers: getHeaders() }).then(function(r) { return r.json(); }),
+      fetch("/api/syllabi/" + syllabusId + "/progress", { headers: getHeaders() }).then(function(r) { return r.ok ? r.json() : null; })
+    ]).then(function(results) {
+      var syl = results[0];
+      var progress = results[1];
+      renderSyllabusDetail(area, syl, progress);
+    }).catch(function() {
+      area.textContent = "";
+      area.appendChild(h("div", { className: "empty-state" }, "Failed to load syllabus."));
+    });
+  }
+
+  function renderSyllabusDetail(area, syl, progress) {
+    area.textContent = "";
+
+    area.appendChild(h("button", { className: "btn-back", onclick: function() { renderSyllabiTab(); } }, "\u2190 Back to syllabi"));
+
+    var headerInfo = [
+      h("h2", { style: "font-family:var(--font-display)" }, syl.name),
+      statusBadge(syl.status || "draft")
+    ];
+    area.appendChild(h("div", { className: "concept-detail-header" }, headerInfo));
+    if (syl.description) {
+      area.appendChild(h("div", { style: "color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem" }, syl.description));
+    }
+
+    // Action buttons
+    var actions = h("div", { style: "display:flex;gap:0.5rem;margin-bottom:1.5rem" });
+    var enrolled = progress && progress.concepts && progress.concepts.length > 0;
+    if (!enrolled) {
+      actions.appendChild(h("button", { className: "btn-sm primary", onclick: function() {
+        fetch("/api/syllabi/" + syl.id + "/enroll", { method: "POST", headers: getHeaders() })
+          .then(function(r) { return r.json(); })
+          .then(function() { openSyllabusDetail(syl.id); });
+      }}, "Enroll"));
+    }
+    actions.appendChild(h("button", { className: "btn-sm", onclick: function() {
+      var newName = prompt("Rename syllabus:", syl.name);
+      if (newName && newName.trim() !== syl.name) {
+        fetch("/api/syllabi/" + syl.id, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({ name: newName.trim() })
+        }).then(function() { openSyllabusDetail(syl.id); });
+      }
+    }}, "Edit"));
+    actions.appendChild(h("button", { className: "btn-sm", style: "color:var(--red);border-color:var(--red)", onclick: function() {
+      if (confirm("Delete this syllabus?")) {
+        fetch("/api/syllabi/" + syl.id, { method: "DELETE", headers: getHeaders() })
+          .then(function() { renderSyllabiTab(); });
+      }
+    }}, "Delete"));
+    area.appendChild(actions);
+
+    // Progress section
+    if (progress && progress.concepts && progress.concepts.length > 0) {
+      var completionPct = Math.round((progress.completionRatio || 0) * 100);
+      var progressSection = h("div", { className: "section" }, [
+        h("div", { className: "section-header" }, [
+          h("div", { className: "section-title" }, "Your Progress"),
+          h("div", { className: "section-subtitle" }, completionPct + "% complete")
+        ])
+      ]);
+      var progressList = h("div", { className: "concept-list" });
+      progress.concepts.forEach(function(cp) {
+        var pct = Math.round(cp.mastery * 100);
+        var threshPct = Math.round(cp.threshold * 100);
+        var color = cp.met ? "var(--green)" : pct > threshPct * 0.5 ? "var(--amber)" : "var(--red)";
+        var displayName = cp.conceptId.replace(/-/g, " ").replace(/\//g, " \u203A ");
+        progressList.appendChild(h("div", { className: "concept-row", style: "grid-template-columns:1fr 120px 80px" }, [
+          h("div", null, [
+            h("div", { className: "concept-name" }, displayName),
+            importanceBadge(cp.importance)
+          ]),
+          h("div", { className: "mastery-cell" }, [
+            h("div", { className: "mastery-bar-bg" }, [
+              (function() {
+                var fill = h("div", { className: "mastery-bar-fill" });
+                fill.style.width = pct + "%";
+                fill.style.background = color;
+                return fill;
+              })()
+            ]),
+            h("div", { className: "mastery-pct" }, pct + "%")
+          ]),
+          h("div", { style: "font-size:0.7rem;color:var(--text-tertiary);text-align:right" }, "need " + threshPct + "%")
+        ]));
+      });
+      progressSection.appendChild(progressList);
+      area.appendChild(progressSection);
+    }
+
+    // Sources section
+    var sources = syl.sources || [];
+    var sourcesSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Sources"),
+        h("button", { className: "btn-sm", onclick: function() { showAddSourceModal(syl.id); } }, "+ Add Source")
+      ])
+    ]);
+    if (sources.length === 0) {
+      sourcesSection.appendChild(h("div", { className: "empty-state" }, "No sources yet. Add URLs or documents."));
+    } else {
+      var sourceList = h("div", { className: "cb-list" });
+      sources.forEach(function(src) {
+        var label = src.sourceUrl || src.fileName || src.sourceType;
+        var row = h("div", { className: "cb-card", style: "cursor:default" }, [
+          h("div", { className: "cb-card-main" }, [
+            h("div", { className: "cb-name", style: "font-size:0.85rem" }, label),
+            h("div", { className: "cb-repo text-tertiary" }, src.sourceType)
+          ]),
+          h("div", { className: "cb-card-meta" }, [
+            statusBadge(src.extractionStatus || "pending"),
+            h("button", { className: "btn-sm", style: "color:var(--red);border-color:var(--red);padding:0.2rem 0.5rem;font-size:0.7rem", onclick: function(e) {
+              e.stopPropagation();
+              if (confirm("Remove this source?")) {
+                fetch("/api/syllabi/" + syl.id + "/sources/" + src.id, { method: "DELETE", headers: getHeaders() })
+                  .then(function() { openSyllabusDetail(syl.id); });
+              }
+            }}, "Remove")
+          ])
+        ]);
+        sourceList.appendChild(row);
+      });
+      sourcesSection.appendChild(sourceList);
+    }
+    area.appendChild(sourcesSection);
+
+    // Concepts section (from detail endpoint — syl may have conceptCount but not the list)
+    // We need to fetch concepts from the syllabus — the detail doesn't include a concept list directly,
+    // so we just show the count and a note about concept curation
+    var conceptCountVal = syl.conceptCount || 0;
+    var conceptsSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Concepts"),
+        h("div", { className: "section-subtitle" }, conceptCountVal + " concepts")
+      ]),
+      h("div", { className: "empty-state" }, conceptCountVal > 0
+        ? "Concepts are managed via the API. Enroll to track your progress."
+        : "No concepts yet. Concepts are extracted from sources or added manually.")
+    ]);
+    area.appendChild(conceptsSection);
+  }
+
+  function showAddSourceModal(syllabusId) {
+    var typeSelect = h("select", { style: "width:100%;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.9rem;background:var(--bg);color:var(--text)" }, [
+      h("option", { value: "url" }, "URL"),
+      h("option", { value: "manual" }, "Manual"),
+      h("option", { value: "pdf" }, "PDF (coming soon)")
+    ]);
+    var urlInput = h("input", { type: "text", placeholder: "https://..." });
+    var errEl = h("div", { className: "error-text" });
+
+    var saveBtn = h("button", { className: "btn-sm primary", onclick: function() {
+      var sourceType = typeSelect.value;
+      var sourceUrl = urlInput.value.trim();
+      if (sourceType === "url" && !sourceUrl) { errEl.textContent = "URL is required"; return; }
+      saveBtn.disabled = true;
+
+      var body = { sourceType: sourceType };
+      if (sourceUrl) body.sourceUrl = sourceUrl;
+
+      fetch("/api/syllabi/" + syllabusId + "/sources", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(body)
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            errEl.textContent = data.error;
+            saveBtn.disabled = false;
+          } else {
+            modal.close();
+            openSyllabusDetail(syllabusId);
+          }
+        })
+        .catch(function() {
+          errEl.textContent = "Network error";
+          saveBtn.disabled = false;
+        });
+    } }, "Add Source");
+
+    var modal = showModal("Add Source", [
+      h("div", { className: "form-group" }, [h("label", null, "Type"), typeSelect]),
+      h("div", { className: "form-group" }, [h("label", null, "URL"), urlInput]),
+      errEl
+    ], { footer: [saveBtn] });
+  }
+
+  // --- Roles Management (in Org Settings) ---
+
+  function renderRolesSection(area) {
+    var rolesSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Custom Roles"),
+        h("button", { className: "btn-sm primary", onclick: function() { showCreateRoleModal(); } }, "+ New Role")
+      ]),
+      h("div", { id: "roles-list" })
+    ]);
+    area.appendChild(rolesSection);
+    loadRoles();
+  }
+
+  var PERMISSION_CATEGORIES = [
+    { label: "Codebases", permissions: ["codebases.create", "codebases.edit", "codebases.delete", "codebases.view_progress"] },
+    { label: "Syllabi", permissions: ["syllabi.create", "syllabi.edit", "syllabi.delete", "syllabi.view_progress"] },
+    { label: "Members", permissions: ["members.invite", "members.manage_roles", "members.view"] },
+    { label: "Organization", permissions: ["org.settings", "org.billing"] }
+  ];
+
+  function loadRoles() {
+    var list = document.getElementById("roles-list");
+    if (!list) return;
+    list.textContent = "";
+    list.appendChild(h("div", { className: "skeleton", style: "height:100px" }, ""));
+
+    fetch("/api/org/roles", { headers: getHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(roles) {
+        list.textContent = "";
+        if (!Array.isArray(roles) || roles.length === 0) {
+          list.appendChild(h("div", { className: "empty-state" }, "No custom roles. Create one to define granular permissions."));
+          return;
+        }
+
+        var roleList = h("div", { className: "cb-list" });
+        roles.forEach(function(role) {
+          var permCount = role.permissions ? role.permissions.length : 0;
+          var badges = [];
+          if (role.isDefault) badges.push(h("span", { className: "status-badge status-default" }, "Built-in"));
+          badges.push(h("span", { className: "cb-stat" }, permCount + " permissions"));
+
+          var actions = h("div", { className: "cb-card-meta", style: "gap:0.35rem" });
+          badges.forEach(function(b) { actions.appendChild(b); });
+
+          if (!role.isDefault) {
+            actions.appendChild(h("button", { className: "btn-sm", style: "padding:0.2rem 0.5rem;font-size:0.7rem", onclick: function(e) {
+              e.stopPropagation();
+              showEditRoleModal(role);
+            }}, "Edit"));
+            actions.appendChild(h("button", { className: "btn-sm", style: "color:var(--red);border-color:var(--red);padding:0.2rem 0.5rem;font-size:0.7rem", onclick: function(e) {
+              e.stopPropagation();
+              if (confirm("Delete role '" + role.name + "'?")) {
+                fetch("/api/org/roles/" + role.id, { method: "DELETE", headers: getHeaders() })
+                  .then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.error) alert(data.error);
+                    else loadRoles();
+                  });
+              }
+            }}, "Delete"));
+          }
+
+          var row = h("div", { className: "cb-card", style: "cursor:default" }, [
+            h("div", { className: "cb-card-main" }, [
+              h("div", { className: "cb-name" }, role.name),
+              h("div", { className: "cb-repo text-tertiary" }, role.description || "No description")
+            ]),
+            actions
+          ]);
+          roleList.appendChild(row);
+        });
+        list.appendChild(roleList);
+      })
+      .catch(function() {
+        list.textContent = "";
+        list.appendChild(h("div", { className: "empty-state" }, "Failed to load roles."));
+      });
+  }
+
+  function renderPermissionCheckboxes(selected) {
+    var selectedSet = {};
+    (selected || []).forEach(function(p) { selectedSet[p] = true; });
+
+    var container = h("div", { className: "perm-groups" });
+    PERMISSION_CATEGORIES.forEach(function(cat) {
+      var group = h("div", { className: "perm-group" });
+      group.appendChild(h("div", { className: "perm-group-label" }, cat.label));
+      cat.permissions.forEach(function(perm) {
+        var shortName = perm.split(".")[1].replace(/_/g, " ");
+        var cb = h("input", { type: "checkbox", "data-perm": perm });
+        if (selectedSet[perm]) cb.checked = true;
+        var label = h("label", { className: "perm-checkbox" }, [cb, h("span", null, shortName)]);
+        group.appendChild(label);
+      });
+      container.appendChild(group);
+    });
+    return container;
+  }
+
+  function getCheckedPermissions(container) {
+    var perms = [];
+    var checkboxes = container.querySelectorAll("input[type=checkbox]");
+    for (var i = 0; i < checkboxes.length; i++) {
+      if (checkboxes[i].checked) perms.push(checkboxes[i].getAttribute("data-perm"));
+    }
+    return perms;
+  }
+
+  function showCreateRoleModal() {
+    var nameInput = h("input", { type: "text", placeholder: "e.g. Reviewer" });
+    var descInput = h("input", { type: "text", placeholder: "Description (optional)" });
+    var permContainer = renderPermissionCheckboxes([]);
+    var errEl = h("div", { className: "error-text" });
+
+    var saveBtn = h("button", { className: "btn-sm primary", onclick: function() {
+      var name = nameInput.value.trim();
+      var perms = getCheckedPermissions(permContainer);
+      if (!name) { errEl.textContent = "Name is required"; return; }
+      if (perms.length === 0) { errEl.textContent = "Select at least one permission"; return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Creating...";
+
+      fetch("/api/org/roles", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ name: name, description: descInput.value.trim(), permissions: perms })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            errEl.textContent = data.error;
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Create";
+          } else {
+            modal.close();
+            loadRoles();
+          }
+        })
+        .catch(function() {
+          errEl.textContent = "Network error";
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Create";
+        });
+    } }, "Create");
+
+    var modal = showModal("New Role", [
+      h("div", { className: "form-group" }, [h("label", null, "Name"), nameInput]),
+      h("div", { className: "form-group" }, [h("label", null, "Description"), descInput]),
+      h("div", { className: "form-group" }, [h("label", null, "Permissions"), permContainer]),
+      errEl
+    ], { footer: [saveBtn] });
+  }
+
+  function showEditRoleModal(role) {
+    var nameInput = h("input", { type: "text", value: role.name });
+    var descInput = h("input", { type: "text", value: role.description || "" });
+    var permContainer = renderPermissionCheckboxes(role.permissions || []);
+    var errEl = h("div", { className: "error-text" });
+
+    var saveBtn = h("button", { className: "btn-sm primary", onclick: function() {
+      var name = nameInput.value.trim();
+      var perms = getCheckedPermissions(permContainer);
+      if (!name) { errEl.textContent = "Name is required"; return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+
+      fetch("/api/org/roles/" + role.id, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify({ name: name, description: descInput.value.trim(), permissions: perms.length > 0 ? perms : undefined })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            errEl.textContent = data.error;
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Save";
+          } else {
+            modal.close();
+            loadRoles();
+          }
+        })
+        .catch(function() {
+          errEl.textContent = "Network error";
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save";
+        });
+    } }, "Save");
+
+    var modal = showModal("Edit Role: " + role.name, [
+      h("div", { className: "form-group" }, [h("label", null, "Name"), nameInput]),
+      h("div", { className: "form-group" }, [h("label", null, "Description"), descInput]),
+      h("div", { className: "form-group" }, [h("label", null, "Permissions"), permContainer]),
+      errEl
+    ], { footer: [saveBtn] });
+  }
+
   // --- Organization Tab ---
 
   function renderOrganization() {
@@ -1954,6 +2744,9 @@
       h("div", { id: "dismissals-table-area" })
     ]);
     area.appendChild(dismissalsSection);
+
+    // Custom Roles section
+    renderRolesSection(area);
 
     loadPendingInvites(org.id);
     loadMembers(org.id);
