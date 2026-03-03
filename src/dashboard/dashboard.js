@@ -211,16 +211,24 @@
     var step = 0;
     var pollInterval = null;
     var overlay = h("div", { className: "wizard-overlay" });
-    var modal = h("div", { className: "wizard-modal" });
+    var modal = h("div", { className: "wizard-modal", role: "dialog", "aria-modal": "true", "aria-label": "Onboarding wizard" });
     overlay.appendChild(modal);
 
+    function showCopyFeedback(btn, success) {
+      var prev = btn.textContent;
+      btn.textContent = success ? "Copied" : "Failed";
+      if (success) btn.classList.add("copied");
+      setTimeout(function() { btn.textContent = prev; btn.classList.remove("copied"); }, 2000);
+    }
+
     function copyToClipboard(text, btn) {
-      navigator.clipboard.writeText(text).then(function() {
-        var prev = btn.textContent;
-        btn.textContent = "Copied";
-        btn.classList.add("copied");
-        setTimeout(function() { btn.textContent = prev; btn.classList.remove("copied"); }, 2000);
-      });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(function() { showCopyFeedback(btn, true); })
+          .catch(function() { showCopyFeedback(btn, false); });
+      } else {
+        showCopyFeedback(btn, false);
+      }
     }
 
     function renderProgress() {
@@ -243,10 +251,25 @@
     function finishOnboarding() {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       fetch("/api/me/onboarding-complete", { method: "POST", headers: getHeaders() })
-        .finally(function() {
-          overlay.remove();
-          showDashboardContent();
-        });
+        .then(function(r) {
+          if (r.ok) {
+            if (currentUser) currentUser.onboardingCompletedAt = new Date().toISOString();
+            overlay.remove();
+            showDashboardContent();
+          } else {
+            showWizardError();
+          }
+        })
+        .catch(function() { showWizardError(); });
+    }
+
+    function showWizardError() {
+      var existing = modal.querySelector(".wizard-error");
+      if (existing) existing.remove();
+      modal.appendChild(h("div", { className: "wizard-error" }, [
+        h("span", null, "Could not save. "),
+        h("button", { className: "btn-link", onclick: finishOnboarding }, "Retry")
+      ]));
     }
 
     function renderStep() {
@@ -265,6 +288,9 @@
       else if (step === 1) renderInstall();
       else if (step === 2) renderLink();
       else if (step === 3) renderOrg();
+
+      var focusTarget = modal.querySelector("button.btn-primary");
+      if (focusTarget) focusTarget.focus();
     }
 
     function renderWelcome() {
@@ -371,11 +397,13 @@
                 method: "POST",
                 headers: getHeaders(),
                 body: JSON.stringify({ organizationId: res.body.id })
-              }).then(function() { finishOnboarding(); });
+              }).then(function() { finishOnboarding(); })
+                .catch(function() { finishOnboarding(); });
             } else {
               errEl.textContent = res.body.message || "Failed to create organization.";
             }
-          });
+          })
+          .catch(function() { errEl.textContent = "Network error. Please try again."; });
       }
 
       modal.appendChild(h("div", { className: "wizard-step" }, [
@@ -395,6 +423,9 @@
 
     renderStep();
     document.body.appendChild(overlay);
+    // Focus first actionable element
+    var firstBtn = modal.querySelector("button.btn-primary, button.btn-link");
+    if (firstBtn) firstBtn.focus();
   }
 
   // --- Dashboard ---

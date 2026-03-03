@@ -273,9 +273,15 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
     const currentUser = c.get('user');
     if (!currentUser) return c.json({ error: 'Unauthorized' }, 401);
     const { eq } = await import('drizzle-orm');
-    const { apikey } = await import('./db/schema.js');
-    const keys = await db.select({ id: apikey.id }).from(apikey).where(eq(apikey.userId, currentUser.id)).limit(1);
-    return c.json({ user: currentUser, hasApiKey: keys.length > 0 });
+    const { apikey, user: userTable } = await import('./db/schema.js');
+    const [keys, userRow] = await Promise.all([
+      db.select({ id: apikey.id }).from(apikey).where(eq(apikey.userId, currentUser.id)).limit(1),
+      db.select({ onboardingCompletedAt: userTable.onboardingCompletedAt }).from(userTable).where(eq(userTable.id, currentUser.id)).limit(1),
+    ]);
+    return c.json({
+      user: { ...currentUser, onboardingCompletedAt: userRow[0]?.onboardingCompletedAt ?? null },
+      hasApiKey: keys.length > 0,
+    });
   });
 
   // Mark onboarding complete

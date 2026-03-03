@@ -820,3 +820,11 @@ body {
   font-size: 0.85rem; color: var(--text-secondary);
   margin-bottom: 1rem; line-height: 1.5;
 }
+.wizard-error {
+  text-align: center; font-size: 0.85rem; color: var(--red);
+  margin-top: 0.75rem;
+}
+.wizard-modal button:focus-visible,
+.wizard-modal .copy-btn:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
