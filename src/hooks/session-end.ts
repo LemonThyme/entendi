@@ -1,6 +1,6 @@
 import { writeFileSync } from 'fs';
-import { join } from 'path';
 import { homedir } from 'os';
+import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
 import { log, readStdin } from './shared.js';
 

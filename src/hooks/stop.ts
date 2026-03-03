@@ -1,10 +1,10 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
 import { homedir } from 'os';
+import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
-import { hasObserveCallInCurrentTurn, findLastUserMessage } from './transcript.js';
+import { type HookInput, log, readStdin } from './shared.js';
+import { findLastUserMessage, hasObserveCallInCurrentTurn } from './transcript.js';
 import { isTrivialMessage } from './trivial.js';
-import { log, readStdin, type HookInput } from './shared.js';
 
 /**
  * Stop hook — fires when the session is about to end.

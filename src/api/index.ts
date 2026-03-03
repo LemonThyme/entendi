@@ -24,7 +24,7 @@ import { openapiRoutes } from './routes/openapi.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
 import { publicRoutes } from './routes/public.js';
-import { publicShell, type PageMeta } from './routes/public-html.js';
+import { type PageMeta, publicShell } from './routes/public-html.js';
 
 export type Env = {
   Variables: {
