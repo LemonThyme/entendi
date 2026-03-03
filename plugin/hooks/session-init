@@ -112,17 +112,22 @@ if [ -n "$PLUGIN_VERSION" ]; then
   if [ -n "$LATEST" ] && [ "$CURRENT_CLEAN" != "$LATEST" ]; then
     log "update available: ${CURRENT_CLEAN} -> ${LATEST}, attempting auto-update"
 
-    # Clear plugin cache to force re-download
-    CACHE_DIR="${HOME}/.claude/plugins/cache/entendi"
-    if [ -d "$CACHE_DIR" ]; then
-      rm -rf "$CACHE_DIR"
-      log "cleared plugin cache at ${CACHE_DIR}"
-    fi
-
-    # Attempt reinstall
+    # Install new version alongside old one (don't delete cache — other sessions may be using it)
     if claude plugin install entendi 2>/dev/null; then
-      UPDATE_MSG="[Entendi] Auto-updated from v${CURRENT_CLEAN} to v${LATEST}."
+      UPDATE_MSG="[Entendi] Auto-updated from v${CURRENT_CLEAN} to v${LATEST}. Restart Claude Code to use the new version."
       log "auto-update succeeded"
+
+      # Clean up stale cache versions (keep only the 2 most recent)
+      CACHE_BASE="${HOME}/.claude/plugins/cache/entendi/entendi"
+      if [ -d "$CACHE_BASE" ]; then
+        STALE_DIRS=$(ls -td "$CACHE_BASE"/*/ 2>/dev/null | tail -n +3)
+        if [ -n "$STALE_DIRS" ]; then
+          echo "$STALE_DIRS" | while read -r dir; do
+            rm -rf "$dir"
+            log "cleaned stale cache: $dir"
+          done
+        fi
+      fi
     else
       UPDATE_MSG="[Entendi] Update available: v${CURRENT_CLEAN} → v${LATEST}. Run 'claude plugin install entendi' to update."
       log "auto-update failed, notifying user"
