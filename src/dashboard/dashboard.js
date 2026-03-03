@@ -209,9 +209,14 @@
 
   function showOnboarding() {
     var step = 0;
+    var prevStep = -1;
     var pollInterval = null;
     var overlay = h("div", { className: "wizard-overlay" });
     var modal = h("div", { className: "wizard-modal", role: "dialog", "aria-modal": "true", "aria-label": "Onboarding wizard" });
+    var chromeBar = h("div", { className: "wizard-chrome" });
+    var stepContainer = h("div", { className: "wizard-step-container" });
+    modal.appendChild(chromeBar);
+    modal.appendChild(stepContainer);
     overlay.appendChild(modal);
 
     function showCopyFeedback(btn, success) {
@@ -244,6 +249,7 @@
 
     function goTo(nextStep) {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      prevStep = step;
       step = nextStep;
       renderStep();
     }
@@ -272,64 +278,114 @@
       ]));
     }
 
-    function renderStep() {
-      modal.textContent = "";
-      modal.classList.remove("wizard-step-enter");
-      void modal.offsetWidth;
-      modal.classList.add("wizard-step-enter");
-
+    function renderChrome() {
+      chromeBar.textContent = "";
       if (step > 0) {
-        modal.appendChild(h("button", { className: "wizard-back", onclick: function() { goTo(step - 1); } }, "\u2190"));
+        chromeBar.appendChild(h("button", { className: "wizard-back", onclick: function() { goTo(step - 1); } }, "\u2190"));
       }
-
-      modal.appendChild(renderProgress());
-
-      if (step === 0) renderWelcome();
-      else if (step === 1) renderInstall();
-      else if (step === 2) renderLink();
-      else if (step === 3) renderOrg();
-
-      var focusTarget = modal.querySelector("button.btn-primary");
-      if (focusTarget) focusTarget.focus();
+      chromeBar.appendChild(renderProgress());
     }
 
-    function renderWelcome() {
+    function renderStepContent() {
+      var wrapper = h("div", { className: "wizard-step" });
+      if (step === 0) renderWelcome(wrapper);
+      else if (step === 1) renderInstall(wrapper);
+      else if (step === 2) renderLink(wrapper);
+      else if (step === 3) renderOrg(wrapper);
+      return wrapper;
+    }
+
+    function renderStep() {
+      var isForward = step > prevStep;
+      var isFirst = prevStep === -1;
+
+      // Update chrome (no animation)
+      renderChrome();
+
+      // Build new step content
+      var newContent = renderStepContent();
+
+      if (isFirst) {
+        // Initial render — no transition
+        stepContainer.textContent = "";
+        stepContainer.appendChild(newContent);
+        var focusTarget = modal.querySelector("button.btn-primary");
+        if (focusTarget) focusTarget.focus();
+        return;
+      }
+
+      // Animate: slide old content out, then slide new content in
+      var oldContent = stepContainer.firstChild;
+      var exitClass = isForward ? "wizard-slide-out-left" : "wizard-slide-out-right";
+      var enterClass = isForward ? "wizard-slide-in-right" : "wizard-slide-in-left";
+
+      // Capture current height for smooth transition
+      var oldHeight = stepContainer.offsetHeight;
+      stepContainer.style.height = oldHeight + "px";
+
+      if (oldContent) {
+        oldContent.classList.add(exitClass);
+        oldContent.addEventListener("animationend", function() {
+          stepContainer.textContent = "";
+          newContent.classList.add(enterClass);
+          stepContainer.appendChild(newContent);
+
+          // Animate to new height
+          var newHeight = newContent.offsetHeight;
+          stepContainer.style.height = newHeight + "px";
+
+          newContent.addEventListener("animationend", function() {
+            newContent.classList.remove(enterClass);
+            stepContainer.style.height = "";
+            var focusTarget = modal.querySelector("button.btn-primary");
+            if (focusTarget) focusTarget.focus();
+          }, { once: true });
+        }, { once: true });
+      } else {
+        newContent.classList.add(enterClass);
+        stepContainer.appendChild(newContent);
+        stepContainer.style.height = "";
+        newContent.addEventListener("animationend", function() {
+          newContent.classList.remove(enterClass);
+          var focusTarget = modal.querySelector("button.btn-primary");
+          if (focusTarget) focusTarget.focus();
+        }, { once: true });
+      }
+    }
+
+    function renderWelcome(wrapper) {
       var bullets = h("ul", { className: "wizard-bullets" }, [
         h("li", null, "Observes technical concepts as you work with Claude Code"),
         h("li", null, "Asks quick comprehension checks at natural moments"),
         h("li", null, "Builds a knowledge map of what you truly know")
       ]);
 
-      modal.appendChild(h("div", { className: "wizard-step" }, [
-        h("div", { className: "wizard-title" }, "Welcome to Entendi"),
-        h("div", { className: "wizard-subtitle" }, "Entendi watches your AI conversations and checks what you actually understand."),
-        h("div", { className: "wizard-help" }, "How it works:"),
-        bullets,
-        h("div", { className: "wizard-actions" }, [
-          h("button", { className: "btn-primary", onclick: function() { goTo(1); } }, "Get Started")
-        ])
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Welcome to Entendi"));
+      wrapper.appendChild(h("div", { className: "wizard-subtitle" }, "Entendi watches your AI conversations and checks what you actually understand."));
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "How it works:"));
+      wrapper.appendChild(bullets);
+      wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+        h("button", { className: "btn-primary", onclick: function() { goTo(1); } }, "Get Started")
       ]));
     }
 
-    function renderInstall() {
+    function renderInstall(wrapper) {
       var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard("claude plugin install entendi", copyBtn); } }, "Copy");
       var terminal = h("div", { className: "wizard-terminal" }, [
         h("code", null, "$ claude plugin install entendi"),
         copyBtn
       ]);
 
-      modal.appendChild(h("div", { className: "wizard-step" }, [
-        h("div", { className: "wizard-title" }, "Install the plugin"),
-        terminal,
-        h("div", { className: "wizard-help" }, "This installs Entendi into Claude Code. It runs locally alongside your conversations."),
-        h("div", { className: "wizard-actions" }, [
-          h("button", { className: "btn-primary", onclick: function() { goTo(2); } }, "I\u2019ve Installed It"),
-          h("button", { className: "btn-link", onclick: function() { goTo(2); } }, "skip")
-        ])
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Install the plugin"));
+      wrapper.appendChild(terminal);
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "This installs Entendi into Claude Code. It runs locally alongside your conversations."));
+      wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+        h("button", { className: "btn-primary", onclick: function() { goTo(2); } }, "I\u2019ve Installed It"),
+        h("button", { className: "btn-link", onclick: function() { goTo(2); } }, "skip")
       ]));
     }
 
-    function renderLink() {
+    function renderLink(wrapper) {
       var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard("entendi login", copyBtn); } }, "Copy");
       var terminal = h("div", { className: "wizard-terminal" }, [
         h("code", null, "entendi login"),
@@ -340,20 +396,32 @@
       var statusText = h("span", null, "Waiting for connection\u2026");
       var connectionEl = h("div", { className: "wizard-connection" }, [dotEl, statusText]);
 
-      if (userHasApiKey) {
+      // Actions: show Continue only once connected, skip always available
+      var continueBtn = h("button", { className: "btn-primary", onclick: function() { goTo(3); } }, "Continue");
+      var skipBtn = h("button", { className: "btn-link", onclick: function() { goTo(3); } }, "skip for now");
+      var actionsEl = h("div", { className: "wizard-actions" }, []);
+
+      function showConnected() {
         dotEl.className = "dot connected";
         statusText.textContent = "Connected";
         connectionEl.classList.add("connected");
+        // Swap actions: show Continue button, remove skip
+        actionsEl.textContent = "";
+        actionsEl.appendChild(continueBtn);
+        continueBtn.focus();
+      }
+
+      if (userHasApiKey) {
+        showConnected();
       } else {
+        actionsEl.appendChild(skipBtn);
         pollInterval = setInterval(function() {
           fetch("/api/me", { headers: getHeaders() })
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
               if (data && data.hasApiKey) {
                 userHasApiKey = true;
-                dotEl.className = "dot connected";
-                statusText.textContent = "Connected";
-                connectionEl.classList.add("connected");
+                showConnected();
                 if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
               }
             })
@@ -361,20 +429,15 @@
         }, 5000);
       }
 
-      modal.appendChild(h("div", { className: "wizard-step" }, [
-        h("div", { className: "wizard-title" }, "Link your account"),
-        h("div", { className: "wizard-help" }, "Open Claude Code and type:"),
-        terminal,
-        h("div", { className: "wizard-help" }, "This opens a browser tab to connect your Claude Code to this account."),
-        connectionEl,
-        h("div", { className: "wizard-actions" }, [
-          h("button", { className: "btn-primary", onclick: function() { goTo(3); } }, "I\u2019ve Linked It"),
-          h("button", { className: "btn-link", onclick: function() { goTo(3); } }, "skip")
-        ])
-      ]));
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Link your account"));
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "Open Claude Code and type:"));
+      wrapper.appendChild(terminal);
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "This opens a browser tab to connect your Claude Code to this account."));
+      wrapper.appendChild(connectionEl);
+      wrapper.appendChild(actionsEl);
     }
 
-    function renderOrg() {
+    function renderOrg(wrapper) {
       var nameInput = h("input", { type: "text", id: "wiz-org-name", placeholder: "My Team" });
       var slugInput = h("input", { type: "text", id: "wiz-org-slug", placeholder: "my-team" });
       var errEl = h("div", { className: "error-text" });
@@ -411,18 +474,16 @@
           .catch(function() { errEl.textContent = "Network error. Please try again."; });
       }
 
-      modal.appendChild(h("div", { className: "wizard-step" }, [
-        h("div", { className: "wizard-title" }, "Using Entendi with a team?"),
-        h("div", { className: "wizard-subtitle" }, "Organizations let managers track their team\u2019s learning and identify gaps."),
-        h("div", { className: "wizard-form" }, [
-          h("div", { className: "form-group" }, [h("label", null, "Team name"), nameInput]),
-          h("div", { className: "form-group" }, [h("label", null, "URL slug"), slugInput]),
-          errEl
-        ]),
-        h("div", { className: "wizard-actions" }, [
-          h("button", { className: "btn-primary", onclick: createOrg }, "Create Organization"),
-          h("button", { className: "btn-link", onclick: finishOnboarding }, "I\u2019m using this solo")
-        ])
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Using Entendi with a team?"));
+      wrapper.appendChild(h("div", { className: "wizard-subtitle" }, "Organizations let managers track their team\u2019s learning and identify gaps."));
+      wrapper.appendChild(h("div", { className: "wizard-form" }, [
+        h("div", { className: "form-group" }, [h("label", null, "Team name"), nameInput]),
+        h("div", { className: "form-group" }, [h("label", null, "URL slug"), slugInput]),
+        errEl
+      ]));
+      wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+        h("button", { className: "btn-primary", onclick: createOrg }, "Create Organization"),
+        h("button", { className: "btn-link", onclick: finishOnboarding }, "I\u2019m using this solo")
       ]));
     }
 
