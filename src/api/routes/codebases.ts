@@ -8,10 +8,13 @@ import {
   codebaseEnrollments,
   codebases,
   concepts,
+  githubInstallations,
   member,
   userConceptStates,
 } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { GitHubClient } from '../lib/github.js';
+import { extractCodebaseConcepts } from '../lib/codebase-extraction.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 
@@ -390,6 +393,72 @@ codebaseRoutes.get('/:id/members', requirePermission('codebases.view_progress'),
   }));
 
   return c.json(members);
+});
+
+// --- POST /:id/extract (trigger concept extraction) ---
+codebaseRoutes.post('/:id/extract', requirePermission('codebases.edit'), async (c) => {
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
+  const codebaseId = c.req.param('id');
+
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
+  if (!codebase) return c.json({ error: 'Not found' }, 404);
+
+  if (!codebase.githubRepoOwner || !codebase.githubRepoName || !codebase.githubInstallationId) {
+    return c.json({ error: 'Codebase is not linked to a GitHub repository' }, 400);
+  }
+
+  const db = c.get('db');
+
+  // Look up installation token
+  const [installation] = await db.select().from(githubInstallations)
+    .where(eq(githubInstallations.id, codebase.githubInstallationId));
+
+  if (!installation?.accessToken) {
+    return c.json({ error: 'No valid GitHub installation token' }, 400);
+  }
+
+  // Set sync status to syncing
+  await db.update(codebases).set({ syncStatus: 'syncing' }).where(eq(codebases.id, codebaseId));
+
+  // Parse tier from body (default to 1)
+  let tier: 1 | 2 | 3 = 1;
+  let deepDivePaths: string[] | undefined;
+  try {
+    const body = await c.req.json();
+    if (body.tier === 2 || body.tier === 3) tier = body.tier;
+    if (Array.isArray(body.deepDivePaths)) deepDivePaths = body.deepDivePaths;
+  } catch { /* no body is fine, use defaults */ }
+
+  // Fire-and-forget: run extraction in the background
+  const github = new GitHubClient(installation.accessToken);
+  extractCodebaseConcepts(github, codebase.githubRepoOwner, codebase.githubRepoName, tier, deepDivePaths)
+    .then(async (extracted) => {
+      // Store extracted concepts
+      const user = c.get('user')!;
+      for (const concept of extracted) {
+        // Find or skip concept by name (concept must already exist)
+        const [existing] = await db.select().from(concepts).where(eq(concepts.id, concept.conceptName));
+        if (existing) {
+          await db.insert(codebaseConcepts).values({
+            codebaseId,
+            conceptId: existing.id,
+            importance: concept.importance,
+            learningObjective: concept.learningObjective,
+            autoExtracted: true,
+            curatedBy: user.id,
+          }).onConflictDoNothing();
+        }
+      }
+      await db.update(codebases).set({ syncStatus: 'synced', lastSyncAt: new Date() })
+        .where(eq(codebases.id, codebaseId));
+    })
+    .catch(async () => {
+      await db.update(codebases).set({ syncStatus: 'error' })
+        .where(eq(codebases.id, codebaseId));
+    });
+
+  return c.json({ id: codebaseId, syncStatus: 'syncing' }, 202);
 });
 
 // --- Shared progress helper ---
