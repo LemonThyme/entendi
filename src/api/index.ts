@@ -10,6 +10,7 @@ import { requestLogger } from './middleware/request-logger.js';
 import { adminStatsRoutes } from './routes/admin-stats.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { billingRoutes } from './routes/billing.js';
+import { codebaseRoutes } from './routes/codebases.js';
 import { conceptRoutes } from './routes/concepts.js';
 import { courseRoutes } from './routes/courses.js';
 import { dashboardRoutes } from './routes/dashboard.js';
@@ -23,8 +24,10 @@ import { mcpRoutes } from './routes/mcp.js';
 import { openapiRoutes } from './routes/openapi.js';
 import { orgRoutes } from './routes/org.js';
 import { preferencesRoutes } from './routes/preferences.js';
+import { roleRoutes } from './routes/roles.js';
 import { publicRoutes } from './routes/public.js';
 import { type PageMeta, publicShell } from './routes/public-html.js';
+import { syllabiRoutes } from './routes/syllabi.js';
 
 export type Env = {
   Variables: {
@@ -327,6 +330,9 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   app.route('/api/history', historyRoutes);
   app.route('/api/hooks', hookRoutes);
   app.route('/api/org', orgRoutes);
+  app.route('/api/org/roles', roleRoutes);
+  app.route('/api/codebases', codebaseRoutes);
+  app.route('/api/syllabi', syllabiRoutes);
   app.route('/api/courses', courseRoutes);
   app.route('/api/billing', billingRoutes);
   app.route('/api/preferences', preferencesRoutes);
