@@ -4,6 +4,9 @@
   "description": "Comprehension accountability layer for AI-assisted work",
   "main": "dist/index.js",
   "type": "module",
+  "bin": {
+    "entendi": "dist/cli/init.js"
+  },
   "scripts": {
     "build": "node -e \"const f='src/dashboard/manifest.ts';require('fs').existsSync(f)||require('fs').writeFileSync(f,'export const manifest: Record<string, string> = {};\\n')\" && npx tsc && node --import tsx esbuild.config.ts",
     "build:hooks": "node --import tsx esbuild.config.ts",

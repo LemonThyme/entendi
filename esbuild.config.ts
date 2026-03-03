@@ -180,3 +180,26 @@ export const manifest: Record<string, string> = ${JSON.stringify(manifest, null,
 `;
 writeFileSync(join('src', 'dashboard', 'manifest.ts'), manifestModule);
 console.log('Dashboard asset manifest:', manifest);
+
+// --- CLI bundle ---
+
+await esbuild.build({
+  entryPoints: [join('src', 'cli', 'init.ts')],
+  bundle: true,
+  platform: 'node',
+  target: 'node22',
+  outdir: join('dist', 'cli'),
+  format: 'esm',
+  banner: { js: '#!/usr/bin/env node' },
+  external: ['@anthropic-ai/sdk'],
+});
+
+chmodSync(join('dist', 'cli', 'init.js'), 0o755);
+
+// Copy CLI templates to dist
+const cliTemplatesSrc = join('src', 'cli', 'templates');
+const cliTemplatesDest = join('dist', 'cli', 'templates');
+if (existsSync(cliTemplatesSrc)) {
+  copyDir(cliTemplatesSrc, cliTemplatesDest);
+  console.log('CLI templates copied to dist/cli/templates/');
+}
