@@ -43,7 +43,7 @@ const addConceptSchema = z.object({
 const updateConceptSchema = z.object({
   importance: z.enum(['core', 'supporting', 'peripheral']).optional(),
   learningObjective: z.string().max(2000).optional(),
-  curate: z.boolean().optional(),
+  autoExtracted: z.boolean().optional(),
 });
 
 function parseBody<T>(schema: z.ZodType<T>, body: unknown, c: Context<Env>): T | Response {
@@ -54,22 +54,42 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown, c: Context<Env>): T |
   return result.data;
 }
 
-function getOrgId(c: Context<Env>): string | null {
-  const session = c.get('session');
-  return session?.activeOrganizationId ?? null;
-}
-
 const IMPORTANCE_THRESHOLDS: Record<string, number> = {
   core: 0.8,
   supporting: 0.6,
   peripheral: 0.4,
 };
 
+/** Verify user is a member of the active org. Returns orgId or error Response. */
+async function requireOrgMembership(c: Context<Env>): Promise<{ orgId: string } | Response> {
+  const session = c.get('session');
+  const orgId = session?.activeOrganizationId;
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const db = c.get('db');
+  const user = c.get('user')!;
+  const [membership] = await db.select({ role: member.role })
+    .from(member)
+    .where(and(eq(member.userId, user.id), eq(member.organizationId, orgId)))
+    .limit(1);
+
+  if (!membership) return c.json({ error: 'Not a member of this organization' }, 403);
+  return { orgId };
+}
+
+/** Fetch a codebase that belongs to the given org, or null. */
+async function getCodebaseForOrg(c: Context<Env>, codebaseId: string, orgId: string) {
+  const db = c.get('db');
+  const [codebase] = await db.select().from(codebases)
+    .where(and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)));
+  return codebase ?? null;
+}
+
 // --- POST / (create codebase) ---
 codebaseRoutes.post('/', requirePermission('codebases.create'), async (c) => {
   const db = c.get('db');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
 
   const raw = await c.req.json();
   const parsed = parseBody(createCodebaseSchema, raw, c);
@@ -91,203 +111,202 @@ codebaseRoutes.post('/', requirePermission('codebases.create'), async (c) => {
   return c.json(created, 201);
 });
 
-// --- GET / (list codebases for active org) ---
+// --- GET / (list codebases for active org with counts) ---
 codebaseRoutes.get('/', async (c) => {
-  const db = c.get('db');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
+  const db = c.get('db');
   const rows = await db.select().from(codebases).where(eq(codebases.orgId, orgId));
-  return c.json(rows);
+
+  // biome-ignore lint/suspicious/noExplicitAny: codebase row type from drizzle
+  const result = await Promise.all(rows.map(async (cb: any) => {
+    const conceptRows = await db.select().from(codebaseConcepts)
+      .where(eq(codebaseConcepts.codebaseId, cb.id));
+    const enrollmentRows = await db.select().from(codebaseEnrollments)
+      .where(eq(codebaseEnrollments.codebaseId, cb.id));
+    return { ...cb, conceptCount: conceptRows.length, enrollmentCount: enrollmentRows.length };
+  }));
+
+  return c.json(result);
 });
 
 // --- GET /:id (detail with concepts and enrollment count) ---
 codebaseRoutes.get('/:id', async (c) => {
-  const db = c.get('db');
-  const id = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, id), eq(codebases.orgId, orgId)),
-  );
+  const codebaseId = c.req.param('id');
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
-  const conceptRows = await db.select().from(codebaseConcepts).where(eq(codebaseConcepts.codebaseId, id));
-  const enrollmentRows = await db.select().from(codebaseEnrollments).where(eq(codebaseEnrollments.codebaseId, id));
+  const db = c.get('db');
+  const conceptRows = await db.select().from(codebaseConcepts)
+    .where(eq(codebaseConcepts.codebaseId, codebaseId));
+  const enrollmentRows = await db.select().from(codebaseEnrollments)
+    .where(eq(codebaseEnrollments.codebaseId, codebaseId));
 
   return c.json({ ...codebase, concepts: conceptRows, enrollmentCount: enrollmentRows.length });
 });
 
 // --- PUT /:id (update name/status) ---
 codebaseRoutes.put('/:id', requirePermission('codebases.edit'), async (c) => {
-  const db = c.get('db');
-  const id = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
+  const codebaseId = c.req.param('id');
 
-  const [existing] = await db.select().from(codebases).where(
-    and(eq(codebases.id, id), eq(codebases.orgId, orgId)),
-  );
-  if (!existing) return c.json({ error: 'Not found' }, 404);
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
+  if (!codebase) return c.json({ error: 'Not found' }, 404);
 
   const raw = await c.req.json();
   const parsed = parseBody(updateCodebaseSchema, raw, c);
   if (parsed instanceof Response) return parsed;
 
-  const updates: Record<string, any> = {};
-  if (parsed.name) updates.name = parsed.name;
-  if (parsed.status) updates.status = parsed.status;
+  const db = c.get('db');
+  const updates: Record<string, unknown> = {};
+  if (parsed.name !== undefined) updates.name = parsed.name;
+  if (parsed.status !== undefined) updates.status = parsed.status;
 
-  if (Object.keys(updates).length === 0) {
-    return c.json({ error: 'No fields to update' }, 400);
+  if (Object.keys(updates).length > 0) {
+    await db.update(codebases).set(updates).where(eq(codebases.id, codebaseId));
   }
 
-  await db.update(codebases).set(updates).where(eq(codebases.id, id));
-
-  const [updated] = await db.select().from(codebases).where(eq(codebases.id, id));
+  const [updated] = await db.select().from(codebases).where(eq(codebases.id, codebaseId));
   return c.json(updated);
 });
 
 // --- DELETE /:id ---
 codebaseRoutes.delete('/:id', requirePermission('codebases.delete'), async (c) => {
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
+  const codebaseId = c.req.param('id');
+
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
+  if (!codebase) return c.json({ error: 'Not found' }, 404);
+
   const db = c.get('db');
-  const id = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
-
-  const [existing] = await db.select().from(codebases).where(
-    and(eq(codebases.id, id), eq(codebases.orgId, orgId)),
-  );
-  if (!existing) return c.json({ error: 'Not found' }, 404);
-
-  await db.delete(codebases).where(eq(codebases.id, id));
+  await db.delete(codebases).where(eq(codebases.id, codebaseId));
   return c.json({ deleted: true });
 });
 
-// --- POST /:id/activate (draft → active) ---
+// --- POST /:id/activate (draft -> active) ---
 codebaseRoutes.post('/:id/activate', requirePermission('codebases.edit'), async (c) => {
-  const db = c.get('db');
-  const id = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
+  const codebaseId = c.req.param('id');
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, id), eq(codebases.orgId, orgId)),
-  );
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
-  await db.update(codebases).set({ status: 'active' }).where(eq(codebases.id, id));
-  return c.json({ id, status: 'active' });
+  const db = c.get('db');
+  await db.update(codebases).set({ status: 'active' }).where(eq(codebases.id, codebaseId));
+  return c.json({ id: codebaseId, status: 'active' });
 });
 
 // --- POST /:id/concepts (add concept) ---
 codebaseRoutes.post('/:id/concepts', requirePermission('codebases.edit'), async (c) => {
-  const db = c.get('db');
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
   const codebaseId = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)),
-  );
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Codebase not found' }, 404);
 
   const raw = await c.req.json();
   const parsed = parseBody(addConceptSchema, raw, c);
   if (parsed instanceof Response) return parsed;
 
+  const db = c.get('db');
   const [concept] = await db.select().from(concepts).where(eq(concepts.id, parsed.conceptId));
   if (!concept) return c.json({ error: 'Concept not found' }, 404);
 
   const user = c.get('user')!;
-  await db.insert(codebaseConcepts).values({
+  const [created] = await db.insert(codebaseConcepts).values({
     codebaseId,
     conceptId: parsed.conceptId,
     importance: parsed.importance,
     learningObjective: parsed.learningObjective ?? null,
     autoExtracted: false,
     curatedBy: user.id,
-  });
+  }).returning();
 
-  const [created] = await db.select().from(codebaseConcepts).where(
-    and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, parsed.conceptId)),
-  );
   return c.json(created, 201);
 });
 
-// --- PUT /:id/concepts/:conceptId (update concept) ---
+// --- PUT /:id/concepts/:conceptId (update concept metadata) ---
 codebaseRoutes.put('/:id/concepts/:conceptId', requirePermission('codebases.edit'), async (c) => {
-  const db = c.get('db');
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
   const codebaseId = c.req.param('id');
   const conceptId = c.req.param('conceptId');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
-  const [existing] = await db.select().from(codebaseConcepts).where(
-    and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)),
-  );
-  if (!existing) return c.json({ error: 'Not found' }, 404);
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
+  if (!codebase) return c.json({ error: 'Codebase not found' }, 404);
+
+  const db = c.get('db');
+  const [existing] = await db.select().from(codebaseConcepts)
+    .where(and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)));
+  if (!existing) return c.json({ error: 'Concept not found in this codebase' }, 404);
 
   const raw = await c.req.json();
   const parsed = parseBody(updateConceptSchema, raw, c);
   if (parsed instanceof Response) return parsed;
 
-  const updates: Record<string, any> = {};
-  if (parsed.importance) updates.importance = parsed.importance;
+  const user = c.get('user')!;
+  const updates: Record<string, unknown> = { curatedBy: user.id };
+  if (parsed.importance !== undefined) updates.importance = parsed.importance;
   if (parsed.learningObjective !== undefined) updates.learningObjective = parsed.learningObjective;
-  if (parsed.curate) {
-    const user = c.get('user')!;
-    updates.autoExtracted = false;
-    updates.curatedBy = user.id;
-  }
+  if (parsed.autoExtracted !== undefined) updates.autoExtracted = parsed.autoExtracted;
 
-  await db.update(codebaseConcepts).set(updates).where(
-    and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)),
-  );
+  await db.update(codebaseConcepts).set(updates)
+    .where(and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)));
 
-  const [updated] = await db.select().from(codebaseConcepts).where(
-    and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)),
-  );
+  const [updated] = await db.select().from(codebaseConcepts)
+    .where(and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)));
   return c.json(updated);
 });
 
 // --- DELETE /:id/concepts/:conceptId ---
 codebaseRoutes.delete('/:id/concepts/:conceptId', requirePermission('codebases.edit'), async (c) => {
-  const db = c.get('db');
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
   const codebaseId = c.req.param('id');
   const conceptId = c.req.param('conceptId');
 
-  const [existing] = await db.select().from(codebaseConcepts).where(
-    and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)),
-  );
-  if (!existing) return c.json({ error: 'Not found' }, 404);
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
+  if (!codebase) return c.json({ error: 'Codebase not found' }, 404);
 
-  await db.delete(codebaseConcepts).where(
-    and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)),
-  );
+  const db = c.get('db');
+  const [existing] = await db.select().from(codebaseConcepts)
+    .where(and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)));
+  if (!existing) return c.json({ error: 'Concept not found in this codebase' }, 404);
+
+  await db.delete(codebaseConcepts)
+    .where(and(eq(codebaseConcepts.codebaseId, codebaseId), eq(codebaseConcepts.conceptId, conceptId)));
   return c.json({ deleted: true });
 });
 
 // --- GET /:id/concepts (list concepts with mastery for current user) ---
 codebaseRoutes.get('/:id/concepts', async (c) => {
-  const db = c.get('db');
-  const codebaseId = c.req.param('id');
-  const user = c.get('user')!;
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)),
-  );
+  const codebaseId = c.req.param('id');
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
-  const conceptRows = await db.select().from(codebaseConcepts).where(eq(codebaseConcepts.codebaseId, codebaseId));
+  const db = c.get('db');
+  const user = c.get('user')!;
+  const conceptRows = await db.select().from(codebaseConcepts)
+    .where(eq(codebaseConcepts.codebaseId, codebaseId));
 
-  const withMastery = await Promise.all(conceptRows.map(async (cc) => {
-    const [ucs] = await db.select().from(userConceptStates).where(
-      and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, cc.conceptId)),
-    );
+  // biome-ignore lint/suspicious/noExplicitAny: codebase concept row type
+  const withMastery = await Promise.all(conceptRows.map(async (cc: any) => {
+    const [ucs] = await db.select().from(userConceptStates)
+      .where(and(eq(userConceptStates.userId, user.id), eq(userConceptStates.conceptId, cc.conceptId)));
     const mu = ucs?.mu ?? 0.0;
     const mastery = pMastery(mu);
     const threshold = IMPORTANCE_THRESHOLDS[cc.importance] ?? 0.6;
@@ -299,86 +318,73 @@ codebaseRoutes.get('/:id/concepts', async (c) => {
 
 // --- POST /:id/enroll (self-enroll, any org member) ---
 codebaseRoutes.post('/:id/enroll', async (c) => {
-  const db = c.get('db');
-  const user = c.get('user')!;
-  const codebaseId = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)),
-  );
+  const codebaseId = c.req.param('id');
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
-  // Verify org membership
-  const [membership] = await db.select({ role: member.role }).from(member).where(
-    and(eq(member.userId, user.id), eq(member.organizationId, orgId)),
-  ).limit(1);
-  if (!membership) return c.json({ error: 'Not a member of this organization' }, 403);
+  const db = c.get('db');
+  const user = c.get('user')!;
 
-  const [existing] = await db.select().from(codebaseEnrollments).where(
-    and(eq(codebaseEnrollments.codebaseId, codebaseId), eq(codebaseEnrollments.userId, user.id)),
-  );
+  const [existing] = await db.select().from(codebaseEnrollments)
+    .where(and(eq(codebaseEnrollments.codebaseId, codebaseId), eq(codebaseEnrollments.userId, user.id)));
   if (existing) return c.json({ error: 'Already enrolled' }, 409);
 
-  await db.insert(codebaseEnrollments).values({
+  const [enrollment] = await db.insert(codebaseEnrollments).values({
     codebaseId,
     userId: user.id,
-  });
+  }).returning();
 
-  const [enrollment] = await db.select().from(codebaseEnrollments).where(
-    and(eq(codebaseEnrollments.codebaseId, codebaseId), eq(codebaseEnrollments.userId, user.id)),
-  );
   return c.json(enrollment, 201);
 });
 
 // --- GET /:id/progress (own progress) ---
 codebaseRoutes.get('/:id/progress', async (c) => {
-  const db = c.get('db');
-  const user = c.get('user')!;
-  const codebaseId = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)),
-  );
+  const codebaseId = c.req.param('id');
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
+  const db = c.get('db');
+  const user = c.get('user')!;
   return c.json(await buildProgress(db, codebaseId, user.id));
 });
 
 // --- GET /:id/progress/:userId (member progress) ---
 codebaseRoutes.get('/:id/progress/:userId', requirePermission('codebases.view_progress'), async (c) => {
-  const db = c.get('db');
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
   const codebaseId = c.req.param('id');
   const userId = c.req.param('userId');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)),
-  );
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
+  const db = c.get('db');
   return c.json(await buildProgress(db, codebaseId, userId));
 });
 
 // --- GET /:id/members (enrolled members with progress summary) ---
 codebaseRoutes.get('/:id/members', requirePermission('codebases.view_progress'), async (c) => {
-  const db = c.get('db');
+  const session = c.get('session')!;
+  const orgId = session.activeOrganizationId!;
   const codebaseId = c.req.param('id');
-  const orgId = getOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
-  const [codebase] = await db.select().from(codebases).where(
-    and(eq(codebases.id, codebaseId), eq(codebases.orgId, orgId)),
-  );
+  const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
   if (!codebase) return c.json({ error: 'Not found' }, 404);
 
-  const enrollments = await db.select().from(codebaseEnrollments).where(eq(codebaseEnrollments.codebaseId, codebaseId));
+  const db = c.get('db');
+  const enrollments = await db.select().from(codebaseEnrollments)
+    .where(eq(codebaseEnrollments.codebaseId, codebaseId));
 
-  const members = await Promise.all(enrollments.map(async (e) => {
+  // biome-ignore lint/suspicious/noExplicitAny: enrollment row type
+  const members = await Promise.all(enrollments.map(async (e: any) => {
     const progress = await buildProgress(db, codebaseId, e.userId);
     return { userId: e.userId, enrolledAt: e.enrolledAt, status: e.status, completionRatio: progress.completionRatio };
   }));
@@ -388,17 +394,19 @@ codebaseRoutes.get('/:id/members', requirePermission('codebases.view_progress'),
 
 // --- Shared progress helper ---
 
+// biome-ignore lint/suspicious/noExplicitAny: db type is complex, private helper
 async function buildProgress(db: any, codebaseId: string, userId: string) {
-  const conceptRows = await db.select().from(codebaseConcepts).where(eq(codebaseConcepts.codebaseId, codebaseId));
+  const conceptRows = await db.select().from(codebaseConcepts)
+    .where(eq(codebaseConcepts.codebaseId, codebaseId));
 
   if (conceptRows.length === 0) {
     return { codebaseId, userId, concepts: [], completionRatio: 0 };
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: codebase concept row type
   const conceptProgress = await Promise.all(conceptRows.map(async (cc: any) => {
-    const [ucs] = await db.select().from(userConceptStates).where(
-      and(eq(userConceptStates.userId, userId), eq(userConceptStates.conceptId, cc.conceptId)),
-    );
+    const [ucs] = await db.select().from(userConceptStates)
+      .where(and(eq(userConceptStates.userId, userId), eq(userConceptStates.conceptId, cc.conceptId)));
     const mu = ucs?.mu ?? 0.0;
     const mastery = pMastery(mu);
     const threshold = IMPORTANCE_THRESHOLDS[cc.importance] ?? 0.6;
@@ -412,6 +420,7 @@ async function buildProgress(db: any, codebaseId: string, userId: string) {
     };
   }));
 
+  // biome-ignore lint/suspicious/noExplicitAny: progress item type
   const metCount = conceptProgress.filter((cp: any) => cp.met).length;
   const completionRatio = metCount / conceptProgress.length;
 
