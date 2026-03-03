@@ -1,4 +1,4 @@
-import { openSync, readSync, fstatSync, closeSync } from 'fs';
+import { closeSync, fstatSync, openSync, readSync } from 'fs';
 
 const TAIL_BYTES = 50 * 1024; // Read last 50KB of transcript
 
