@@ -30,7 +30,7 @@ export type Env = {
   Variables: {
     db: Database;
     auth: Auth;
-    user: { id: string; name: string; email: string; role?: string | null; banned?: boolean | null } | null;
+    user: { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; onboardingCompletedAt?: Date | null } | null;
     session: { id: string; userId: string; activeOrganizationId?: string | null } | null;
     requestId: string;
   };
@@ -269,10 +269,29 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
   });
 
   // Current user
-  app.get('/api/me', (c) => {
-    const user = c.get('user');
-    if (!user) return c.json({ error: 'Unauthorized' }, 401);
-    return c.json({ user });
+  app.get('/api/me', async (c) => {
+    const currentUser = c.get('user');
+    if (!currentUser) return c.json({ error: 'Unauthorized' }, 401);
+    const { eq } = await import('drizzle-orm');
+    const { apikey, user: userTable } = await import('./db/schema.js');
+    const [keys, userRow] = await Promise.all([
+      db.select({ id: apikey.id }).from(apikey).where(eq(apikey.userId, currentUser.id)).limit(1),
+      db.select({ onboardingCompletedAt: userTable.onboardingCompletedAt }).from(userTable).where(eq(userTable.id, currentUser.id)).limit(1),
+    ]);
+    return c.json({
+      user: { ...currentUser, onboardingCompletedAt: userRow[0]?.onboardingCompletedAt ?? null },
+      hasApiKey: keys.length > 0,
+    });
+  });
+
+  // Mark onboarding complete
+  app.post('/api/me/onboarding-complete', async (c) => {
+    const currentUser = c.get('user');
+    if (!currentUser) return c.json({ error: 'Unauthorized' }, 401);
+    const { eq } = await import('drizzle-orm');
+    const { user: userTable } = await import('./db/schema.js');
+    await db.update(userTable).set({ onboardingCompletedAt: new Date() }).where(eq(userTable.id, currentUser.id));
+    return c.json({ ok: true });
   });
 
   // Delete current user and all associated data (right-to-deletion)

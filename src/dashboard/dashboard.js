@@ -2,6 +2,7 @@
   
   var token = localStorage.getItem("entendi_token");
   var currentUser = null;
+  var userHasApiKey = false;
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -204,9 +205,312 @@
       });
   }
 
+  // --- Onboarding Wizard ---
+
+  function showOnboarding() {
+    var step = 0;
+    var prevStep = -1;
+    var pollInterval = null;
+    var overlay = h("div", { className: "wizard-overlay" });
+    var modal = h("div", { className: "wizard-modal", role: "dialog", "aria-modal": "true", "aria-label": "Onboarding wizard" });
+    var chromeBar = h("div", { className: "wizard-chrome" });
+    var stepContainer = h("div", { className: "wizard-step-container" });
+    modal.appendChild(chromeBar);
+    modal.appendChild(stepContainer);
+    overlay.appendChild(modal);
+
+    function showCopyFeedback(btn, success) {
+      var prev = btn.textContent;
+      btn.textContent = success ? "Copied" : "Failed";
+      if (success) btn.classList.add("copied");
+      setTimeout(function() { btn.textContent = prev; btn.classList.remove("copied"); }, 2000);
+    }
+
+    function copyToClipboard(text, btn) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(function() { showCopyFeedback(btn, true); })
+          .catch(function() { showCopyFeedback(btn, false); });
+      } else {
+        showCopyFeedback(btn, false);
+      }
+    }
+
+    function renderProgress() {
+      var dots = h("div", { className: "wizard-progress" });
+      for (var i = 0; i < 4; i++) {
+        var cls = "wizard-dot";
+        if (i < step) cls += " completed";
+        if (i === step) cls += " active";
+        dots.appendChild(h("div", { className: cls }));
+      }
+      return dots;
+    }
+
+    function goTo(nextStep) {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      prevStep = step;
+      step = nextStep;
+      renderStep();
+    }
+
+    function finishOnboarding() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      fetch("/api/me/onboarding-complete", { method: "POST", headers: getHeaders() })
+        .then(function(r) {
+          if (r.ok) {
+            if (currentUser) currentUser.onboardingCompletedAt = new Date().toISOString();
+            overlay.remove();
+            showDashboardContent();
+          } else {
+            showWizardError();
+          }
+        })
+        .catch(function() { showWizardError(); });
+    }
+
+    function showWizardError() {
+      var existing = modal.querySelector(".wizard-error");
+      if (existing) existing.remove();
+      modal.appendChild(h("div", { className: "wizard-error" }, [
+        h("span", null, "Could not save. "),
+        h("button", { className: "btn-link", onclick: finishOnboarding }, "Retry")
+      ]));
+    }
+
+    function renderChrome() {
+      chromeBar.textContent = "";
+      if (step > 0) {
+        chromeBar.appendChild(h("button", { className: "wizard-back", onclick: function() { goTo(step - 1); } }, "\u2190"));
+      }
+      chromeBar.appendChild(renderProgress());
+    }
+
+    function renderStepContent() {
+      var wrapper = h("div", { className: "wizard-step" });
+      if (step === 0) renderWelcome(wrapper);
+      else if (step === 1) renderInstall(wrapper);
+      else if (step === 2) renderLink(wrapper);
+      else if (step === 3) renderOrg(wrapper);
+      return wrapper;
+    }
+
+    function renderStep() {
+      var isForward = step > prevStep;
+      var isFirst = prevStep === -1;
+
+      // Update chrome (no animation)
+      renderChrome();
+
+      // Build new step content
+      var newContent = renderStepContent();
+
+      if (isFirst) {
+        // Initial render — no transition
+        stepContainer.textContent = "";
+        stepContainer.appendChild(newContent);
+        var focusTarget = modal.querySelector("button.btn-primary");
+        if (focusTarget) focusTarget.focus();
+        return;
+      }
+
+      // Animate: slide old content out, then slide new content in
+      var oldContent = stepContainer.firstChild;
+      var exitClass = isForward ? "wizard-slide-out-left" : "wizard-slide-out-right";
+      var enterClass = isForward ? "wizard-slide-in-right" : "wizard-slide-in-left";
+
+      // Capture current height for smooth transition
+      var oldHeight = stepContainer.offsetHeight;
+      stepContainer.style.height = oldHeight + "px";
+
+      if (oldContent) {
+        oldContent.classList.add(exitClass);
+        oldContent.addEventListener("animationend", function() {
+          stepContainer.textContent = "";
+          newContent.classList.add(enterClass);
+          stepContainer.appendChild(newContent);
+
+          // Animate to new height
+          var newHeight = newContent.offsetHeight;
+          stepContainer.style.height = newHeight + "px";
+
+          newContent.addEventListener("animationend", function() {
+            newContent.classList.remove(enterClass);
+            stepContainer.style.height = "";
+            var focusTarget = modal.querySelector("button.btn-primary");
+            if (focusTarget) focusTarget.focus();
+          }, { once: true });
+        }, { once: true });
+      } else {
+        newContent.classList.add(enterClass);
+        stepContainer.appendChild(newContent);
+        stepContainer.style.height = "";
+        newContent.addEventListener("animationend", function() {
+          newContent.classList.remove(enterClass);
+          var focusTarget = modal.querySelector("button.btn-primary");
+          if (focusTarget) focusTarget.focus();
+        }, { once: true });
+      }
+    }
+
+    function renderWelcome(wrapper) {
+      var bullets = h("ul", { className: "wizard-bullets" }, [
+        h("li", null, "Observes technical concepts as you work with Claude Code"),
+        h("li", null, "Asks quick comprehension checks at natural moments"),
+        h("li", null, "Builds a knowledge map of what you truly know")
+      ]);
+
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Welcome to Entendi"));
+      wrapper.appendChild(h("div", { className: "wizard-subtitle" }, "Entendi watches your AI conversations and checks what you actually understand."));
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "How it works:"));
+      wrapper.appendChild(bullets);
+      wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+        h("button", { className: "btn-primary", onclick: function() { goTo(1); } }, "Get Started")
+      ]));
+    }
+
+    function renderInstall(wrapper) {
+      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard("claude plugin install entendi", copyBtn); } }, "Copy");
+      var terminal = h("div", { className: "wizard-terminal" }, [
+        h("code", null, "$ claude plugin install entendi"),
+        copyBtn
+      ]);
+
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Install the plugin"));
+      wrapper.appendChild(terminal);
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "This installs Entendi into Claude Code. It runs locally alongside your conversations."));
+      wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+        h("button", { className: "btn-primary", onclick: function() { goTo(2); } }, "I\u2019ve Installed It"),
+        h("button", { className: "btn-link", onclick: function() { goTo(2); } }, "skip")
+      ]));
+    }
+
+    function renderLink(wrapper) {
+      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard("entendi login", copyBtn); } }, "Copy");
+      var terminal = h("div", { className: "wizard-terminal" }, [
+        h("code", null, "entendi login"),
+        copyBtn
+      ]);
+
+      var dotEl = h("span", { className: "dot waiting" });
+      var statusText = h("span", null, "Waiting for connection\u2026");
+      var connectionEl = h("div", { className: "wizard-connection" }, [dotEl, statusText]);
+
+      // Actions: show Continue only once connected, skip always available
+      var continueBtn = h("button", { className: "btn-primary", onclick: function() { goTo(3); } }, "Continue");
+      var skipBtn = h("button", { className: "btn-link", onclick: function() { goTo(3); } }, "skip for now");
+      var actionsEl = h("div", { className: "wizard-actions" }, []);
+
+      function showConnected() {
+        dotEl.className = "dot connected";
+        statusText.textContent = "Connected";
+        connectionEl.classList.add("connected");
+        // Swap actions: show Continue button, remove skip
+        actionsEl.textContent = "";
+        actionsEl.appendChild(continueBtn);
+        continueBtn.focus();
+      }
+
+      if (userHasApiKey) {
+        showConnected();
+      } else {
+        actionsEl.appendChild(skipBtn);
+        pollInterval = setInterval(function() {
+          fetch("/api/me", { headers: getHeaders() })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+              if (data && data.hasApiKey) {
+                userHasApiKey = true;
+                showConnected();
+                if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+              }
+            })
+            .catch(function() { /* poll silently — will retry next interval */ });
+        }, 5000);
+      }
+
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Link your account"));
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "Open Claude Code and type:"));
+      wrapper.appendChild(terminal);
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "This opens a browser tab to connect your Claude Code to this account."));
+      wrapper.appendChild(connectionEl);
+      wrapper.appendChild(actionsEl);
+    }
+
+    function renderOrg(wrapper) {
+      var nameInput = h("input", { type: "text", id: "wiz-org-name", placeholder: "My Team" });
+      var slugInput = h("input", { type: "text", id: "wiz-org-slug", placeholder: "my-team" });
+      var errEl = h("div", { className: "error-text" });
+
+      nameInput.addEventListener("input", function() {
+        slugInput.value = nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      });
+
+      function createOrg() {
+        var name = nameInput.value.trim();
+        var slug = slugInput.value.trim();
+        if (!name || !slug) { errEl.textContent = "Name and slug are required."; return; }
+        fetch("/api/auth/organization/create", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ name: name, slug: slug })
+        }).then(function(r) {
+            return r.json()
+              .then(function(body) { return { status: r.status, body: body }; })
+              .catch(function() { return { status: r.status, body: { message: "Server error" } }; });
+          })
+          .then(function(res) {
+            if (res.status === 200 && res.body.id) {
+              fetch("/api/auth/organization/set-active", {
+                method: "POST",
+                headers: getHeaders(),
+                body: JSON.stringify({ organizationId: res.body.id })
+              }).then(function() { finishOnboarding(); })
+                .catch(function() { finishOnboarding(); });
+            } else {
+              errEl.textContent = res.body.message || "Failed to create organization.";
+            }
+          })
+          .catch(function() { errEl.textContent = "Network error. Please try again."; });
+      }
+
+      wrapper.appendChild(h("div", { className: "wizard-title" }, "Using Entendi with a team?"));
+      wrapper.appendChild(h("div", { className: "wizard-subtitle" }, "Organizations let managers track their team\u2019s learning and identify gaps."));
+      wrapper.appendChild(h("div", { className: "wizard-form" }, [
+        h("div", { className: "form-group" }, [h("label", null, "Team name"), nameInput]),
+        h("div", { className: "form-group" }, [h("label", null, "URL slug"), slugInput]),
+        errEl
+      ]));
+      wrapper.appendChild(h("div", { className: "wizard-actions" }, [
+        h("button", { className: "btn-primary", onclick: createOrg }, "Create Organization"),
+        h("button", { className: "btn-link", onclick: finishOnboarding }, "I\u2019m using this solo")
+      ]));
+    }
+
+    // Trap focus inside the modal for keyboard accessibility
+    overlay.addEventListener("keydown", function(e) {
+      if (e.key !== "Tab") return;
+      var focusable = modal.querySelectorAll("button, input, [tabindex]:not([tabindex='-1'])");
+      if (focusable.length === 0) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+
+    renderStep();
+    document.body.appendChild(overlay);
+    // Focus first actionable element
+    var firstBtn = modal.querySelector("button.btn-primary, button.btn-link");
+    if (firstBtn) firstBtn.focus();
+  }
+
   // --- Dashboard ---
 
-  function showDashboard() {
+  function showDashboardContent() {
     document.getElementById("auth-area").textContent = "";
     document.getElementById("content").style.display = "block";
 
@@ -221,6 +525,14 @@
     initTabs();
     loadData();
     connectSSE();
+  }
+
+  function showDashboard() {
+    if (currentUser && !currentUser.onboardingCompletedAt) {
+      showOnboarding();
+    } else {
+      showDashboardContent();
+    }
   }
 
   function applyData(concepts, mastery) {
@@ -273,7 +585,7 @@
         h("div", { className: "hero-panel-title" }, title)
       ]);
       if (items.length === 0) {
-        panel.appendChild(h("div", { className: "empty-state" }, "No data yet."));
+        panel.appendChild(h("div", { className: "empty-state" }, "Your strongest and weakest concepts appear here after a few interactions."));
       } else {
         items.forEach(function(item) {
           var barFill = h("div", { className: "hero-concept-bar-fill" });
@@ -352,7 +664,7 @@
     document.getElementById("concept-count").textContent = filtered.length + " concepts";
 
     if (filtered.length === 0) {
-      container.appendChild(h("div", { className: "empty-state" }, "No concepts found."));
+      container.appendChild(h("div", { className: "empty-state" }, "Concepts appear as Entendi observes your AI conversations."));
       return;
     }
 
@@ -392,7 +704,7 @@
     var assessed = Object.keys(allMasteryMap);
     if (assessed.length === 0) {
       document.getElementById("activity-area").appendChild(
-        h("div", { className: "empty-state" }, "No assessments yet. Start using AI tools with Entendi active.")
+        h("div", { className: "empty-state" }, "Assessment trends build as you work with Claude Code.")
       );
       return;
     }
@@ -406,7 +718,7 @@
 
     if (sorted.length === 0) {
       document.getElementById("activity-area").appendChild(
-        h("div", { className: "empty-state" }, "No assessment history yet.")
+        h("div", { className: "empty-state" }, "Your comprehension checks will appear here.")
       );
       return;
     }
@@ -452,7 +764,7 @@
     area.textContent = "";
 
     if (events.length === 0) {
-      area.appendChild(h("div", { className: "empty-state" }, "No assessment history yet."));
+      area.appendChild(h("div", { className: "empty-state" }, "Your comprehension checks will appear here."));
       return;
     }
 
@@ -953,8 +1265,8 @@
     // Fetch all assessed concepts, then their history for integrity data
     var assessed = Object.keys(allMasteryMap).filter(function(id) { return allMasteryMap[id].lastAssessed; });
     if (assessed.length === 0) {
-      trendEl.appendChild(h("div", { className: "empty-state" }, "No assessments yet."));
-      dismissEl.appendChild(h("div", { className: "empty-state" }, "No data yet."));
+      trendEl.appendChild(h("div", { className: "empty-state" }, "Assessment trends build as you work with Claude Code."));
+      dismissEl.appendChild(h("div", { className: "empty-state" }, "Dismissal history will appear here."));
       return;
     }
 
@@ -1011,7 +1323,7 @@
         statsRow.appendChild(statCard((withIntegrity.length > 0 ? ((1 - flagged.length / withIntegrity.length) * 100).toFixed(0) : "0") + "%", "Clean Rate", "green"));
         trendEl.parentNode.insertBefore(statsRow, trendEl);
       } else {
-        trendEl.appendChild(h("div", { className: "empty-state" }, "No integrity data recorded yet."));
+        trendEl.appendChild(h("div", { className: "empty-state" }, "Response integrity tracking starts with your first probe."));
       }
 
       // Dismiss patterns — show flagged events table
@@ -1753,7 +2065,7 @@
         list.textContent = "";
 
         if (!members || !Array.isArray(members) || members.length === 0) {
-          list.appendChild(h("div", { className: "empty-state" }, "No members yet."));
+          list.appendChild(h("div", { className: "empty-state" }, "Invite team members to start tracking."));
           return;
         }
 
@@ -1862,7 +2174,7 @@
         area.textContent = "";
         var concepts = data.concepts || [];
         if (concepts.length === 0) {
-          area.appendChild(h("div", { className: "empty-state" }, "No concepts assessed yet."));
+          area.appendChild(h("div", { className: "empty-state" }, "Concepts will appear as team members are assessed."));
           return;
         }
 
@@ -1924,7 +2236,7 @@
       .then(function(events) {
         area.textContent = "";
         if (!events || !Array.isArray(events) || events.length === 0) {
-          area.appendChild(h("div", { className: "empty-state" }, "No assessment history yet."));
+          area.appendChild(h("div", { className: "empty-state" }, "Your comprehension checks will appear here."));
           return;
         }
 
@@ -2079,7 +2391,7 @@
         area.textContent = "";
 
         if (!rankings || !Array.isArray(rankings) || rankings.length === 0) {
-          area.appendChild(h("div", { className: "empty-state" }, "No ranking data yet."));
+          area.appendChild(h("div", { className: "empty-state" }, "Rankings appear after multiple team members are assessed."));
           return;
         }
 
@@ -2140,7 +2452,7 @@
         if (!area) return;
         area.textContent = "";
         if (!data || !data.items || data.items.length === 0) {
-          area.appendChild(h("div", { className: "empty-state" }, "No flagged responses yet."));
+          area.appendChild(h("div", { className: "empty-state" }, "No flagged responses yet. All clear."));
           return;
         }
 
@@ -2258,7 +2570,7 @@
       .then(function(data) {
         area.textContent = "";
         if (!data || !data.items || data.items.length === 0) {
-          area.appendChild(h("div", { className: "empty-state" }, "No dismissals recorded yet."));
+          area.appendChild(h("div", { className: "empty-state" }, "Dismissal history will appear here."));
           return;
         }
 
@@ -2749,6 +3061,7 @@
       .then(function(data) {
         if (data.user) {
           currentUser = data.user;
+          userHasApiKey = !!data.hasApiKey;
           return true;
         }
         return false;
@@ -2762,7 +3075,7 @@
         if (r.ok) return r.json();
         throw new Error("Unauthorized");
       })
-      .then(function(data) { currentUser = data.user; showDashboard(); })
+      .then(function(data) { currentUser = data.user; userHasApiKey = !!data.hasApiKey; showDashboard(); })
       .catch(function() {
         localStorage.removeItem("entendi_token"); token = null;
         // Try session-based auth (OAuth callback case)
