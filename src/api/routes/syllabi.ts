@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { pMastery } from '../../schemas/types.js';
 import { concepts, member, syllabi, syllabusConcepts, syllabusEnrollments, syllabusSources, userConceptStates } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 
@@ -48,8 +49,7 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown, c: Context<Env>): T |
 // --- POST / (create syllabus) ---
 syllabiRoutes.post('/', requirePermission('syllabi.create'), async (c) => {
   const db = c.get('db');
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const raw = await c.req.json();
   const parsed = parseBody(createSyllabusSchema, raw, c);
   if (parsed instanceof Response) return parsed;
@@ -71,8 +71,7 @@ syllabiRoutes.post('/', requirePermission('syllabi.create'), async (c) => {
 // --- GET / (list syllabi for active org) ---
 syllabiRoutes.get('/', async (c) => {
   const db = c.get('db');
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const rows = await db.select().from(syllabi).where(eq(syllabi.orgId, orgId));
@@ -224,8 +223,7 @@ syllabiRoutes.delete('/:id/concepts/:conceptId', requirePermission('syllabi.edit
 syllabiRoutes.post('/:id/enroll', async (c) => {
   const db = c.get('db');
   const user = c.get('user')!;
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const syllabusId = c.req.param('id');

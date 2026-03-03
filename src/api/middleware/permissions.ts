@@ -2,14 +2,14 @@ import { and, eq } from 'drizzle-orm';
 import type { Context, Next } from 'hono';
 import { member, orgRolePermissions } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 
 export function requirePermission(permission: string) {
   return async (c: Context<Env>, next: Next) => {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const session = c.get('session');
-    const orgId = session?.activeOrganizationId;
+    const orgId = await resolveOrgId(c);
     if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
     const db = c.get('db');

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { pMastery } from '../../schemas/types.js';
 import { assessmentEvents, concepts, dismissalEvents, eventAnnotations, member, organization, user, userConceptStates } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 
 /** Build a SQL fragment for `<col> IN (...)` that works with parameterized queries */
@@ -17,25 +18,6 @@ export const orgRoutes = new Hono<Env>();
 
 orgRoutes.use('*', requireAuth);
 
-/**
- * Resolve the user's org ID: prefer session.activeOrganizationId,
- * fall back to their first org membership.
- */
-async function resolveOrgId(c: Context<Env>): Promise<string | null> {
-  const session = c.get('session');
-  if (session?.activeOrganizationId) return session.activeOrganizationId;
-
-  const userId = c.get('user')?.id;
-  if (!userId) return null;
-
-  const db = c.get('db');
-  const [membership] = await db.select({ organizationId: member.organizationId })
-    .from(member)
-    .where(eq(member.userId, userId))
-    .limit(1);
-
-  return membership?.organizationId ?? null;
-}
 
 // GET /members — list org members with mastery overview
 orgRoutes.get('/members', async (c) => {

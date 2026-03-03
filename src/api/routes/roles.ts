@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { member, orgRolePermissions, orgRoles } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const roleRoutes = new Hono<Env>();
@@ -39,8 +40,7 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown, c: Context<Env>): T |
 }
 
 async function requireOwnerOrAdmin(c: Context<Env>): Promise<{ orgId: string } | Response> {
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const user = c.get('user')!;
@@ -105,8 +105,7 @@ roleRoutes.post('/', async (c) => {
 
 // --- GET / (list roles for active org) ---
 roleRoutes.get('/', async (c) => {
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const db = c.get('db');

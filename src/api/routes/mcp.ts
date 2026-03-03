@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { updateAnalyticsSnapshots } from '../../core/analytics-snapshots.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 import { propagatePrerequisiteBoost } from '../../core/prerequisite-propagation.js';
 import {decayPrior,fsrsDifficultyUpdate,fsrsStabilityAfterSuccess, grmFisherInformation, 
   grmUpdate, 
@@ -217,8 +218,7 @@ mcpRoutes.post('/observe', async (c) => {
       const [, repoOwner, repoName] = repoMatch;
       const cleanName = repoName.replace(/\.git$/, '');
       // Look up codebase by repo owner/name within user's org
-      const session = c.get('session');
-      const orgId = session?.activeOrganizationId;
+      const orgId = await resolveOrgId(c);
       if (orgId) {
         const [codebase] = await db.select({ id: codebases.id }).from(codebases)
           .where(and(

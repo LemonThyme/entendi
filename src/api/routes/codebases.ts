@@ -15,6 +15,7 @@ import {
 import type { Env } from '../index.js';
 import { GitHubClient } from '../lib/github.js';
 import { extractCodebaseConcepts } from '../lib/codebase-extraction.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 
@@ -65,8 +66,7 @@ const IMPORTANCE_THRESHOLDS: Record<string, number> = {
 
 /** Verify user is a member of the active org. Returns orgId or error Response. */
 async function requireOrgMembership(c: Context<Env>): Promise<{ orgId: string } | Response> {
-  const session = c.get('session');
-  const orgId = session?.activeOrganizationId;
+  const orgId = await resolveOrgId(c);
   if (!orgId) return c.json({ error: 'No active organization' }, 400);
 
   const db = c.get('db');
@@ -91,8 +91,7 @@ async function getCodebaseForOrg(c: Context<Env>, codebaseId: string, orgId: str
 // --- POST / (create codebase) ---
 codebaseRoutes.post('/', requirePermission('codebases.create'), async (c) => {
   const db = c.get('db');
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
 
   const raw = await c.req.json();
   const parsed = parseBody(createCodebaseSchema, raw, c);
@@ -156,8 +155,7 @@ codebaseRoutes.get('/:id', async (c) => {
 
 // --- PUT /:id (update name/status) ---
 codebaseRoutes.put('/:id', requirePermission('codebases.edit'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
 
   const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
@@ -182,8 +180,7 @@ codebaseRoutes.put('/:id', requirePermission('codebases.edit'), async (c) => {
 
 // --- DELETE /:id ---
 codebaseRoutes.delete('/:id', requirePermission('codebases.delete'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
 
   const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
@@ -196,8 +193,7 @@ codebaseRoutes.delete('/:id', requirePermission('codebases.delete'), async (c) =
 
 // --- POST /:id/activate (draft -> active) ---
 codebaseRoutes.post('/:id/activate', requirePermission('codebases.edit'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
 
   const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
@@ -210,8 +206,7 @@ codebaseRoutes.post('/:id/activate', requirePermission('codebases.edit'), async 
 
 // --- POST /:id/concepts (add concept) ---
 codebaseRoutes.post('/:id/concepts', requirePermission('codebases.edit'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
 
   const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
@@ -240,8 +235,7 @@ codebaseRoutes.post('/:id/concepts', requirePermission('codebases.edit'), async 
 
 // --- PUT /:id/concepts/:conceptId (update concept metadata) ---
 codebaseRoutes.put('/:id/concepts/:conceptId', requirePermission('codebases.edit'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
   const conceptId = c.req.param('conceptId');
 
@@ -273,8 +267,7 @@ codebaseRoutes.put('/:id/concepts/:conceptId', requirePermission('codebases.edit
 
 // --- DELETE /:id/concepts/:conceptId ---
 codebaseRoutes.delete('/:id/concepts/:conceptId', requirePermission('codebases.edit'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
   const conceptId = c.req.param('conceptId');
 
@@ -361,8 +354,7 @@ codebaseRoutes.get('/:id/progress', async (c) => {
 
 // --- GET /:id/progress/:userId (member progress) ---
 codebaseRoutes.get('/:id/progress/:userId', requirePermission('codebases.view_progress'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
   const userId = c.req.param('userId');
 
@@ -375,8 +367,7 @@ codebaseRoutes.get('/:id/progress/:userId', requirePermission('codebases.view_pr
 
 // --- GET /:id/members (enrolled members with progress summary) ---
 codebaseRoutes.get('/:id/members', requirePermission('codebases.view_progress'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
 
   const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
@@ -397,8 +388,7 @@ codebaseRoutes.get('/:id/members', requirePermission('codebases.view_progress'),
 
 // --- POST /:id/extract (trigger concept extraction) ---
 codebaseRoutes.post('/:id/extract', requirePermission('codebases.edit'), async (c) => {
-  const session = c.get('session')!;
-  const orgId = session.activeOrganizationId!;
+  const orgId = (await resolveOrgId(c))!;
   const codebaseId = c.req.param('id');
 
   const codebase = await getCodebaseForOrg(c, codebaseId, orgId);
