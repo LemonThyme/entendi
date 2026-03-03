@@ -721,3 +721,102 @@ body {
   color: var(--red);
   border: 1px solid var(--red);
 }
+
+/* --- Onboarding wizard --- */
+.wizard-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+}
+.wizard-modal {
+  max-width: 480px; width: 100%;
+  background: var(--bg-card); border-radius: 12px;
+  padding: 2rem; position: relative;
+}
+.wizard-progress { display: flex; gap: 8px; justify-content: center; margin-bottom: 1.5rem; }
+.wizard-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: background 0.2s;
+}
+.wizard-dot.active { background: var(--accent); }
+.wizard-dot.completed { background: var(--accent); }
+.wizard-back {
+  position: absolute; top: 1.5rem; left: 1.5rem;
+  background: none; border: none; color: var(--text-tertiary);
+  cursor: pointer; font-size: 1.1rem;
+}
+.wizard-back:hover { color: var(--text); }
+.wizard-step { min-height: 280px; }
+.wizard-title {
+  font-family: var(--font-display); font-size: 1.5rem; font-weight: 600;
+  margin-bottom: 0.75rem; text-align: center;
+}
+.wizard-subtitle {
+  font-size: 0.9rem; color: var(--text-secondary);
+  text-align: center; margin-bottom: 1.5rem; line-height: 1.5;
+}
+.wizard-bullets { list-style: none; padding: 0; margin-bottom: 1.5rem; }
+.wizard-bullets li {
+  font-size: 0.9rem; color: var(--text-secondary);
+  padding: 0.4rem 0; padding-left: 1.5rem;
+  position: relative; line-height: 1.4;
+}
+.wizard-bullets li::before {
+  content: "\2192"; position: absolute; left: 0; color: var(--accent);
+}
+.wizard-terminal {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.75rem 1rem; display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 1rem;
+}
+.wizard-terminal code {
+  font-family: var(--mono); font-size: 0.85rem; color: var(--text);
+}
+.wizard-terminal .copy-btn {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--text-secondary);
+  cursor: pointer; white-space: nowrap;
+}
+.wizard-terminal .copy-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.wizard-terminal .copy-btn.copied { color: var(--green); border-color: var(--green); }
+.wizard-connection {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 1rem;
+}
+.wizard-connection .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary);
+}
+.wizard-connection .dot.waiting { animation: pulse 1.5s ease-in-out infinite; }
+.wizard-connection .dot.connected { background: var(--green); animation: none; }
+.wizard-connection.connected { color: var(--green); }
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.wizard-step-enter { animation: wizardIn 0.2s ease-out; }
+.wizard-step-exit { animation: wizardOut 0.15s ease-in; }
+@keyframes wizardIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes wizardOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-20px); }
+}
+@keyframes wizardInReverse {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes wizardOutReverse {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(20px); }
+}
+.wizard-actions {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem; margin-top: 1.5rem;
+}
+.wizard-actions .btn-primary { width: 100%; }
+.wizard-help {
+  font-size: 0.85rem; color: var(--text-secondary);
+  margin-bottom: 1rem; line-height: 1.5;
+}
