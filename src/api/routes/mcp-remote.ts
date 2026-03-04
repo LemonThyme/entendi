@@ -1,7 +1,12 @@
+import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
+
+import { getFrontierViewHtml } from '../../mcp/views/frontier.js';
+import { getProbeViewHtml } from '../../mcp/views/probe.js';
+import { getStatusViewHtml } from '../../mcp/views/status.js';
 import type { Env } from '../index.js';
 
 /**
@@ -54,6 +59,28 @@ function registerTools(
   app: Hono<Env>,
   authHeaders: Record<string, string>,
 ) {
+  // --- App resources (UI views) ---
+  registerAppResource(server, 'Entendi Status Dashboard', 'ui://entendi/status',
+    { description: 'Interactive mastery dashboard' },
+    async () => ({
+      contents: [{ uri: 'ui://entendi/status', mimeType: RESOURCE_MIME_TYPE, text: getStatusViewHtml() }],
+    }),
+  );
+
+  registerAppResource(server, 'Entendi ZPD Frontier', 'ui://entendi/frontier',
+    { description: 'Zone of Proximal Development learning recommendations' },
+    async () => ({
+      contents: [{ uri: 'ui://entendi/frontier', mimeType: RESOURCE_MIME_TYPE, text: getFrontierViewHtml() }],
+    }),
+  );
+
+  registerAppResource(server, 'Entendi Probe', 'ui://entendi/probe',
+    { description: 'Interactive comprehension probe' },
+    async () => ({
+      contents: [{ uri: 'ui://entendi/probe', mimeType: RESOURCE_MIME_TYPE, text: getProbeViewHtml() }],
+    }),
+  );
+
   // --- entendi_health_check (no auth required) ---
   server.tool(
     'entendi_health_check',
@@ -65,11 +92,15 @@ function registerTools(
     },
   );
 
-  // --- entendi_get_status ---
-  server.tool(
+  // --- entendi_get_status (App tool — renders status UI) ---
+  registerAppTool(
+    server,
     'entendi_get_status',
-    'Query mastery state for a specific concept or get an overview of all concepts.',
-    { conceptId: z.string().optional() },
+    {
+      description: 'Query mastery state for a specific concept or get an overview of all concepts.',
+      inputSchema: { conceptId: z.string().optional() },
+      _meta: { ui: { resourceUri: 'ui://entendi/status' } },
+    },
     async (args) => {
       const path = args.conceptId
         ? `/api/mcp/status?conceptId=${encodeURIComponent(args.conceptId)}`
@@ -79,20 +110,34 @@ function registerTools(
     },
   );
 
-  // --- entendi_observe ---
-  server.tool(
+  // --- entendi_observe (App tool — renders probe UI) ---
+  registerAppTool(
+    server,
     'entendi_observe',
-    'Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.',
     {
-      concepts: z.array(z.object({
-        id: z.string(),
-        source: z.enum(['package', 'ast', 'llm']),
-      })),
-      triggerContext: z.string(),
-      primaryConceptId: z.string().optional(),
-      repoUrl: z.string().url().optional(),
+      description: 'Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.',
+      inputSchema: {
+        concepts: z.preprocess(
+          (v) => {
+            if (v === undefined || v === null) return [];
+            if (typeof v === 'string') try { return JSON.parse(v); } catch { return []; }
+            return v;
+          },
+          z.array(z.object({
+            id: z.string(),
+            source: z.enum(['package', 'ast', 'llm']).default('llm'),
+          })).default([]),
+        ),
+        triggerContext: z.string().default('(not provided)'),
+        primaryConceptId: z.string().optional(),
+        repoUrl: z.string().url().optional(),
+      },
+      _meta: { ui: { resourceUri: 'ui://entendi/probe' } },
     },
     async (args) => {
+      if (!args.concepts || args.concepts.length === 0) {
+        return toolResult({ shouldProbe: false, conceptsObserved: 0 });
+      }
       const { status, json } = await internalFetch(app, 'POST', '/api/mcp/observe', authHeaders, {
         concepts: args.concepts,
         triggerContext: args.triggerContext,
@@ -180,14 +225,18 @@ function registerTools(
     },
   );
 
-  // --- entendi_get_zpd_frontier ---
-  server.tool(
+  // --- entendi_get_zpd_frontier (App tool — renders frontier UI) ---
+  registerAppTool(
+    server,
     'entendi_get_zpd_frontier',
-    'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
     {
-      limit: z.number().int().min(1).max(100).optional(),
-      domain: z.string().optional(),
-      includeUnassessed: z.boolean().optional(),
+      description: 'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional(),
+        domain: z.string().optional(),
+        includeUnassessed: z.boolean().optional(),
+      },
+      _meta: { ui: { resourceUri: 'ui://entendi/frontier' } },
     },
     async (args) => {
       const params = new URLSearchParams();
@@ -224,7 +273,7 @@ export function createMcpRemoteRoutes(parentApp: Hono<Env>): Hono<Env> {
 
     const server = new McpServer({
       name: 'entendi',
-      version: '0.3.0',
+      version: '0.4.1',
     });
 
     registerTools(server, parentApp, authHeaders);
