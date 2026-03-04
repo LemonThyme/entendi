@@ -1101,12 +1101,12 @@ mcpRoutes.get('/status', async (c) => {
     }))
     .sort((a, b) => b.mu - a.mu);
 
+  const assessed = mastered + inProgress;
   return c.json({
     overview: {
-      totalConcepts: allConcepts.length,
+      totalConcepts: assessed,
       mastered,
       inProgress,
-      unknown: allConcepts.length - mastered - inProgress,
       recentActivity: recentActivity.slice(0, 5),
     },
     concepts: conceptsList,
