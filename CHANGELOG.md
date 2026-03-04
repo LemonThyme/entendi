@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/LemonThyme/entendi/compare/entendi-v0.4.1...entendi-v0.5.0) (2026-03-04)
+
+
+### Features
+
+* **mcp:** migrate remote MCP endpoint to ext-apps SDK ([#118](https://github.com/LemonThyme/entendi/issues/118)) ([e352e3d](https://github.com/LemonThyme/entendi/commit/e352e3d8bfc319baa6d364ceda43316a3c1810e1))
+
 ## [0.4.1](https://github.com/LemonThyme/entendi/compare/entendi-v0.4.0...entendi-v0.4.1) (2026-03-04)
 
 
