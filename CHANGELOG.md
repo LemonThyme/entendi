@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/LemonThyme/entendi/compare/entendi-v0.3.0...entendi-v0.3.1) (2026-03-04)
+
+
+### Bug Fixes
+
+* **plugin:** sync marketplace version and add to release-please ([94cdfc6](https://github.com/LemonThyme/entendi/commit/94cdfc6bfdc18cf73b78afdd48b2e0c737b1a6bf))
+* **plugin:** sync marketplace version to 0.3.0 and add to release-please ([9ca960c](https://github.com/LemonThyme/entendi/commit/9ca960cfa861a3de2e92661e4bc784394b12f819))
+
 ## [0.3.0](https://github.com/LemonThyme/entendi/compare/entendi-v0.2.0...entendi-v0.3.0) (2026-03-04)
 
 
