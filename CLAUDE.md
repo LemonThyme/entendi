@@ -51,6 +51,33 @@ npm test                  # Run tests
 npx wrangler deploy       # Deploy to Cloudflare Workers
 ```
 
+## Cursor Support
+
+Entendi works as an MCP App in Cursor 2.6+, rendering interactive views inline in chat.
+
+### Setup
+
+Add to `.cursor/mcp.json` (project-level) or `~/.cursor/mcp.json` (global):
+
+```json
+{
+  "mcpServers": {
+    "entendi": {
+      "command": "node",
+      "args": ["<path-to>/plugin/mcp/server.js"]
+    }
+  }
+}
+```
+
+### Views
+
+- **Status Dashboard** — mastery overview with concept bars and progress ring
+- **ZPD Frontier** — learning recommendations with "Start Learning" buttons
+- **Probe UI** — interactive comprehension probes with answer input
+
+Views render automatically when the corresponding tools are called. Hosts without MCP Apps support get text-only fallback.
+
 ## Architecture
 
 ```
