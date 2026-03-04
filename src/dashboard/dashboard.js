@@ -4,6 +4,9 @@
   var currentUser = null;
   var userHasApiKey = false;
   var pendingInvitations = [];
+  var userOrgs = [];
+  var activeOrg = null;
+  var activeOrgId = null;
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -237,6 +240,7 @@
                 currentUser = me.user;
                 userHasApiKey = !!me.hasApiKey;
                 pendingInvitations = me.pendingInvitations || [];
+                activeOrgId = me.activeOrganizationId || null;
               } else {
                 currentUser = data.user;
               }
@@ -705,18 +709,164 @@
     document.getElementById("auth-area").textContent = "";
     document.getElementById("content").style.display = "block";
 
-    var bar = document.getElementById("user-bar");
-    bar.textContent = "";
-    var userBar = h("div", { className: "user-bar" }, [
-      h("span", null, currentUser ? (currentUser.name || currentUser.email) : "User"),
-      h("button", { onclick: function() { fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", credentials: "include" }).finally(function() { localStorage.removeItem("entendi_token"); token = null; cacheClear(); location.reload(); }); } }, "Sign out")
-    ]);
-    bar.appendChild(userBar);
-
+    renderUserBar();
     initTabs();
     loadFeatureFlags();
     loadData();
     connectSSE();
+  }
+
+  function renderUserBar() {
+    var bar = document.getElementById("user-bar");
+    bar.textContent = "";
+
+    var leftItems = [
+      h("span", null, currentUser ? (currentUser.name || currentUser.email) : "User")
+    ];
+
+    // Org switcher — only show if user has multiple orgs
+    if (userOrgs.length > 1) {
+      leftItems.push(renderOrgSwitcher());
+    } else if (activeOrg) {
+      leftItems.push(h("span", { className: "org-label" }, activeOrg.name));
+    }
+
+    var userBar = h("div", { className: "user-bar" }, [
+      h("div", { className: "user-bar-left" }, leftItems),
+      h("button", { onclick: function() { fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", credentials: "include" }).finally(function() { localStorage.removeItem("entendi_token"); token = null; cacheClear(); location.reload(); }); } }, "Sign out")
+    ]);
+    bar.appendChild(userBar);
+  }
+
+  function renderOrgSwitcher() {
+    var container = h("div", { className: "org-switcher" });
+    var currentName = activeOrg ? activeOrg.name : "Select org";
+    var toggle = h("button", { className: "org-switcher-toggle", "aria-haspopup": "listbox", "aria-expanded": "false" }, [
+      h("span", null, currentName),
+      h("span", { className: "org-switcher-arrow" }, "\u25BE")
+    ]);
+    var dropdown = h("div", { className: "org-switcher-dropdown", role: "listbox" });
+
+    for (var i = 0; i < userOrgs.length; i++) {
+      (function(org) {
+        var isActive = activeOrg && activeOrg.id === org.id;
+        var item = h("button", {
+          className: "org-switcher-item" + (isActive ? " active" : ""),
+          role: "option",
+          "aria-selected": isActive ? "true" : "false",
+          onclick: function() {
+            if (isActive) {
+              container.classList.remove("open");
+              toggle.setAttribute("aria-expanded", "false");
+              return;
+            }
+            switchOrg(org.id);
+          }
+        }, org.name);
+        dropdown.appendChild(item);
+      })(userOrgs[i]);
+    }
+
+    toggle.onclick = function(e) {
+      e.stopPropagation();
+      var isOpen = container.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    };
+
+    // Close on outside click
+    document.addEventListener("click", function(e) {
+      if (!container.contains(e.target)) {
+        container.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    });
+
+    container.appendChild(toggle);
+    container.appendChild(dropdown);
+    return container;
+  }
+
+  function switchOrg(orgId) {
+    fetch("/api/auth/organization/set-active", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ organizationId: orgId })
+    })
+      .then(function(r) {
+        if (r.ok) {
+          activeOrg = null;
+          for (var i = 0; i < userOrgs.length; i++) {
+            if (userOrgs[i].id === orgId) { activeOrg = userOrgs[i]; break; }
+          }
+          cacheClear();
+          renderUserBar();
+          loadFeatureFlags();
+          loadData();
+          // Re-render active tab
+          var activeTab = document.querySelector(".tab-btn.active");
+          if (activeTab) switchTab(activeTab);
+        }
+      });
+  }
+
+  function fetchUserOrgs() {
+    return fetch("/api/auth/organization/list", { headers: getHeaders() })
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(orgs) {
+        userOrgs = Array.isArray(orgs) ? orgs : [];
+        activeOrg = null;
+        if (userOrgs.length === 1) {
+          activeOrg = userOrgs[0];
+        } else if (userOrgs.length > 1 && activeOrgId) {
+          for (var i = 0; i < userOrgs.length; i++) {
+            if (userOrgs[i].id === activeOrgId) { activeOrg = userOrgs[i]; break; }
+          }
+        }
+        return userOrgs;
+      })
+      .catch(function() { userOrgs = []; return []; });
+  }
+
+  function showOrgPicker() {
+    var overlay = h("div", { className: "wizard-overlay" });
+    var modal = h("div", { className: "wizard-modal", role: "dialog", "aria-modal": "true", "aria-label": "Select organization" });
+    var content = h("div", { className: "wizard-step" });
+
+    content.appendChild(h("div", { className: "wizard-title" }, "Select Organization"));
+    content.appendChild(h("div", { className: "wizard-subtitle" }, "You belong to multiple organizations. Choose which one to work in."));
+
+    var list = h("div", { className: "org-picker-list" });
+    for (var i = 0; i < userOrgs.length; i++) {
+      (function(org) {
+        var btn = h("button", { className: "org-picker-item", onclick: function() {
+          btn.disabled = true;
+          btn.textContent = "Switching\u2026";
+          fetch("/api/auth/organization/set-active", {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify({ organizationId: org.id })
+          }).then(function(r) {
+            if (r.ok) {
+              activeOrg = org;
+              overlay.remove();
+              showDashboardContent();
+            } else {
+              btn.disabled = false;
+              btn.textContent = org.name;
+            }
+          }).catch(function() {
+            btn.disabled = false;
+            btn.textContent = org.name;
+          });
+        } }, org.name);
+        list.appendChild(btn);
+      })(userOrgs[i]);
+    }
+
+    content.appendChild(list);
+    modal.appendChild(content);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
   }
 
   function loadFeatureFlags() {
@@ -734,9 +884,17 @@
   function showDashboard() {
     if (currentUser && !currentUser.onboardingCompletedAt) {
       showOnboarding();
-    } else {
-      showDashboardContent();
+      return;
     }
+    // Fetch orgs before showing dashboard — needed for switcher and org picker
+    fetchUserOrgs().then(function() {
+      if (userOrgs.length > 1 && !activeOrg) {
+        // Multi-org user with no active org — show picker
+        showOrgPicker();
+      } else {
+        showDashboardContent();
+      }
+    });
   }
 
   function applyData(concepts, mastery) {
@@ -4287,6 +4445,7 @@
           currentUser = data.user;
           userHasApiKey = !!data.hasApiKey;
           pendingInvitations = data.pendingInvitations || [];
+          activeOrgId = data.activeOrganizationId || null;
           return true;
         }
         return false;
@@ -4300,7 +4459,7 @@
         if (r.ok) return r.json();
         throw new Error("Unauthorized");
       })
-      .then(function(data) { currentUser = data.user; userHasApiKey = !!data.hasApiKey; pendingInvitations = data.pendingInvitations || []; showDashboard(); })
+      .then(function(data) { currentUser = data.user; userHasApiKey = !!data.hasApiKey; pendingInvitations = data.pendingInvitations || []; activeOrgId = data.activeOrganizationId || null; showDashboard(); })
       .catch(function() {
         localStorage.removeItem("entendi_token"); token = null;
         // Try session-based auth (OAuth callback case)

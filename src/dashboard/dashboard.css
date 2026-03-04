@@ -92,6 +92,46 @@ body {
   font-size: 0.8rem;
 }
 .user-bar button:hover { color: var(--text); }
+.user-bar-left { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Org switcher */
+.org-label {
+  color: var(--text-tertiary); font-size: 0.75rem;
+  padding: 0.15rem 0.5rem; background: var(--bg-card); border-radius: 4px;
+}
+.org-switcher { position: relative; }
+.org-switcher-toggle {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.2rem 0.5rem; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: var(--text-secondary);
+  font-family: inherit; transition: border-color 0.15s;
+}
+.org-switcher-toggle:hover { border-color: var(--accent); color: var(--text); }
+.org-switcher-arrow { font-size: 0.65rem; opacity: 0.6; transition: transform 0.15s; }
+.org-switcher.open .org-switcher-arrow { transform: rotate(180deg); }
+.org-switcher-dropdown {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 180px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08); z-index: 100; overflow: hidden;
+}
+.org-switcher.open .org-switcher-dropdown { display: block; }
+.org-switcher-item {
+  display: block; width: 100%; text-align: left; padding: 0.5rem 0.75rem;
+  background: none; border: none; font-size: 0.8rem; color: var(--text-secondary);
+  cursor: pointer; font-family: inherit;
+}
+.org-switcher-item:hover { background: var(--bg); color: var(--text); }
+.org-switcher-item.active { color: var(--accent); font-weight: 500; }
+
+/* Org picker (multi-org, no active org) */
+.org-picker-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
+.org-picker-item {
+  padding: 0.75rem 1rem; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 0.9rem; color: var(--text); cursor: pointer;
+  font-family: inherit; text-align: left; transition: border-color 0.15s;
+}
+.org-picker-item:hover { border-color: var(--accent); }
+.org-picker-item:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Tabs */
 .tabs {
