@@ -30515,6 +30515,829 @@ var EntendiApiClient = class {
   }
 };
 
+// src/mcp/views/runtime.ts
+function getViewRuntime() {
+  return `
+(function() {
+  'use strict';
+
+  var pending = {};
+  var nextId = 1;
+  var hostContext = {};
+  var toolResultHandlers = [];
+  var readyCallback = null;
+
+  function sendRpc(method, params) {
+    var id = nextId++;
+    var msg = { jsonrpc: '2.0', id: id, method: method, params: params || {} };
+    window.parent.postMessage(msg, '*');
+    return new Promise(function(resolve, reject) {
+      pending[id] = { resolve: resolve, reject: reject };
+    });
+  }
+
+  function sendNotification(method, params) {
+    var msg = { jsonrpc: '2.0', method: method, params: params || {} };
+    window.parent.postMessage(msg, '*');
+  }
+
+  function applyTheme(theme) {
+    if (!theme) return;
+    var root = document.documentElement.style;
+    var map = {
+      'background-primary': '--color-background-primary',
+      'background-secondary': '--color-background-secondary',
+      'text-primary': '--color-text-primary',
+      'text-secondary': '--color-text-secondary',
+      'accent': '--color-accent',
+      'border': '--color-border'
+    };
+    for (var key in map) {
+      if (theme[key]) {
+        root.setProperty(map[key], theme[key]);
+      }
+    }
+  }
+
+  window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data || !data.jsonrpc) return;
+
+    // Response to our request
+    if (data.id && pending[data.id]) {
+      var p = pending[data.id];
+      delete pending[data.id];
+      if (data.error) {
+        p.reject(new Error(data.error.message || 'RPC error'));
+      } else {
+        p.resolve(data.result);
+      }
+      return;
+    }
+
+    // Notifications from host
+    if (data.method === 'ui/notifications/tool-result') {
+      for (var i = 0; i < toolResultHandlers.length; i++) {
+        toolResultHandlers[i](data.params);
+      }
+    } else if (data.method === 'ui/notifications/tool-input') {
+      for (var j = 0; j < toolResultHandlers.length; j++) {
+        toolResultHandlers[j](data.params);
+      }
+    } else if (data.method === 'ui/notifications/host-context-changed') {
+      hostContext = data.params || {};
+      applyTheme(hostContext.theme);
+    }
+  });
+
+  // Auto-resize observer with 50ms debounce
+  var resizeTimer = null;
+  var observer = new ResizeObserver(function(entries) {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      var el = document.documentElement;
+      sendNotification('ui/notifications/size-changed', {
+        width: el.scrollWidth,
+        height: el.scrollHeight
+      });
+    }, 50);
+  });
+  observer.observe(document.documentElement);
+
+  window.EntendiApp = {
+    init: function(name, onReady) {
+      readyCallback = onReady;
+      sendRpc('ui/initialize', {
+        protocolVersion: '2026-01-26',
+        appName: name
+      }).then(function(result) {
+        if (result && result.hostContext) {
+          hostContext = result.hostContext;
+          applyTheme(hostContext.theme);
+        }
+        if (readyCallback) readyCallback(result);
+      });
+    },
+    callTool: function(name, args) {
+      return sendRpc('tools/call', { name: name, arguments: args || {} });
+    },
+    onToolResult: function(fn) {
+      toolResultHandlers.push(fn);
+    },
+    getHostContext: function() {
+      return hostContext;
+    },
+    openLink: function(url) {
+      sendNotification('ui/notifications/open-link', { url: url });
+    },
+    sendNotification: sendNotification
+  };
+})();
+`;
+}
+
+// src/mcp/views/status.ts
+function getStatusViewHtml() {
+  const runtime = getViewRuntime();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entendi Status</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --color-background-primary: light-dark(#F6F4F1, #1a1917);
+    --color-background-secondary: light-dark(#EDEAE6, #252320);
+    --color-text-primary: light-dark(#2D2A26, #E8E5E1);
+    --color-text-secondary: light-dark(#6B6560, #9B9590);
+    --color-accent: light-dark(#C4704B, #D4845F);
+    --color-border: light-dark(#D9D4CF, #3A3733);
+    --color-green: light-dark(#4A9E6B, #5DB87E);
+    --color-orange: light-dark(#C4704B, #D4845F);
+    --color-red: light-dark(#C44B4B, #D46060);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    padding: 16px;
+    line-height: 1.5;
+  }
+  .header { text-align: center; margin-bottom: 16px; }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header p { font-size: 13px; color: var(--color-text-secondary); }
+  #overall-mastery { display: flex; justify-content: center; margin-bottom: 16px; }
+  .ring-label { font-size: 24px; font-weight: 700; }
+  .stats-row {
+    display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;
+  }
+  .stat-card {
+    background: var(--color-background-secondary);
+    border-radius: 8px; padding: 8px 16px; text-align: center;
+    border: 1px solid var(--color-border);
+  }
+  .stat-card .count { font-size: 20px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; }
+  #concept-list { display: flex; flex-direction: column; gap: 8px; }
+  .concept-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--color-background-secondary);
+    border-radius: 8px; padding: 10px 12px;
+    border: 1px solid var(--color-border);
+  }
+  .concept-name { flex: 1; font-size: 14px; font-weight: 500; }
+  .mastery-bar-bg {
+    width: 80px; height: 6px; border-radius: 3px;
+    background: var(--color-border);
+  }
+  .mastery-bar-fill { height: 100%; border-radius: 3px; }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Mastery Status</h1>
+  <p>Your comprehension overview</p>
+</div>
+<div id="overall-mastery"></div>
+<div class="stats-row" id="stats-row"></div>
+<div id="concept-list"><div class="loading">Loading...</div></div>
+
+<script>
+${runtime}
+
+(function() {
+  'use strict';
+
+  function pMastery(mu) {
+    return 1 / (1 + Math.exp(-mu / 0.5));
+  }
+
+  function masteryColor(pct) {
+    if (pct >= 70) return 'var(--color-green)';
+    if (pct >= 40) return 'var(--color-orange)';
+    return 'var(--color-red)';
+  }
+
+  function badgeText(pct) {
+    if (pct >= 70) return 'Strong';
+    if (pct >= 40) return 'Growing';
+    return 'Weak';
+  }
+
+  function renderRing(container, pct) {
+    var size = 100;
+    var stroke = 8;
+    var radius = (size - stroke) / 2;
+    var circumference = 2 * Math.PI * radius;
+    var offset = circumference * (1 - pct / 100);
+
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+
+    var bgCircle = document.createElementNS(ns, 'circle');
+    bgCircle.setAttribute('cx', String(size / 2));
+    bgCircle.setAttribute('cy', String(size / 2));
+    bgCircle.setAttribute('r', String(radius));
+    bgCircle.setAttribute('fill', 'none');
+    bgCircle.setAttribute('stroke', 'var(--color-border)');
+    bgCircle.setAttribute('stroke-width', String(stroke));
+    svg.appendChild(bgCircle);
+
+    var fgCircle = document.createElementNS(ns, 'circle');
+    fgCircle.setAttribute('cx', String(size / 2));
+    fgCircle.setAttribute('cy', String(size / 2));
+    fgCircle.setAttribute('r', String(radius));
+    fgCircle.setAttribute('fill', 'none');
+    fgCircle.setAttribute('stroke', masteryColor(pct));
+    fgCircle.setAttribute('stroke-width', String(stroke));
+    fgCircle.setAttribute('stroke-dasharray', String(circumference));
+    fgCircle.setAttribute('stroke-dashoffset', String(offset));
+    fgCircle.setAttribute('stroke-linecap', 'round');
+    fgCircle.setAttribute('transform', 'rotate(-90 ' + size / 2 + ' ' + size / 2 + ')');
+    svg.appendChild(fgCircle);
+
+    var text = document.createElementNS(ns, 'text');
+    text.setAttribute('x', '50%');
+    text.setAttribute('y', '50%');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('fill', 'var(--color-text-primary)');
+    text.setAttribute('font-size', '24');
+    text.setAttribute('font-weight', '700');
+    text.textContent = Math.round(pct) + '%';
+    svg.appendChild(text);
+
+    container.appendChild(svg);
+  }
+
+  function renderStats(container, strong, growing, weak) {
+    var items = [
+      { count: strong, label: 'Strong', color: 'var(--color-green)' },
+      { count: growing, label: 'Growing', color: 'var(--color-orange)' },
+      { count: weak, label: 'Weak', color: 'var(--color-red)' }
+    ];
+    items.forEach(function(item) {
+      var card = document.createElement('div');
+      card.setAttribute('class', 'stat-card');
+      var countEl = document.createElement('div');
+      countEl.setAttribute('class', 'count');
+      countEl.setAttribute('style', 'color: ' + item.color);
+      countEl.textContent = String(item.count);
+      var labelEl = document.createElement('div');
+      labelEl.setAttribute('class', 'label');
+      labelEl.textContent = item.label;
+      card.appendChild(countEl);
+      card.appendChild(labelEl);
+      container.appendChild(card);
+    });
+  }
+
+  function renderConcepts(container, concepts) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    if (!concepts || concepts.length === 0) {
+      var empty = document.createElement('div');
+      empty.setAttribute('class', 'loading');
+      empty.textContent = 'No concepts tracked yet';
+      container.appendChild(empty);
+      return;
+    }
+    concepts.forEach(function(c) {
+      var pct = Math.round(pMastery(c.mu || 0) * 100);
+      var row = document.createElement('div');
+      row.setAttribute('class', 'concept-row');
+
+      var name = document.createElement('span');
+      name.setAttribute('class', 'concept-name');
+      name.textContent = c.name || c.conceptId || 'Unknown';
+      row.appendChild(name);
+
+      var barBg = document.createElement('div');
+      barBg.setAttribute('class', 'mastery-bar-bg');
+      var barFill = document.createElement('div');
+      barFill.setAttribute('class', 'mastery-bar-fill');
+      barFill.setAttribute('style', 'width: ' + pct + '%; background: ' + masteryColor(pct));
+      barBg.appendChild(barFill);
+      row.appendChild(barBg);
+
+      var badge = document.createElement('span');
+      badge.setAttribute('class', 'badge');
+      badge.setAttribute('style', 'color: ' + masteryColor(pct) + '; background: ' + masteryColor(pct) + '20');
+      badge.textContent = badgeText(pct);
+      row.appendChild(badge);
+
+      container.appendChild(row);
+    });
+  }
+
+  function handleStatusData(data) {
+    if (!data) return;
+    var concepts = data.concepts || [];
+    concepts.sort(function(a, b) { return (a.mu || 0) - (b.mu || 0); });
+
+    var totalMastery = 0;
+    var strong = 0, growing = 0, weak = 0;
+    concepts.forEach(function(c) {
+      var pct = pMastery(c.mu || 0) * 100;
+      totalMastery += pct;
+      if (pct >= 70) strong++;
+      else if (pct >= 40) growing++;
+      else weak++;
+    });
+    var avgMastery = concepts.length > 0 ? totalMastery / concepts.length : 0;
+
+    var ringEl = document.getElementById('overall-mastery');
+    while (ringEl.firstChild) ringEl.removeChild(ringEl.firstChild);
+    renderRing(ringEl, avgMastery);
+
+    var statsEl = document.getElementById('stats-row');
+    while (statsEl.firstChild) statsEl.removeChild(statsEl.firstChild);
+    renderStats(statsEl, strong, growing, weak);
+
+    renderConcepts(document.getElementById('concept-list'), concepts);
+  }
+
+  EntendiApp.onToolResult(function(params) {
+    if (params && params.result) {
+      try {
+        var content = params.result.content;
+        if (Array.isArray(content)) {
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].type === 'text') {
+              handleStatusData(JSON.parse(content[i].text));
+              return;
+            }
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+  });
+
+  EntendiApp.init('entendi-status', function() {
+    EntendiApp.callTool('entendi_get_status', {}).then(function(result) {
+      if (result && result.content) {
+        for (var i = 0; i < result.content.length; i++) {
+          if (result.content[i].type === 'text') {
+            try { handleStatusData(JSON.parse(result.content[i].text)); } catch(e) {}
+            return;
+          }
+        }
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>`;
+}
+
+// src/mcp/views/frontier.ts
+function getFrontierViewHtml() {
+  const runtime = getViewRuntime();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entendi Learning Frontier</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --color-background-primary: light-dark(#F6F4F1, #1a1917);
+    --color-background-secondary: light-dark(#EDEAE6, #252320);
+    --color-text-primary: light-dark(#2D2A26, #E8E5E1);
+    --color-text-secondary: light-dark(#6B6560, #9B9590);
+    --color-accent: light-dark(#C4704B, #D4845F);
+    --color-border: light-dark(#D9D4CF, #3A3733);
+    --color-green: light-dark(#4A9E6B, #5DB87E);
+    --color-orange: light-dark(#C4704B, #D4845F);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    padding: 16px;
+    line-height: 1.5;
+  }
+  .header { margin-bottom: 16px; }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header p { font-size: 13px; color: var(--color-text-secondary); }
+  #frontier-list { display: flex; flex-direction: column; gap: 10px; }
+  .frontier-card {
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 10px; padding: 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .card-info { flex: 1; }
+  .card-name { font-size: 15px; font-weight: 600; }
+  .card-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .importance-tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; text-transform: capitalize;
+  }
+  .readiness { font-size: 12px; color: var(--color-text-secondary); }
+  .start-btn {
+    background: var(--color-accent); color: #fff;
+    border: none; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .start-btn:hover { opacity: 0.85; }
+  .start-btn:disabled { opacity: 0.5; cursor: default; }
+  .empty-state {
+    text-align: center; padding: 40px 16px;
+    color: var(--color-text-secondary); font-size: 14px;
+  }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Learning Frontier</h1>
+  <p>Concepts you are ready to learn next</p>
+</div>
+<div id="frontier-list"><div class="loading">Loading...</div></div>
+
+<script>
+${runtime}
+
+(function() {
+  'use strict';
+
+  function importanceColor(importance) {
+    if (importance === 'core') return 'var(--color-accent)';
+    if (importance === 'supporting') return 'var(--color-orange)';
+    return 'var(--color-text-secondary)';
+  }
+
+  function renderFrontier(container, concepts) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    if (!concepts || concepts.length === 0) {
+      var empty = document.createElement('div');
+      empty.setAttribute('class', 'empty-state');
+      empty.textContent = 'No frontier concepts available. Keep working to discover new topics!';
+      container.appendChild(empty);
+      return;
+    }
+
+    concepts.forEach(function(c) {
+      var card = document.createElement('div');
+      card.setAttribute('class', 'frontier-card');
+
+      var info = document.createElement('div');
+      info.setAttribute('class', 'card-info');
+
+      var name = document.createElement('div');
+      name.setAttribute('class', 'card-name');
+      name.textContent = c.name || c.conceptId || 'Unknown';
+      info.appendChild(name);
+
+      var meta = document.createElement('div');
+      meta.setAttribute('class', 'card-meta');
+
+      if (c.importance) {
+        var tag = document.createElement('span');
+        tag.setAttribute('class', 'importance-tag');
+        var tagColor = importanceColor(c.importance);
+        tag.setAttribute('style', 'color: ' + tagColor + '; background: ' + tagColor + '20');
+        tag.textContent = c.importance;
+        meta.appendChild(tag);
+      }
+
+      var readiness = document.createElement('span');
+      readiness.setAttribute('class', 'readiness');
+      var readinessPct = Math.round((c.readiness || 0) * 100);
+      readiness.textContent = readinessPct + '% ready';
+      meta.appendChild(readiness);
+
+      info.appendChild(meta);
+      card.appendChild(info);
+
+      var btn = document.createElement('button');
+      btn.setAttribute('class', 'start-btn');
+      btn.textContent = 'Start Learning';
+      btn.addEventListener('click', function() {
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+        EntendiApp.callTool('entendi_start_tutor', {
+          conceptId: c.conceptId || c.id
+        }).then(function() {
+          btn.textContent = 'Started!';
+        }).catch(function() {
+          btn.disabled = false;
+          btn.textContent = 'Start Learning';
+        });
+      });
+      card.appendChild(btn);
+
+      container.appendChild(card);
+    });
+  }
+
+  function handleFrontierData(data) {
+    if (!data) return;
+    var concepts = data.frontier || data.concepts || [];
+    concepts.sort(function(a, b) { return (b.readiness || 0) - (a.readiness || 0); });
+    renderFrontier(document.getElementById('frontier-list'), concepts);
+  }
+
+  EntendiApp.onToolResult(function(params) {
+    if (params && params.result) {
+      try {
+        var content = params.result.content;
+        if (Array.isArray(content)) {
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].type === 'text') {
+              handleFrontierData(JSON.parse(content[i].text));
+              return;
+            }
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+  });
+
+  EntendiApp.init('entendi-frontier', function() {
+    EntendiApp.callTool('entendi_get_zpd_frontier', {}).then(function(result) {
+      if (result && result.content) {
+        for (var i = 0; i < result.content.length; i++) {
+          if (result.content[i].type === 'text') {
+            try { handleFrontierData(JSON.parse(result.content[i].text)); } catch(e) {}
+            return;
+          }
+        }
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>`;
+}
+
+// src/mcp/views/probe.ts
+function getProbeViewHtml() {
+  const runtime = getViewRuntime();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entendi Probe</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --color-background-primary: light-dark(#F6F4F1, #1a1917);
+    --color-background-secondary: light-dark(#EDEAE6, #252320);
+    --color-text-primary: light-dark(#2D2A26, #E8E5E1);
+    --color-text-secondary: light-dark(#6B6560, #9B9590);
+    --color-accent: light-dark(#C4704B, #D4845F);
+    --color-border: light-dark(#D9D4CF, #3A3733);
+    --color-green: light-dark(#4A9E6B, #5DB87E);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    padding: 16px;
+    line-height: 1.5;
+  }
+  .probe-card {
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-accent);
+    border-radius: 10px; padding: 16px;
+  }
+  .probe-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .probe-concept {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    color: var(--color-accent); letter-spacing: 0.5px;
+  }
+  #probe-question { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
+  #probe-answer {
+    width: 100%; min-height: 80px; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    font-family: inherit; font-size: 14px;
+    resize: vertical; margin-bottom: 12px;
+  }
+  #probe-answer:focus { outline: 2px solid var(--color-accent); outline-offset: -1px; }
+  .btn-row { display: flex; gap: 8px; justify-content: flex-end; }
+  .submit-btn {
+    background: var(--color-accent); color: #fff;
+    border: none; border-radius: 8px;
+    padding: 8px 20px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .submit-btn:hover { opacity: 0.85; }
+  .submit-btn:disabled { opacity: 0.5; cursor: default; }
+  .skip-btn {
+    background: transparent; color: var(--color-text-secondary);
+    border: 1px solid var(--color-border); border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .skip-btn:hover { opacity: 0.7; }
+  .skip-btn:disabled { opacity: 0.5; cursor: default; }
+  #no-probe {
+    text-align: center; padding: 24px 16px;
+    color: var(--color-text-secondary);
+  }
+  .no-probe-icon { font-size: 28px; margin-bottom: 8px; color: var(--color-green); }
+  .no-probe-text { font-size: 14px; }
+  .feedback-msg {
+    text-align: center; padding: 16px;
+    color: var(--color-green); font-weight: 500; font-size: 14px;
+  }
+  .hidden { display: none; }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 24px; }
+</style>
+</head>
+<body>
+<div id="probe-container" class="hidden">
+  <div class="probe-card">
+    <div class="probe-header">
+      <span id="probe-concept-label" class="probe-concept"></span>
+    </div>
+    <div id="probe-question"></div>
+    <textarea id="probe-answer" placeholder="Type your answer..."></textarea>
+    <div class="btn-row">
+      <button id="skip-btn" class="skip-btn">Skip</button>
+      <button id="submit-btn" class="submit-btn" disabled>Submit</button>
+    </div>
+  </div>
+</div>
+<div id="no-probe" class="hidden">
+  <div class="no-probe-icon">&#10003;</div>
+  <div class="no-probe-text" id="no-probe-text">Concepts observed. No probe needed right now.</div>
+</div>
+<div id="feedback" class="hidden">
+  <div class="feedback-msg" id="feedback-msg"></div>
+</div>
+<div id="loading-state" class="loading">Waiting for data...</div>
+
+<script>
+${runtime}
+
+(function() {
+  'use strict';
+
+  var probeData = null;
+  var submitted = false;
+
+  function show(id) {
+    var ids = ['probe-container', 'no-probe', 'feedback', 'loading-state'];
+    ids.forEach(function(elId) {
+      var el = document.getElementById(elId);
+      if (el) {
+        if (elId === id) el.setAttribute('class', el.getAttribute('class').replace(' hidden', '').replace('hidden', ''));
+        else if (el.getAttribute('class').indexOf('hidden') === -1) el.setAttribute('class', (el.getAttribute('class') || '') + ' hidden');
+      }
+    });
+  }
+
+  function showNoProbe(text) {
+    var el = document.getElementById('no-probe-text');
+    if (el && text) el.textContent = text;
+    show('no-probe');
+  }
+
+  function showProbe(data) {
+    probeData = data;
+    var conceptLabel = document.getElementById('probe-concept-label');
+    conceptLabel.textContent = data.conceptName || data.concept || '';
+
+    var questionEl = document.getElementById('probe-question');
+    questionEl.textContent = data.question || data.probeQuestion || '';
+
+    var answerEl = document.getElementById('probe-answer');
+    answerEl.value = '';
+    answerEl.disabled = false;
+
+    var submitBtn = document.getElementById('submit-btn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submit';
+
+    var skipBtn = document.getElementById('skip-btn');
+    skipBtn.disabled = false;
+
+    show('probe-container');
+    answerEl.focus();
+  }
+
+  function showFeedback(msg) {
+    var container = document.getElementById('feedback');
+    while (container.firstChild) container.removeChild(container.firstChild);
+    var msgEl = document.createElement('div');
+    msgEl.setAttribute('class', 'feedback-msg');
+    msgEl.textContent = msg;
+    container.appendChild(msgEl);
+    show('feedback');
+  }
+
+  // Enable submit when answer is not empty
+  var answerInput = document.getElementById('probe-answer');
+  var submitBtn = document.getElementById('submit-btn');
+  answerInput.addEventListener('input', function() {
+    submitBtn.disabled = answerInput.value.trim().length === 0 || submitted;
+  });
+
+  // Submit answer
+  submitBtn.addEventListener('click', function() {
+    if (submitted || answerInput.value.trim().length === 0) return;
+    submitted = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    answerInput.disabled = true;
+    document.getElementById('skip-btn').disabled = true;
+
+    EntendiApp.sendNotification('ui/message', {
+      type: 'probe-response',
+      answer: answerInput.value.trim(),
+      conceptId: probeData ? (probeData.conceptId || probeData.id) : null
+    });
+
+    showFeedback('Answer submitted! The AI will evaluate your response.');
+  });
+
+  // Skip / dismiss
+  document.getElementById('skip-btn').addEventListener('click', function() {
+    if (submitted) return;
+    submitted = true;
+    document.getElementById('skip-btn').disabled = true;
+    submitBtn.disabled = true;
+    answerInput.disabled = true;
+
+    EntendiApp.callTool('entendi_dismiss', {
+      reason: 'busy',
+      note: 'Skipped via MCP App UI'
+    }).then(function() {
+      showFeedback('Probe skipped.');
+    }).catch(function() {
+      showFeedback('Probe skipped.');
+    });
+  });
+
+  function handleObserveResult(data) {
+    if (!data) return;
+    if (data.shouldProbe && data.probeQuestion) {
+      showProbe(data);
+    } else {
+      var count = data.conceptsObserved || 0;
+      var text = count + ' concept' + (count !== 1 ? 's' : '') + ' observed. No probe needed right now.';
+      showNoProbe(text);
+    }
+  }
+
+  // 3-second timeout: if no tool result arrives, show no-probe state
+  var dataReceived = false;
+  var timeout = setTimeout(function() {
+    if (!dataReceived) showNoProbe(null);
+  }, 3000);
+
+  EntendiApp.onToolResult(function(params) {
+    dataReceived = true;
+    clearTimeout(timeout);
+    if (params && params.result) {
+      try {
+        var content = params.result.content;
+        if (Array.isArray(content)) {
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].type === 'text') {
+              handleObserveResult(JSON.parse(content[i].text));
+              return;
+            }
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+  });
+
+  EntendiApp.init('entendi-probe', function() {
+    // The probe view is reactive \u2014 it waits for the observe tool result
+    // which the host pushes via onToolResult. No active fetch needed.
+  });
+})();
+</script>
+</body>
+</html>`;
+}
+
 // src/mcp/server.ts
 var MCP_LOG_DIR = join3(homedir3(), ".entendi");
 var MCP_LOG_FILE = join3(MCP_LOG_DIR, "debug.log");
@@ -30584,26 +31407,57 @@ function createEntendiServer(options) {
   const authenticated = !!options.apiKey;
   const registeredTools = [];
   if (authenticated) {
-    mcpServer.tool(
+    const APP_MIME = "text/html;profile=mcp-app";
+    mcpServer.registerResource(
+      "Entendi Status Dashboard",
+      "ui://entendi/status",
+      { mimeType: APP_MIME, description: "Interactive mastery dashboard" },
+      async () => ({
+        contents: [{ uri: "ui://entendi/status", mimeType: APP_MIME, text: getStatusViewHtml() }]
+      })
+    );
+    mcpServer.registerResource(
+      "Entendi ZPD Frontier",
+      "ui://entendi/frontier",
+      { mimeType: APP_MIME, description: "Visual learning frontier" },
+      async () => ({
+        contents: [{ uri: "ui://entendi/frontier", mimeType: APP_MIME, text: getFrontierViewHtml() }]
+      })
+    );
+    mcpServer.registerResource(
+      "Entendi Probe",
+      "ui://entendi/probe",
+      { mimeType: APP_MIME, description: "Interactive comprehension probe" },
+      async () => ({
+        contents: [{ uri: "ui://entendi/probe", mimeType: APP_MIME, text: getProbeViewHtml() }]
+      })
+    );
+    mcpServer.registerTool(
       "entendi_observe",
-      "Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.",
       {
-        concepts: external_exports3.preprocess(
-          (v) => typeof v === "string" ? JSON.parse(v) : v,
-          external_exports3.array(external_exports3.object({
-            id: external_exports3.string(),
-            source: external_exports3.enum(["package", "ast", "llm"])
-          }))
-        ),
-        triggerContext: external_exports3.string(),
-        primaryConceptId: external_exports3.preprocess(
-          (v) => v === "" || v === null ? void 0 : v,
-          external_exports3.string().optional()
-        ),
-        repoUrl: external_exports3.preprocess(
-          (v) => v === "" || v === null ? void 0 : v,
-          external_exports3.string().url().optional()
-        )
+        description: "Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.",
+        inputSchema: {
+          concepts: external_exports3.preprocess(
+            (v) => typeof v === "string" ? JSON.parse(v) : v,
+            external_exports3.array(external_exports3.object({
+              id: external_exports3.string(),
+              source: external_exports3.enum(["package", "ast", "llm"])
+            }))
+          ),
+          triggerContext: external_exports3.string(),
+          primaryConceptId: external_exports3.preprocess(
+            (v) => v === "" || v === null ? void 0 : v,
+            external_exports3.string().optional()
+          ),
+          repoUrl: external_exports3.preprocess(
+            (v) => v === "" || v === null ? void 0 : v,
+            external_exports3.string().url().optional()
+          )
+        },
+        _meta: {
+          ui: { resourceUri: "ui://entendi/probe" },
+          "ui/resourceUri": "ui://entendi/probe"
+        }
       },
       async (args, extra) => {
         mcpLog("tool:entendi_observe called", args);
@@ -30761,11 +31615,17 @@ function createEntendiServer(options) {
       }
     );
     registeredTools.push({ name: "entendi_dismiss" });
-    mcpServer.tool(
+    mcpServer.registerTool(
       "entendi_get_status",
-      "Query mastery state for a specific concept or get an overview of all concepts.",
       {
-        conceptId: external_exports3.string().optional()
+        description: "Query mastery state for a specific concept or get an overview of all concepts.",
+        inputSchema: {
+          conceptId: external_exports3.string().optional()
+        },
+        _meta: {
+          ui: { resourceUri: "ui://entendi/status" },
+          "ui/resourceUri": "ui://entendi/status"
+        }
       },
       async (args) => {
         mcpLog("tool:entendi_get_status called", args);
@@ -30780,13 +31640,19 @@ function createEntendiServer(options) {
       }
     );
     registeredTools.push({ name: "entendi_get_status" });
-    mcpServer.tool(
+    mcpServer.registerTool(
       "entendi_get_zpd_frontier",
-      "Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.",
       {
-        limit: external_exports3.coerce.number().int().min(1).max(100).optional().describe("Max concepts to return (default: 20)"),
-        domain: external_exports3.string().optional().describe('Filter by domain (e.g. "frontend", "databases")'),
-        includeUnassessed: external_exports3.boolean().optional().describe("Include never-assessed concepts (default: false \u2014 only in-progress)")
+        description: "Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.",
+        inputSchema: {
+          limit: external_exports3.coerce.number().int().min(1).max(100).optional().describe("Max concepts to return (default: 20)"),
+          domain: external_exports3.string().optional().describe('Filter by domain (e.g. "frontend", "databases")'),
+          includeUnassessed: external_exports3.boolean().optional().describe("Include never-assessed concepts (default: false \u2014 only in-progress)")
+        },
+        _meta: {
+          ui: { resourceUri: "ui://entendi/frontier" },
+          "ui/resourceUri": "ui://entendi/frontier"
+        }
       },
       async (args) => {
         mcpLog("tool:entendi_get_zpd_frontier called", args);

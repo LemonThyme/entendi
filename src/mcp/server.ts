@@ -8,6 +8,9 @@ import { join } from 'path';
 import { z } from 'zod';
 import { loadConfig, saveConfig } from '../shared/config.js';
 import { EntendiApiClient } from './api-client.js';
+import { getFrontierViewHtml } from './views/frontier.js';
+import { getProbeViewHtml } from './views/probe.js';
+import { getStatusViewHtml } from './views/status.js';
 
 const MCP_LOG_DIR = join(homedir(), '.entendi');
 const MCP_LOG_FILE = join(MCP_LOG_DIR, 'debug.log');
@@ -97,27 +100,63 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   // Tools 1-7 require authentication
   if (authenticated) {
 
+  // --- MCP App Resources (UI views for MCP Apps-compatible hosts) ---
+  const APP_MIME = 'text/html;profile=mcp-app';
+
+  mcpServer.registerResource(
+    'Entendi Status Dashboard',
+    'ui://entendi/status',
+    { mimeType: APP_MIME, description: 'Interactive mastery dashboard' },
+    async () => ({
+      contents: [{ uri: 'ui://entendi/status', mimeType: APP_MIME, text: getStatusViewHtml() }],
+    }),
+  );
+
+  mcpServer.registerResource(
+    'Entendi ZPD Frontier',
+    'ui://entendi/frontier',
+    { mimeType: APP_MIME, description: 'Visual learning frontier' },
+    async () => ({
+      contents: [{ uri: 'ui://entendi/frontier', mimeType: APP_MIME, text: getFrontierViewHtml() }],
+    }),
+  );
+
+  mcpServer.registerResource(
+    'Entendi Probe',
+    'ui://entendi/probe',
+    { mimeType: APP_MIME, description: 'Interactive comprehension probe' },
+    async () => ({
+      contents: [{ uri: 'ui://entendi/probe', mimeType: APP_MIME, text: getProbeViewHtml() }],
+    }),
+  );
+
   // --- Tool 1: entendi_observe ---
-  mcpServer.tool(
+  mcpServer.registerTool(
     'entendi_observe',
-    'Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.',
     {
-      concepts: z.preprocess(
-        (v) => (typeof v === 'string' ? JSON.parse(v) : v),
-        z.array(z.object({
-          id: z.string(),
-          source: z.enum(['package', 'ast', 'llm']),
-        })),
-      ),
-      triggerContext: z.string(),
-      primaryConceptId: z.preprocess(
-        (v) => (v === '' || v === null ? undefined : v),
-        z.string().optional(),
-      ),
-      repoUrl: z.preprocess(
-        (v) => (v === '' || v === null ? undefined : v),
-        z.string().url().optional(),
-      ),
+      description: 'Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.',
+      inputSchema: {
+        concepts: z.preprocess(
+          (v) => (typeof v === 'string' ? JSON.parse(v) : v),
+          z.array(z.object({
+            id: z.string(),
+            source: z.enum(['package', 'ast', 'llm']),
+          })),
+        ),
+        triggerContext: z.string(),
+        primaryConceptId: z.preprocess(
+          (v) => (v === '' || v === null ? undefined : v),
+          z.string().optional(),
+        ),
+        repoUrl: z.preprocess(
+          (v) => (v === '' || v === null ? undefined : v),
+          z.string().url().optional(),
+        ),
+      },
+      _meta: {
+        ui: { resourceUri: 'ui://entendi/probe' },
+        'ui/resourceUri': 'ui://entendi/probe',
+      },
     },
     async (args, extra) => {
       mcpLog('tool:entendi_observe called', args);
@@ -286,11 +325,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   registeredTools.push({ name: 'entendi_dismiss' });
 
   // --- Tool 6: entendi_get_status ---
-  mcpServer.tool(
+  mcpServer.registerTool(
     'entendi_get_status',
-    'Query mastery state for a specific concept or get an overview of all concepts.',
     {
-      conceptId: z.string().optional(),
+      description: 'Query mastery state for a specific concept or get an overview of all concepts.',
+      inputSchema: {
+        conceptId: z.string().optional(),
+      },
+      _meta: {
+        ui: { resourceUri: 'ui://entendi/status' },
+        'ui/resourceUri': 'ui://entendi/status',
+      },
     },
     async (args) => {
       mcpLog('tool:entendi_get_status called', args);
@@ -307,16 +352,22 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   registeredTools.push({ name: 'entendi_get_status' });
 
   // --- Tool 7: entendi_get_zpd_frontier ---
-  mcpServer.tool(
+  mcpServer.registerTool(
     'entendi_get_zpd_frontier',
-    'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
     {
-      limit: z.coerce.number().int().min(1).max(100).optional()
-        .describe('Max concepts to return (default: 20)'),
-      domain: z.string().optional()
-        .describe('Filter by domain (e.g. "frontend", "databases")'),
-      includeUnassessed: z.boolean().optional()
-        .describe('Include never-assessed concepts (default: false — only in-progress)'),
+      description: 'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
+      inputSchema: {
+        limit: z.coerce.number().int().min(1).max(100).optional()
+          .describe('Max concepts to return (default: 20)'),
+        domain: z.string().optional()
+          .describe('Filter by domain (e.g. "frontend", "databases")'),
+        includeUnassessed: z.boolean().optional()
+          .describe('Include never-assessed concepts (default: false — only in-progress)'),
+      },
+      _meta: {
+        ui: { resourceUri: 'ui://entendi/frontier' },
+        'ui/resourceUri': 'ui://entendi/frontier',
+      },
     },
     async (args) => {
       mcpLog('tool:entendi_get_zpd_frontier called', args);
