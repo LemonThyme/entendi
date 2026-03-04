@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/LemonThyme/entendi/compare/entendi-v0.5.1...entendi-v0.5.2) (2026-03-04)
+
+
+### Bug Fixes
+
+* **mcp:** show concept names and only assessed concepts in status view ([#122](https://github.com/LemonThyme/entendi/issues/122)) ([f73ab89](https://github.com/LemonThyme/entendi/commit/f73ab8976ec737e0467a600c4c58b26d4fd93146))
+
 ## [0.5.1](https://github.com/LemonThyme/entendi/compare/entendi-v0.5.0...entendi-v0.5.1) (2026-03-04)
 
 
