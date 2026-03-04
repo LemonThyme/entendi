@@ -428,9 +428,13 @@ mcpRoutes.post('/observe', async (c) => {
 
   logger.info('mcp.observe.probe', { requestId: c.get('requestId'), userId: user.id, conceptId: selected.conceptId, depth, mastery: masteryPct });
 
+  const lastAssessedDays = selected.daysSince;
+  const conceptName = selected.conceptId.replace(/-/g, ' ');
+
   return c.json({
     shouldProbe: true,
     conceptId: selected.conceptId,
+    conceptName,
     depth,
     intrusiveness,
     guidance,
@@ -438,6 +442,9 @@ mcpRoutes.post('/observe', async (c) => {
     mastery: masteryPct,
     urgency: selected.urgency,
     probeToken,
+    lastAssessedDays,
+    assessmentCount: selected.assessmentCount,
+    stability: selected.stability ?? null,
   });
 });
 
@@ -604,6 +611,14 @@ mcpRoutes.post('/record-evaluation', async (c) => {
   const direction = result.newMastery > result.previousMastery ? 'improved'
     : result.newMastery < result.previousMastery ? 'decreased' : 'unchanged';
 
+  // Fetch updated stability for the view
+  const [updatedState] = await db.select().from(userConceptStates)
+    .where(and(
+      eq(userConceptStates.userId, user.id),
+      eq(userConceptStates.conceptId, body.conceptId),
+    ));
+  const stabilityDays = updatedState?.stability ?? null;
+
   logger.info('mcp.evaluation.recorded', { requestId: c.get('requestId'), userId: user.id, conceptId: body.conceptId, score: body.score, newMastery: result.newMastery });
 
   return c.json({
@@ -611,6 +626,7 @@ mcpRoutes.post('/record-evaluation', async (c) => {
     previousMastery: result.previousMastery,
     sigma: result.newSigma,
     previousSigma: result.previousSigma,
+    stabilityDays,
     shouldOfferTutor,
     integrityScore,
     integrityFlags: integrityFlags.length > 0 ? integrityFlags : undefined,
@@ -1092,14 +1108,35 @@ mcpRoutes.get('/status', async (c) => {
   // Include individual concept states for the UI view
   const conceptsList = allStates
     .filter(s => s.assessmentCount > 0)
-    .map(s => ({
-      id: s.conceptId,
-      mu: s.mu,
-      sigma: s.sigma,
-      assessmentCount: s.assessmentCount,
-      lastAssessed: s.lastAssessed ? new Date(s.lastAssessed).toISOString() : null,
-    }))
-    .sort((a, b) => b.mu - a.mu);
+    .map(s => {
+      const daysSince = s.lastAssessed
+        ? (Date.now() - new Date(s.lastAssessed).getTime()) / (1000 * 60 * 60 * 24)
+        : 999;
+      return {
+        id: s.conceptId,
+        mu: s.mu,
+        sigma: s.sigma,
+        assessmentCount: s.assessmentCount,
+        lastAssessed: s.lastAssessed ? new Date(s.lastAssessed).toISOString() : null,
+        urgency: probeUrgency({
+          mu: s.mu, sigma: s.sigma, stability: s.stability ?? 1,
+          daysSinceAssessed: daysSince,
+          assessmentCount: s.assessmentCount,
+          fisherInfo: 0,
+        }),
+        stability: s.stability ?? null,
+      };
+    })
+    .sort((a, b) => b.urgency - a.urgency);
+
+  // Count assessment events in the last 7 days
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const weeklyEvents = await db.select().from(assessmentEvents)
+    .where(and(
+      eq(assessmentEvents.userId, user.id),
+      sql`${assessmentEvents.createdAt} > ${oneWeekAgo}`,
+    ));
+  const weeklyActivity = weeklyEvents.length;
 
   const assessed = mastered + inProgress;
   return c.json({
@@ -1108,6 +1145,7 @@ mcpRoutes.get('/status', async (c) => {
       mastered,
       inProgress,
       recentActivity: recentActivity.slice(0, 5),
+      weeklyActivity,
     },
     concepts: conceptsList,
   });
