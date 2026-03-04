@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/LemonThyme/entendi/compare/entendi-v0.4.0...entendi-v0.4.1) (2026-03-04)
+
+
+### Bug Fixes
+
+* **mcp:** forgiving schemas, ontoolresult format fix, and debug logging ([#116](https://github.com/LemonThyme/entendi/issues/116)) ([7721cd6](https://github.com/LemonThyme/entendi/commit/7721cd661fded1d8fc4e77e9bba39ca3bb9badac))
+
 ## [0.4.0](https://github.com/LemonThyme/entendi/compare/entendi-v0.3.1...entendi-v0.4.0) (2026-03-04)
 
 
