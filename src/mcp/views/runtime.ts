@@ -78,8 +78,14 @@ ${APP_BRIDGE_BUNDLE}
     sendMessage: function(params) {
       return app.sendMessage(params);
     },
-    sendNotification: function() {
-      // Legacy no-op — App class handles notifications internally
+    sendNotification: function(method, params) {
+      // Forward ui/message notifications to the host via sendMessage
+      if (method === 'ui/message' && params) {
+        return app.sendMessage({
+          role: 'user',
+          content: [{ type: 'text', text: JSON.stringify(params) }]
+        });
+      }
     }
   };
 })();
