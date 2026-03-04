@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/LemonThyme/entendi/compare/entendi-v0.5.2...entendi-v0.6.0) (2026-03-04)
+
+
+### Features
+
+* **views:** redesign MCP App views for Cursor ([#126](https://github.com/LemonThyme/entendi/issues/126)) ([ae305e8](https://github.com/LemonThyme/entendi/commit/ae305e810b7dffeb4951c48142f178c92c7fe036))
+
 ## [0.5.2](https://github.com/LemonThyme/entendi/compare/entendi-v0.5.1...entendi-v0.5.2) (2026-03-04)
 
 
