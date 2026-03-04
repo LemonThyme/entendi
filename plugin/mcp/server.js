@@ -37042,8 +37042,7 @@ function getFrontierViewHtml() {
     --color-text-secondary: light-dark(#6B6560, #9B9590);
     --color-accent: light-dark(#C4704B, #D4845F);
     --color-border: light-dark(#D9D4CF, #3A3733);
-    --color-green: light-dark(#4A9E6B, #5DB87E);
-    --color-orange: light-dark(#C4704B, #D4845F);
+    --color-green: light-dark(#2D7D46, #4CAF6A);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -37053,46 +37052,52 @@ function getFrontierViewHtml() {
     padding: 16px;
     line-height: 1.5;
   }
-  .header { margin-bottom: 16px; }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .header p { font-size: 13px; color: var(--color-text-secondary); }
-  #frontier-list { display: flex; flex-direction: column; gap: 10px; }
+  .header { margin-bottom: 14px; }
+  .header h1 { font-size: 16px; font-weight: 600; }
+  .header p { font-size: 12px; color: var(--color-text-secondary); }
+  #frontier-list { display: flex; flex-direction: column; gap: 8px; }
   .frontier-card {
     background: var(--color-background-secondary);
     border: 1px solid var(--color-border);
-    border-radius: 10px; padding: 14px;
-    display: flex; align-items: center; gap: 12px;
+    border-radius: 10px; padding: 12px 14px;
   }
-  .card-info { flex: 1; }
-  .card-name { font-size: 15px; font-weight: 600; }
-  .card-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  .importance-tag {
-    font-size: 11px; padding: 2px 8px; border-radius: 10px;
-    font-weight: 600; text-transform: capitalize;
+  .card-top { display: flex; justify-content: space-between; align-items: center; }
+  .card-name { font-size: 14px; font-weight: 600; }
+  .card-meta {
+    font-size: 11px; color: var(--color-text-secondary);
+    margin-top: 4px;
   }
-  .readiness { font-size: 12px; color: var(--color-text-secondary); }
+  .info-gain {
+    font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px;
+  }
   .start-btn {
-    background: var(--color-accent); color: #fff;
-    border: none; border-radius: 8px;
-    padding: 8px 16px; font-size: 13px; font-weight: 600;
-    cursor: pointer; white-space: nowrap;
-    transition: opacity 0.15s;
+    display: inline-block; margin-top: 8px;
+    background: none; color: var(--color-accent);
+    border: none; font-size: 13px; font-weight: 600;
+    cursor: pointer; padding: 0;
   }
-  .start-btn:hover { opacity: 0.85; }
-  .start-btn:disabled { opacity: 0.5; cursor: default; }
+  .start-btn:hover { text-decoration: underline; }
+  .start-btn:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+  #more-count {
+    margin-top: 10px; font-size: 12px;
+    color: var(--color-text-secondary); text-align: center;
+  }
   .empty-state {
-    text-align: center; padding: 40px 16px;
-    color: var(--color-text-secondary); font-size: 14px;
+    text-align: center; padding: 32px 16px;
+    color: var(--color-text-secondary); font-size: 13px;
   }
-  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; font-size: 13px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Learning Frontier</h1>
-  <p>Concepts you are ready to learn next</p>
+  <h1>Ready to Learn</h1>
+  <p>Concepts with the highest learning potential</p>
 </div>
 <div id="frontier-list"><div class="loading">Loading...</div></div>
+<div id="more-count" class="hidden"></div>
 
 <script>
 ${runtime}
@@ -37100,10 +37105,12 @@ ${runtime}
 (function() {
   'use strict';
 
-  function importanceColor(importance) {
-    if (importance === 'core') return 'var(--color-accent)';
-    if (importance === 'supporting') return 'var(--color-orange)';
-    return 'var(--color-text-secondary)';
+  var MAX_SHOWN = 5;
+
+  function infoGainLevel(fisherInfo) {
+    if (fisherInfo > 0.5) return { label: 'High info-gain', color: 'var(--color-green)' };
+    if (fisherInfo > 0.2) return { label: 'Medium gain', color: 'var(--color-accent)' };
+    return { label: 'Low gain', color: 'var(--color-text-secondary)' };
   }
 
   function renderFrontier(container, concepts) {
@@ -37112,69 +37119,79 @@ ${runtime}
     if (!concepts || concepts.length === 0) {
       var empty = document.createElement('div');
       empty.setAttribute('class', 'empty-state');
-      empty.textContent = 'No frontier concepts available. Keep working to discover new topics!';
+      empty.textContent = 'No frontier concepts available. Keep learning!';
       container.appendChild(empty);
       return;
     }
 
-    concepts.forEach(function(c) {
+    var shown = concepts.slice(0, MAX_SHOWN);
+    var remaining = concepts.length - shown.length;
+
+    shown.forEach(function(c) {
       var card = document.createElement('div');
       card.setAttribute('class', 'frontier-card');
 
-      var info = document.createElement('div');
-      info.setAttribute('class', 'card-info');
+      var top = document.createElement('div');
+      top.setAttribute('class', 'card-top');
 
-      var name = document.createElement('div');
-      name.setAttribute('class', 'card-name');
-      name.textContent = c.name || c.conceptId || 'Unknown';
-      info.appendChild(name);
+      var nameEl = document.createElement('span');
+      nameEl.setAttribute('class', 'card-name');
+      nameEl.textContent = (c.conceptId || '').replace(/-/g, ' ');
+      top.appendChild(nameEl);
 
-      var meta = document.createElement('div');
-      meta.setAttribute('class', 'card-meta');
+      var gainInfo = infoGainLevel(c.fisherInfo || 0);
+      var gainEl = document.createElement('span');
+      gainEl.setAttribute('class', 'info-gain');
+      gainEl.setAttribute('style', 'color: ' + gainInfo.color + '; background: ' + gainInfo.color + '15');
+      gainEl.textContent = gainInfo.label;
+      top.appendChild(gainEl);
 
-      if (c.importance) {
-        var tag = document.createElement('span');
-        tag.setAttribute('class', 'importance-tag');
-        var tagColor = importanceColor(c.importance);
-        tag.setAttribute('style', 'color: ' + tagColor + '; background: ' + tagColor + '20');
-        tag.textContent = c.importance;
-        meta.appendChild(tag);
+      card.appendChild(top);
+
+      // Meta line
+      var metaEl = document.createElement('div');
+      metaEl.setAttribute('class', 'card-meta');
+      var parts = [];
+      if (c.assessmentCount > 0) {
+        parts.push('Assessed ' + c.assessmentCount + '\\u00d7');
+      } else {
+        parts.push('Not yet assessed');
       }
+      if (c.domain) {
+        parts.push(c.domain);
+      }
+      metaEl.textContent = parts.join(' \\u00b7 ');
+      card.appendChild(metaEl);
 
-      var readiness = document.createElement('span');
-      readiness.setAttribute('class', 'readiness');
-      var readinessPct = Math.round((c.readiness || 0) * 100);
-      readiness.textContent = readinessPct + '% ready';
-      meta.appendChild(readiness);
-
-      info.appendChild(meta);
-      card.appendChild(info);
-
+      // Start Learning link
       var btn = document.createElement('button');
       btn.setAttribute('class', 'start-btn');
-      btn.textContent = 'Start Learning';
+      btn.textContent = 'Start Learning \\u2192';
       btn.addEventListener('click', function() {
         btn.disabled = true;
         btn.textContent = 'Starting...';
-        EntendiApp.callTool('entendi_start_tutor', {
-          conceptId: c.conceptId || c.id
-        }).then(function() {
-          btn.textContent = 'Started!';
-        }).catch(function() {
-          btn.disabled = false;
-          btn.textContent = 'Start Learning';
+        EntendiApp.sendMessage({
+          role: 'user',
+          content: [{ type: 'text', text: 'Teach me about ' + (c.conceptId || '').replace(/-/g, ' ') }]
         });
       });
       card.appendChild(btn);
 
       container.appendChild(card);
     });
+
+    // Show remaining count
+    if (remaining > 0) {
+      var moreEl = document.getElementById('more-count');
+      moreEl.textContent = remaining + ' more concept' + (remaining !== 1 ? 's' : '') + ' available';
+      moreEl.setAttribute('class', '');
+    }
   }
 
   function handleFrontierData(data) {
     if (!data) return;
     var concepts = data.frontier || data.concepts || [];
-    concepts.sort(function(a, b) { return (b.readiness || 0) - (a.readiness || 0); });
+    // Already sorted by API (assessed first, then by Fisher info desc)
     renderFrontier(document.getElementById('frontier-list'), concepts);
   }
 
@@ -37190,7 +37207,7 @@ ${runtime}
             }
           }
         }
-      } catch (e) { /* ignore parse errors */ }
+      } catch (e) { /* ignore */ }
     }
   });
 
@@ -37230,7 +37247,11 @@ function getProbeViewHtml() {
     --color-text-secondary: light-dark(#6B6560, #9B9590);
     --color-accent: light-dark(#C4704B, #D4845F);
     --color-border: light-dark(#D9D4CF, #3A3733);
-    --color-green: light-dark(#4A9E6B, #5DB87E);
+    --color-green: light-dark(#2D7D46, #4CAF6A);
+    --color-orange: light-dark(#C4704B, #D4845F);
+    --color-red: light-dark(#B54040, #D45050);
+    --delta-positive: light-dark(#2D7D46, #4CAF6A);
+    --delta-negative: light-dark(#B54040, #D45050);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -37243,76 +37264,82 @@ function getProbeViewHtml() {
   .probe-card {
     background: var(--color-background-secondary);
     border: 1px solid var(--color-border);
-    border-left: 4px solid var(--color-accent);
-    border-radius: 10px; padding: 16px;
+    border-radius: 10px;
+    padding: 16px;
   }
-  .probe-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-  .probe-concept {
+  .concept-name {
     font-size: 12px; font-weight: 600; text-transform: uppercase;
-    color: var(--color-accent); letter-spacing: 0.5px;
+    letter-spacing: 0.5px; margin-bottom: 8px;
   }
-  #probe-question { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
-  #probe-answer {
-    width: 100%; min-height: 80px; padding: 10px; border-radius: 8px;
-    border: 1px solid var(--color-border);
-    background: var(--color-background-primary);
+  .mastery-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+  .mastery-bar-bg {
+    flex: 1; height: 8px; border-radius: 4px;
+    background: var(--color-border); overflow: hidden;
+  }
+  .mastery-bar-fill {
+    height: 100%; border-radius: 4px;
+    transition: width 300ms ease-out, background-color 300ms ease-out;
+  }
+  .mastery-pct {
+    font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    min-width: 36px; text-align: right;
+  }
+  .decay-indicator {
+    font-size: 11px; font-weight: 500;
+  }
+  .delta-badge {
+    font-size: 12px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    opacity: 0; transition: opacity 200ms ease-in;
+  }
+  .delta-badge.visible { opacity: 1; }
+  .question {
+    font-size: 14px; line-height: 1.5; margin-bottom: 10px;
     color: var(--color-text-primary);
-    font-family: inherit; font-size: 14px;
-    resize: vertical; margin-bottom: 12px;
   }
-  #probe-answer:focus { outline: 2px solid var(--color-accent); outline-offset: -1px; }
-  .btn-row { display: flex; gap: 8px; justify-content: flex-end; }
-  .submit-btn {
-    background: var(--color-accent); color: #fff;
-    border: none; border-radius: 8px;
-    padding: 8px 20px; font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: opacity 0.15s;
+  .context-line {
+    font-size: 11px; color: var(--color-text-secondary);
+    display: flex; gap: 12px;
   }
-  .submit-btn:hover { opacity: 0.85; }
-  .submit-btn:disabled { opacity: 0.5; cursor: default; }
-  .skip-btn {
-    background: transparent; color: var(--color-text-secondary);
-    border: 1px solid var(--color-border); border-radius: 8px;
-    padding: 8px 16px; font-size: 13px; font-weight: 500;
-    cursor: pointer; transition: opacity 0.15s;
+  .result-section {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--color-border);
   }
-  .skip-btn:hover { opacity: 0.7; }
-  .skip-btn:disabled { opacity: 0.5; cursor: default; }
-  #no-probe {
-    text-align: center; padding: 24px 16px;
-    color: var(--color-text-secondary);
+  .confidence-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
   }
-  .no-probe-icon { font-size: 28px; margin-bottom: 8px; color: var(--color-green); }
-  .no-probe-text { font-size: 14px; }
-  .feedback-msg {
+  .confidence-label {
+    font-size: 11px; color: var(--color-text-secondary); min-width: 72px;
+  }
+  .confidence-bar-bg {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: var(--color-border); overflow: hidden;
+  }
+  .confidence-bar-fill {
+    height: 100%; border-radius: 2px;
+    background: var(--color-text-secondary); opacity: 0.4;
+    transition: width 300ms ease-out;
+  }
+  .confidence-text {
+    font-size: 11px; color: var(--color-text-secondary);
+  }
+  .next-review {
+    font-size: 11px; color: var(--color-text-secondary);
+  }
+  .no-probe {
     text-align: center; padding: 16px;
-    color: var(--color-green); font-weight: 500; font-size: 14px;
+    color: var(--color-text-secondary); font-size: 13px;
   }
   .hidden { display: none; }
-  .loading { text-align: center; color: var(--color-text-secondary); padding: 24px; }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 24px; font-size: 13px; }
 </style>
 </head>
 <body>
-<div id="probe-container" class="hidden">
-  <div class="probe-card">
-    <div class="probe-header">
-      <span id="probe-concept-label" class="probe-concept"></span>
-    </div>
-    <div id="probe-question"></div>
-    <textarea id="probe-answer" placeholder="Type your answer..."></textarea>
-    <div class="btn-row">
-      <button id="skip-btn" class="skip-btn">Skip</button>
-      <button id="submit-btn" class="submit-btn" disabled>Submit</button>
-    </div>
-  </div>
-</div>
-<div id="no-probe" class="hidden">
-  <div class="no-probe-icon">&#10003;</div>
-  <div class="no-probe-text" id="no-probe-text">Concepts observed. No probe needed right now.</div>
-</div>
-<div id="feedback" class="hidden">
-  <div class="feedback-msg" id="feedback-msg"></div>
-</div>
+<div id="probe-card" class="probe-card hidden"></div>
+<div id="no-probe" class="no-probe hidden"></div>
 <div id="loading-state" class="loading">Waiting for data...</div>
 
 <script>
@@ -37321,140 +37348,250 @@ ${runtime}
 (function() {
   'use strict';
 
-  var probeData = null;
-  var submitted = false;
+  var currentMastery = 0;
+
+  function pMastery(mu) {
+    return 1 / (1 + Math.exp(-mu / 0.5));
+  }
+
+  function masteryColor(pct) {
+    if (pct >= 70) return 'var(--color-green)';
+    if (pct >= 40) return 'var(--color-orange)';
+    return 'var(--color-red)';
+  }
 
   function show(id) {
-    var ids = ['probe-container', 'no-probe', 'feedback', 'loading-state'];
+    var ids = ['probe-card', 'no-probe', 'loading-state'];
     ids.forEach(function(elId) {
       var el = document.getElementById(elId);
       if (el) {
-        if (elId === id) el.setAttribute('class', el.getAttribute('class').replace(' hidden', '').replace('hidden', ''));
+        if (elId === id) el.setAttribute('class', el.getAttribute('class').replace(/\\bhidden\\b/g, '').trim());
         else if (el.getAttribute('class').indexOf('hidden') === -1) el.setAttribute('class', (el.getAttribute('class') || '') + ' hidden');
       }
     });
   }
 
-  function showNoProbe(text) {
-    var el = document.getElementById('no-probe-text');
-    if (el && text) el.textContent = text;
-    show('no-probe');
-  }
+  function showProbeCard(data) {
+    var card = document.getElementById('probe-card');
+    while (card.firstChild) card.removeChild(card.firstChild);
 
-  function showProbe(data) {
-    probeData = data;
-    var conceptLabel = document.getElementById('probe-concept-label');
-    conceptLabel.textContent = data.conceptName || data.concept || '';
+    var pct = data.mastery || 0;
+    currentMastery = pct;
+    var conceptName = (data.conceptName || data.conceptId || '').replace(/-/g, ' ');
 
-    var questionEl = document.getElementById('probe-question');
-    questionEl.textContent = data.question || data.probeQuestion || '';
+    // Concept name
+    var nameEl = document.createElement('div');
+    nameEl.setAttribute('class', 'concept-name');
+    nameEl.setAttribute('style', 'color: ' + masteryColor(pct));
+    nameEl.textContent = conceptName;
+    card.appendChild(nameEl);
 
-    var answerEl = document.getElementById('probe-answer');
-    answerEl.value = '';
-    answerEl.disabled = false;
+    // Mastery row: bar + percentage + decay indicator
+    var masteryRow = document.createElement('div');
+    masteryRow.setAttribute('class', 'mastery-row');
 
-    var submitBtn = document.getElementById('submit-btn');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submit';
+    var barBg = document.createElement('div');
+    barBg.setAttribute('class', 'mastery-bar-bg');
+    var barFill = document.createElement('div');
+    barFill.setAttribute('class', 'mastery-bar-fill');
+    barFill.setAttribute('id', 'mastery-fill');
+    barFill.setAttribute('style', 'width: ' + pct + '%; background: ' + masteryColor(pct));
+    barBg.appendChild(barFill);
+    masteryRow.appendChild(barBg);
 
-    var skipBtn = document.getElementById('skip-btn');
-    skipBtn.disabled = false;
+    var pctEl = document.createElement('span');
+    pctEl.setAttribute('class', 'mastery-pct');
+    pctEl.setAttribute('id', 'mastery-pct-value');
+    pctEl.textContent = pct + '%';
+    masteryRow.appendChild(pctEl);
 
-    show('probe-container');
-    answerEl.focus();
-  }
-
-  function showFeedback(msg) {
-    var container = document.getElementById('feedback');
-    while (container.firstChild) container.removeChild(container.firstChild);
-    var msgEl = document.createElement('div');
-    msgEl.setAttribute('class', 'feedback-msg');
-    msgEl.textContent = msg;
-    container.appendChild(msgEl);
-    show('feedback');
-  }
-
-  // Enable submit when answer is not empty
-  var answerInput = document.getElementById('probe-answer');
-  var submitBtn = document.getElementById('submit-btn');
-  answerInput.addEventListener('input', function() {
-    submitBtn.disabled = answerInput.value.trim().length === 0 || submitted;
-  });
-
-  // Submit answer
-  submitBtn.addEventListener('click', function() {
-    if (submitted || answerInput.value.trim().length === 0) return;
-    submitted = true;
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting...';
-    answerInput.disabled = true;
-    document.getElementById('skip-btn').disabled = true;
-
-    EntendiApp.sendNotification('ui/message', {
-      type: 'probe-response',
-      answer: answerInput.value.trim(),
-      conceptId: probeData ? (probeData.conceptId || probeData.id) : null
-    });
-
-    showFeedback('Answer submitted! The AI will evaluate your response.');
-  });
-
-  // Skip / dismiss
-  document.getElementById('skip-btn').addEventListener('click', function() {
-    if (submitted) return;
-    submitted = true;
-    document.getElementById('skip-btn').disabled = true;
-    submitBtn.disabled = true;
-    answerInput.disabled = true;
-
-    EntendiApp.callTool('entendi_dismiss', {
-      reason: 'busy',
-      note: 'Skipped via MCP App UI'
-    }).then(function() {
-      showFeedback('Probe skipped.');
-    }).catch(function() {
-      showFeedback('Probe skipped.');
-    });
-  });
-
-  function handleObserveResult(data) {
-    if (!data) return;
-    if (data.shouldProbe && data.probeQuestion) {
-      showProbe(data);
-    } else {
-      var count = data.conceptsObserved || 0;
-      var text = count + ' concept' + (count !== 1 ? 's' : '') + ' observed. No probe needed right now.';
-      showNoProbe(text);
+    // Decay indicator
+    var decayEl = document.createElement('span');
+    decayEl.setAttribute('class', 'decay-indicator');
+    decayEl.setAttribute('id', 'decay-indicator');
+    if (data.stability != null && data.lastAssessedDays != null) {
+      if (data.lastAssessedDays > (data.stability * 0.8)) {
+        decayEl.textContent = '\\u2193 decaying';
+        decayEl.setAttribute('style', 'color: var(--color-red)');
+      } else if (data.assessmentCount > 1) {
+        decayEl.textContent = '\\u2191 stable';
+        decayEl.setAttribute('style', 'color: var(--color-green)');
+      }
     }
+    masteryRow.appendChild(decayEl);
+
+    // Delta badge (hidden until record_evaluation)
+    var deltaEl = document.createElement('span');
+    deltaEl.setAttribute('class', 'delta-badge');
+    deltaEl.setAttribute('id', 'delta-badge');
+    masteryRow.appendChild(deltaEl);
+
+    card.appendChild(masteryRow);
+
+    // Question
+    if (data.probeQuestion || data.guidance) {
+      var qEl = document.createElement('div');
+      qEl.setAttribute('class', 'question');
+      qEl.textContent = data.probeQuestion || '';
+      card.appendChild(qEl);
+    }
+
+    // Context line
+    var ctxEl = document.createElement('div');
+    ctxEl.setAttribute('class', 'context-line');
+    var parts = [];
+    if (data.lastAssessedDays != null) {
+      var days = Math.round(data.lastAssessedDays);
+      parts.push(days === 0 ? 'Probed today' : 'Last probed ' + days + 'd ago');
+    }
+    if (data.assessmentCount != null) {
+      parts.push('Assessed ' + data.assessmentCount + '\\u00d7');
+    }
+    parts.forEach(function(text) {
+      var span = document.createElement('span');
+      span.textContent = text;
+      ctxEl.appendChild(span);
+    });
+    card.appendChild(ctxEl);
+
+    show('probe-card');
   }
 
-  // 3-second timeout: if no tool result arrives, show no-probe state
+  function showResult(data) {
+    if (!data || data.previousMastery == null) return;
+
+    var oldPct = Math.round(data.previousMastery * 100);
+    var newPct = Math.round(data.mastery * 100);
+    var delta = newPct - oldPct;
+
+    // Animate mastery bar
+    var fill = document.getElementById('mastery-fill');
+    if (fill) {
+      fill.setAttribute('style', 'width: ' + newPct + '%; background: ' + masteryColor(newPct));
+    }
+
+    // Animate percentage number
+    var pctEl = document.getElementById('mastery-pct-value');
+    if (pctEl) {
+      var startPct = oldPct;
+      var endPct = newPct;
+      var startTime = null;
+      function animatePct(ts) {
+        if (!startTime) startTime = ts;
+        var progress = Math.min((ts - startTime) / 300, 1);
+        var current = Math.round(startPct + (endPct - startPct) * progress);
+        pctEl.textContent = current + '%';
+        if (progress < 1) requestAnimationFrame(animatePct);
+      }
+      requestAnimationFrame(animatePct);
+    }
+
+    // Show delta badge
+    var deltaEl = document.getElementById('delta-badge');
+    if (deltaEl && delta !== 0) {
+      var sign = delta > 0 ? '+' : '';
+      deltaEl.textContent = sign + delta + '%';
+      deltaEl.setAttribute('style', 'color: ' + (delta > 0 ? 'var(--delta-positive)' : 'var(--delta-negative)'));
+      setTimeout(function() {
+        deltaEl.setAttribute('class', 'delta-badge visible');
+      }, 320);
+    }
+
+    // Update decay indicator
+    var decayEl = document.getElementById('decay-indicator');
+    if (decayEl) {
+      decayEl.textContent = delta > 0 ? '\\u2191 improving' : delta < 0 ? '\\u2193 declining' : '';
+      decayEl.setAttribute('style', 'color: ' + (delta >= 0 ? 'var(--color-green)' : 'var(--color-red)'));
+    }
+
+    // Add result section (confidence + next review)
+    var card = document.getElementById('probe-card');
+    var resultSection = document.createElement('div');
+    resultSection.setAttribute('class', 'result-section');
+
+    // Confidence bar
+    if (data.sigma != null) {
+      var confRow = document.createElement('div');
+      confRow.setAttribute('class', 'confidence-row');
+
+      var confLabel = document.createElement('span');
+      confLabel.setAttribute('class', 'confidence-label');
+      confLabel.textContent = 'Confidence';
+      confRow.appendChild(confLabel);
+
+      var confBarBg = document.createElement('div');
+      confBarBg.setAttribute('class', 'confidence-bar-bg');
+      var confFill = document.createElement('div');
+      confFill.setAttribute('class', 'confidence-bar-fill');
+      // sigma 0.05 = very confident (narrow), sigma 1.5 = very uncertain (wide)
+      var confWidth = Math.max(5, Math.min(100, (1 - (data.sigma - 0.05) / 1.45) * 100));
+      confFill.setAttribute('style', 'width: ' + confWidth + '%');
+      confBarBg.appendChild(confFill);
+      confRow.appendChild(confBarBg);
+
+      var confText = document.createElement('span');
+      confText.setAttribute('class', 'confidence-text');
+      confText.textContent = data.sigma < 0.3 ? 'high' : data.sigma < 0.7 ? 'moderate' : 'low';
+      confRow.appendChild(confText);
+
+      resultSection.appendChild(confRow);
+    }
+
+    // Next review estimate
+    if (data.stabilityDays != null) {
+      var reviewEl = document.createElement('div');
+      reviewEl.setAttribute('class', 'next-review');
+      var days = Math.round(data.stabilityDays);
+      reviewEl.textContent = 'Next review: ~' + days + ' day' + (days !== 1 ? 's' : '');
+      resultSection.appendChild(reviewEl);
+    }
+
+    card.appendChild(resultSection);
+  }
+
+  // 3-second timeout for no data
   var dataReceived = false;
   var timeout = setTimeout(function() {
-    if (!dataReceived) showNoProbe(null);
+    if (!dataReceived) {
+      var noProbe = document.getElementById('no-probe');
+      noProbe.textContent = 'Concepts observed. No probe needed right now.';
+      show('no-probe');
+    }
   }, 3000);
 
   EntendiApp.onToolResult(function(params) {
-    dataReceived = true;
-    clearTimeout(timeout);
     if (params && params.result) {
       try {
         var content = params.result.content;
         if (Array.isArray(content)) {
           for (var i = 0; i < content.length; i++) {
             if (content[i].type === 'text') {
-              handleObserveResult(JSON.parse(content[i].text));
+              var parsed = JSON.parse(content[i].text);
+              // Detect observe result vs record_evaluation result
+              if (parsed.shouldProbe != null) {
+                dataReceived = true;
+                clearTimeout(timeout);
+                if (parsed.shouldProbe && (parsed.probeQuestion || parsed.guidance)) {
+                  showProbeCard(parsed);
+                } else {
+                  var noProbe = document.getElementById('no-probe');
+                  var count = parsed.conceptsObserved || 0;
+                  noProbe.textContent = count + ' concept' + (count !== 1 ? 's' : '') + ' observed. No probe needed.';
+                  show('no-probe');
+                }
+              } else if (parsed.previousMastery != null) {
+                showResult(parsed);
+              }
               return;
             }
           }
         }
-      } catch (e) { /* ignore parse errors */ }
+      } catch (e) { /* ignore */ }
     }
   });
 
   EntendiApp.init('entendi-probe', function() {
-    // The probe view is reactive \u2014 it waits for the observe tool result
-    // which the host pushes via onToolResult. No active fetch needed.
+    // Reactive view \u2014 waits for observe tool result via onToolResult
   });
 })();
 </script>
@@ -37480,9 +37617,10 @@ function getStatusViewHtml() {
     --color-text-secondary: light-dark(#6B6560, #9B9590);
     --color-accent: light-dark(#C4704B, #D4845F);
     --color-border: light-dark(#D9D4CF, #3A3733);
-    --color-green: light-dark(#4A9E6B, #5DB87E);
+    --color-green: light-dark(#2D7D46, #4CAF6A);
     --color-orange: light-dark(#C4704B, #D4845F);
-    --color-red: light-dark(#C44B4B, #D46060);
+    --color-red: light-dark(#B54040, #D45050);
+    --sigma-overlay: rgba(128, 128, 128, 0.15);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -37492,48 +37630,55 @@ function getStatusViewHtml() {
     padding: 16px;
     line-height: 1.5;
   }
-  .header { text-align: center; margin-bottom: 16px; }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .header p { font-size: 13px; color: var(--color-text-secondary); }
-  #overall-mastery { display: flex; justify-content: center; margin-bottom: 16px; }
-  .ring-label { font-size: 24px; font-weight: 700; }
-  .stats-row {
-    display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;
+  .header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 14px;
   }
-  .stat-card {
-    background: var(--color-background-secondary);
-    border-radius: 8px; padding: 8px 16px; text-align: center;
-    border: 1px solid var(--color-border);
-  }
-  .stat-card .count { font-size: 20px; font-weight: 700; }
-  .stat-card .label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; }
-  #concept-list { display: flex; flex-direction: column; gap: 8px; }
+  .header h1 { font-size: 16px; font-weight: 600; }
+  .header-meta { font-size: 12px; color: var(--color-text-secondary); }
+  #concept-list { display: flex; flex-direction: column; gap: 6px; }
   .concept-row {
     display: flex; align-items: center; gap: 10px;
-    background: var(--color-background-secondary);
-    border-radius: 8px; padding: 10px 12px;
-    border: 1px solid var(--color-border);
+    padding: 6px 0;
   }
-  .concept-name { flex: 1; font-size: 14px; font-weight: 500; }
-  .mastery-bar-bg {
-    width: 80px; height: 6px; border-radius: 3px;
-    background: var(--color-border);
+  .concept-name {
+    flex: 0 0 120px; font-size: 13px; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .mastery-bar-fill { height: 100%; border-radius: 3px; }
-  .badge {
-    font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  .bar-container {
+    flex: 1; height: 8px; border-radius: 4px;
+    background: var(--color-border); position: relative; overflow: hidden;
   }
-  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+  .sigma-overlay {
+    position: absolute; top: 0; height: 100%;
+    background: var(--sigma-overlay); border-radius: 4px;
+  }
+  .mastery-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    border-radius: 4px; z-index: 1;
+  }
+  .mastery-pct {
+    font-size: 12px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 32px; text-align: right;
+  }
+  .footer {
+    margin-top: 14px; padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+    font-size: 11px; color: var(--color-text-secondary);
+    text-align: center;
+  }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; font-size: 13px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Mastery Status</h1>
-  <p>Your comprehension overview</p>
+  <h1>Mastery</h1>
+  <span class="header-meta" id="header-meta"></span>
 </div>
-<div id="overall-mastery"></div>
-<div class="stats-row" id="stats-row"></div>
 <div id="concept-list"><div class="loading">Loading...</div></div>
+<div id="footer" class="footer hidden"></div>
 
 <script>
 ${runtime}
@@ -37551,81 +37696,10 @@ ${runtime}
     return 'var(--color-red)';
   }
 
-  function badgeText(pct) {
-    if (pct >= 70) return 'Strong';
-    if (pct >= 40) return 'Growing';
-    return 'Weak';
-  }
-
-  function renderRing(container, pct) {
-    var size = 100;
-    var stroke = 8;
-    var radius = (size - stroke) / 2;
-    var circumference = 2 * Math.PI * radius;
-    var offset = circumference * (1 - pct / 100);
-
-    var ns = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('width', String(size));
-    svg.setAttribute('height', String(size));
-    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
-
-    var bgCircle = document.createElementNS(ns, 'circle');
-    bgCircle.setAttribute('cx', String(size / 2));
-    bgCircle.setAttribute('cy', String(size / 2));
-    bgCircle.setAttribute('r', String(radius));
-    bgCircle.setAttribute('fill', 'none');
-    bgCircle.setAttribute('stroke', 'var(--color-border)');
-    bgCircle.setAttribute('stroke-width', String(stroke));
-    svg.appendChild(bgCircle);
-
-    var fgCircle = document.createElementNS(ns, 'circle');
-    fgCircle.setAttribute('cx', String(size / 2));
-    fgCircle.setAttribute('cy', String(size / 2));
-    fgCircle.setAttribute('r', String(radius));
-    fgCircle.setAttribute('fill', 'none');
-    fgCircle.setAttribute('stroke', masteryColor(pct));
-    fgCircle.setAttribute('stroke-width', String(stroke));
-    fgCircle.setAttribute('stroke-dasharray', String(circumference));
-    fgCircle.setAttribute('stroke-dashoffset', String(offset));
-    fgCircle.setAttribute('stroke-linecap', 'round');
-    fgCircle.setAttribute('transform', 'rotate(-90 ' + size / 2 + ' ' + size / 2 + ')');
-    svg.appendChild(fgCircle);
-
-    var text = document.createElementNS(ns, 'text');
-    text.setAttribute('x', '50%');
-    text.setAttribute('y', '50%');
-    text.setAttribute('dominant-baseline', 'central');
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('fill', 'var(--color-text-primary)');
-    text.setAttribute('font-size', '24');
-    text.setAttribute('font-weight', '700');
-    text.textContent = Math.round(pct) + '%';
-    svg.appendChild(text);
-
-    container.appendChild(svg);
-  }
-
-  function renderStats(container, strong, growing, weak) {
-    var items = [
-      { count: strong, label: 'Strong', color: 'var(--color-green)' },
-      { count: growing, label: 'Growing', color: 'var(--color-orange)' },
-      { count: weak, label: 'Weak', color: 'var(--color-red)' }
-    ];
-    items.forEach(function(item) {
-      var card = document.createElement('div');
-      card.setAttribute('class', 'stat-card');
-      var countEl = document.createElement('div');
-      countEl.setAttribute('class', 'count');
-      countEl.setAttribute('style', 'color: ' + item.color);
-      countEl.textContent = String(item.count);
-      var labelEl = document.createElement('div');
-      labelEl.setAttribute('class', 'label');
-      labelEl.textContent = item.label;
-      card.appendChild(countEl);
-      card.appendChild(labelEl);
-      container.appendChild(card);
-    });
+  function sigmaRange(mu, sigma) {
+    var lo = pMastery(mu - 2 * sigma) * 100;
+    var hi = pMastery(mu + 2 * sigma) * 100;
+    return { lo: Math.max(0, lo), hi: Math.min(100, hi) };
   }
 
   function renderConcepts(container, concepts) {
@@ -37637,29 +37711,48 @@ ${runtime}
       container.appendChild(empty);
       return;
     }
+
     concepts.forEach(function(c) {
       var pct = Math.round(pMastery(c.mu || 0) * 100);
+      var range = sigmaRange(c.mu || 0, c.sigma || 0.5);
+      var color = masteryColor(pct);
+      var urgency = c.urgency || 0;
+
       var row = document.createElement('div');
       row.setAttribute('class', 'concept-row');
 
-      var name = document.createElement('span');
-      name.setAttribute('class', 'concept-name');
-      name.textContent = (c.name || c.id || c.conceptId || 'Unknown').replace(/-/g, ' ');
-      row.appendChild(name);
+      // Name
+      var nameEl = document.createElement('span');
+      nameEl.setAttribute('class', 'concept-name');
+      nameEl.textContent = (c.id || c.name || 'Unknown').replace(/-/g, ' ');
+      // Warm tint for high-urgency concepts
+      if (urgency > 0.6) {
+        nameEl.setAttribute('style', 'color: ' + color);
+      }
+      row.appendChild(nameEl);
 
-      var barBg = document.createElement('div');
-      barBg.setAttribute('class', 'mastery-bar-bg');
-      var barFill = document.createElement('div');
-      barFill.setAttribute('class', 'mastery-bar-fill');
-      barFill.setAttribute('style', 'width: ' + pct + '%; background: ' + masteryColor(pct));
-      barBg.appendChild(barFill);
-      row.appendChild(barBg);
+      // Bar with sigma overlay
+      var barContainer = document.createElement('div');
+      barContainer.setAttribute('class', 'bar-container');
 
-      var badge = document.createElement('span');
-      badge.setAttribute('class', 'badge');
-      badge.setAttribute('style', 'color: ' + masteryColor(pct) + '; background: ' + masteryColor(pct) + '20');
-      badge.textContent = badgeText(pct);
-      row.appendChild(badge);
+      var sigmaEl = document.createElement('div');
+      sigmaEl.setAttribute('class', 'sigma-overlay');
+      sigmaEl.setAttribute('style', 'left: ' + range.lo + '%; width: ' + (range.hi - range.lo) + '%');
+      barContainer.appendChild(sigmaEl);
+
+      var fill = document.createElement('div');
+      fill.setAttribute('class', 'mastery-fill');
+      fill.setAttribute('style', 'width: ' + pct + '%; background: ' + color);
+      barContainer.appendChild(fill);
+
+      row.appendChild(barContainer);
+
+      // Percentage
+      var pctEl = document.createElement('span');
+      pctEl.setAttribute('class', 'mastery-pct');
+      pctEl.setAttribute('style', 'color: ' + color);
+      pctEl.textContent = pct + '%';
+      row.appendChild(pctEl);
 
       container.appendChild(row);
     });
@@ -37668,28 +37761,30 @@ ${runtime}
   function handleStatusData(data) {
     if (!data) return;
     var concepts = data.concepts || [];
-    concepts.sort(function(a, b) { return (a.mu || 0) - (b.mu || 0); });
 
-    var totalMastery = 0;
-    var strong = 0, growing = 0, weak = 0;
-    concepts.forEach(function(c) {
-      var pct = pMastery(c.mu || 0) * 100;
-      totalMastery += pct;
-      if (pct >= 70) strong++;
-      else if (pct >= 40) growing++;
-      else weak++;
-    });
-    var avgMastery = concepts.length > 0 ? totalMastery / concepts.length : 0;
-
-    var ringEl = document.getElementById('overall-mastery');
-    while (ringEl.firstChild) ringEl.removeChild(ringEl.firstChild);
-    renderRing(ringEl, avgMastery);
-
-    var statsEl = document.getElementById('stats-row');
-    while (statsEl.firstChild) statsEl.removeChild(statsEl.firstChild);
-    renderStats(statsEl, strong, growing, weak);
+    // Sort by urgency descending (already sorted by API, but ensure)
+    concepts.sort(function(a, b) { return (b.urgency || 0) - (a.urgency || 0); });
 
     renderConcepts(document.getElementById('concept-list'), concepts);
+
+    // Header meta
+    var meta = document.getElementById('header-meta');
+    if (data.overview && data.overview.weeklyActivity != null) {
+      meta.textContent = data.overview.weeklyActivity + ' assessments this week';
+    }
+
+    // Footer
+    var footer = document.getElementById('footer');
+    var total = concepts.length;
+    var strong = 0, weak = 0;
+    concepts.forEach(function(c) {
+      var pct = pMastery(c.mu || 0) * 100;
+      if (pct >= 70) strong++;
+      else if (pct < 40) weak++;
+    });
+    footer.textContent = total + ' concept' + (total !== 1 ? 's' : '') +
+      ' \\u00b7 ' + strong + ' mastered \\u00b7 ' + weak + ' weak';
+    footer.setAttribute('class', 'footer');
   }
 
   EntendiApp.onToolResult(function(params) {
@@ -37704,7 +37799,7 @@ ${runtime}
             }
           }
         }
-      } catch (e) { /* ignore parse errors */ }
+      } catch (e) { /* ignore */ }
     }
   });
 
