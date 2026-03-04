@@ -1,7 +1,7 @@
+import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { ServerNotification } from '@modelcontextprotocol/sdk/types.js';
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { execFile } from 'child_process';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir, platform } from 'os';
