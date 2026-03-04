@@ -423,15 +423,19 @@
     }
 
     function renderInstall(wrapper) {
-      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard("claude plugin install entendi", copyBtn); } }, "Copy");
-      var terminal = h("div", { className: "wizard-terminal" }, [
-        h("code", null, "$ claude plugin install entendi"),
+      var cmds = "claude plugin marketplace add LemonThyme/entendi\nclaude plugin install entendi";
+      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(cmds, copyBtn); } }, "Copy");
+      var terminal = h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
+        h("div", { className: "wizard-terminal-lines" }, [
+          h("code", null, "$ claude plugin marketplace add LemonThyme/entendi"),
+          h("code", null, "$ claude plugin install entendi")
+        ]),
         copyBtn
       ]);
 
       wrapper.appendChild(h("div", { className: "wizard-title" }, "Install the plugin"));
       wrapper.appendChild(terminal);
-      wrapper.appendChild(h("div", { className: "wizard-help" }, "This installs Entendi into Claude Code. It runs locally alongside your conversations."));
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "This adds the Entendi marketplace and installs the plugin. It auto-updates on every session."));
       wrapper.appendChild(h("div", { className: "wizard-actions" }, [
         h("button", { className: "btn-primary", onclick: function() { goTo(2); } }, "I\u2019ve Installed It"),
         h("button", { className: "btn-link", onclick: function() { goTo(2); } }, "skip")
