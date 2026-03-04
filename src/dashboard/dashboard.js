@@ -423,19 +423,107 @@
     }
 
     function renderInstall(wrapper) {
-      var cmds = "claude plugin marketplace add LemonThyme/entendi\nclaude plugin install entendi";
-      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(cmds, copyBtn); } }, "Copy");
-      var terminal = h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
-        h("div", { className: "wizard-terminal-lines" }, [
-          h("code", null, "$ claude plugin marketplace add LemonThyme/entendi"),
-          h("code", null, "$ claude plugin install entendi")
+      var activeEditor = "claude-code";
+
+      // --- Claude Code instructions ---
+      var claudeCmds = "claude plugin marketplace add LemonThyme/entendi\nclaude plugin install entendi";
+      var claudeCopyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(claudeCmds, claudeCopyBtn); } }, "Copy");
+      var claudePane = h("div", { className: "wizard-editor-pane" }, [
+        h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
+          h("div", { className: "wizard-terminal-lines" }, [
+            h("code", null, "$ claude plugin marketplace add LemonThyme/entendi"),
+            h("code", null, "$ claude plugin install entendi")
+          ]),
+          claudeCopyBtn
         ]),
-        copyBtn
+        h("div", { className: "wizard-help" }, "Adds the Entendi marketplace and installs the plugin. Auto-updates on every session.")
       ]);
 
+      // --- Cursor instructions ---
+      // One-click: creates API key, opens deeplink with real key embedded
+      var cursorKeyArea = h("div", { className: "wizard-key-reveal" });
+      var manualPre = h("pre", { className: "wizard-json" });
+      var cursorInstalling = false;
+
+      function buildManualJson(key) {
+        return '{\n  "mcpServers": {\n    "entendi": {\n      "url": "https://api.entendi.dev/mcp",\n      "headers": {\n        "x-api-key": "' + key + '"\n      }\n    }\n  }\n}';
+      }
+      manualPre.textContent = buildManualJson("YOUR_API_KEY");
+
+      var manualCopyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(manualPre.textContent, manualCopyBtn); } }, "Copy");
+      var manualDetails = h("details", { className: "wizard-manual-setup" }, [
+        h("summary", null, "Manual setup"),
+        h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
+          manualPre,
+          manualCopyBtn
+        ]),
+        h("div", { className: "wizard-help" }, "Add to .cursor/mcp.json in your project or ~/.cursor/mcp.json globally.")
+      ]);
+
+      var addToCursorBtn = h("button", { className: "btn-cursor-install", onclick: function() {
+        if (cursorInstalling) return;
+        cursorInstalling = true;
+        haptic.tap();
+        addToCursorBtn.textContent = "Creating key\u2026";
+
+        fetch("/api/auth/api-key/create", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ name: "Cursor MCP" })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!data.key) throw new Error("No key returned");
+            var config = JSON.stringify({ url: "https://api.entendi.dev/mcp", headers: { "x-api-key": data.key } });
+            window.open("https://cursor.com/en/install-mcp?name=entendi&config=" + btoa(config), "_blank");
+
+            // Update manual JSON with real key
+            manualPre.textContent = buildManualJson(data.key);
+
+            // Show the key inline (only shown once)
+            cursorKeyArea.textContent = "";
+            var keyVal = h("code", { className: "wizard-key-value" }, data.key);
+            var keyCopyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(data.key, keyCopyBtn); } }, "Copy");
+            cursorKeyArea.appendChild(h("div", { className: "wizard-key-box" }, [
+              h("div", { className: "wizard-help" }, "Your API key (save it \u2014 won\u2019t be shown again):"),
+              h("div", { className: "wizard-terminal" }, [keyVal, keyCopyBtn])
+            ]));
+
+            addToCursorBtn.textContent = "Added \u2713";
+            haptic.success();
+          })
+          .catch(function() {
+            cursorInstalling = false;
+            addToCursorBtn.textContent = "Add to Cursor";
+            haptic.error();
+          });
+      } }, "Add to Cursor");
+
+      var cursorPane = h("div", { className: "wizard-editor-pane", style: "display:none" }, [
+        addToCursorBtn,
+        h("div", { className: "wizard-help" }, "Creates an API key and opens Cursor with the server pre-configured."),
+        cursorKeyArea,
+        manualDetails
+      ]);
+
+      // --- Editor tabs ---
+      var claudeTab = h("button", { className: "wizard-editor-tab active", onclick: function() { switchEditor("claude-code"); } }, "Claude Code");
+      var cursorTab = h("button", { className: "wizard-editor-tab", onclick: function() { switchEditor("cursor"); } }, "Cursor");
+      var editorTabs = h("div", { className: "wizard-editor-tabs" }, [claudeTab, cursorTab]);
+
+      function switchEditor(editor) {
+        haptic.tap();
+        activeEditor = editor;
+        claudeTab.classList.toggle("active", editor === "claude-code");
+        cursorTab.classList.toggle("active", editor === "cursor");
+        claudePane.style.display = editor === "claude-code" ? "" : "none";
+        cursorPane.style.display = editor === "cursor" ? "" : "none";
+      }
+
       wrapper.appendChild(h("div", { className: "wizard-title" }, "Install the plugin"));
-      wrapper.appendChild(terminal);
-      wrapper.appendChild(h("div", { className: "wizard-help" }, "This adds the Entendi marketplace and installs the plugin. It auto-updates on every session."));
+      wrapper.appendChild(editorTabs);
+      wrapper.appendChild(claudePane);
+      wrapper.appendChild(cursorPane);
       wrapper.appendChild(h("div", { className: "wizard-actions" }, [
         h("button", { className: "btn-primary", onclick: function() { goTo(2); } }, "I\u2019ve Installed It"),
         h("button", { className: "btn-link", onclick: function() { goTo(2); } }, "skip")
@@ -1478,6 +1566,110 @@
     var area = document.getElementById("settings-area");
     area.textContent = "";
 
+    // Setup section
+    var setupActiveEditor = "claude-code";
+
+    var setupClaudeCmds = "claude plugin marketplace add LemonThyme/entendi\nclaude plugin install entendi";
+    var setupClaudeCopyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(setupClaudeCmds, setupClaudeCopyBtn); } }, "Copy");
+    var setupClaudePane = h("div", { className: "wizard-editor-pane" }, [
+      h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
+        h("div", { className: "wizard-terminal-lines" }, [
+          h("code", null, "$ claude plugin marketplace add LemonThyme/entendi"),
+          h("code", null, "$ claude plugin install entendi")
+        ]),
+        setupClaudeCopyBtn
+      ]),
+      h("div", { className: "wizard-help" }, "Adds the Entendi marketplace and installs the plugin. Auto-updates on every session.")
+    ]);
+
+    var setupCursorKeyArea = h("div", { className: "wizard-key-reveal" });
+    var setupManualPre = h("pre", { className: "wizard-json" });
+    var setupCursorInstalling = false;
+
+    function setupBuildManualJson(key) {
+      return '{\n  "mcpServers": {\n    "entendi": {\n      "url": "https://api.entendi.dev/mcp",\n      "headers": {\n        "x-api-key": "' + key + '"\n      }\n    }\n  }\n}';
+    }
+    setupManualPre.textContent = setupBuildManualJson("YOUR_API_KEY");
+
+    var setupManualCopyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(setupManualPre.textContent, setupManualCopyBtn); } }, "Copy");
+    var setupManualDetails = h("details", { className: "wizard-manual-setup" }, [
+      h("summary", null, "Manual setup"),
+      h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
+        setupManualPre,
+        setupManualCopyBtn
+      ]),
+      h("div", { className: "wizard-help" }, "Add to .cursor/mcp.json in your project or ~/.cursor/mcp.json globally.")
+    ]);
+
+    var setupAddToCursorBtn = h("button", { className: "btn-cursor-install", onclick: function() {
+      if (setupCursorInstalling) return;
+      setupCursorInstalling = true;
+      haptic.tap();
+      setupAddToCursorBtn.textContent = "Creating key\u2026";
+
+      fetch("/api/auth/api-key/create", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ name: "Cursor MCP" })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.key) throw new Error("No key returned");
+          var config = JSON.stringify({ url: "https://api.entendi.dev/mcp", headers: { "x-api-key": data.key } });
+          window.open("https://cursor.com/en/install-mcp?name=entendi&config=" + btoa(config), "_blank");
+
+          setupManualPre.textContent = setupBuildManualJson(data.key);
+
+          setupCursorKeyArea.textContent = "";
+          var keyVal = h("code", { className: "wizard-key-value" }, data.key);
+          var keyCopyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(data.key, keyCopyBtn); } }, "Copy");
+          setupCursorKeyArea.appendChild(h("div", { className: "wizard-key-box" }, [
+            h("div", { className: "wizard-help" }, "Your API key (save it \u2014 won\u2019t be shown again):"),
+            h("div", { className: "wizard-terminal" }, [keyVal, keyCopyBtn])
+          ]));
+
+          setupAddToCursorBtn.textContent = "Added \u2713";
+          haptic.success();
+          loadKeys();
+        })
+        .catch(function() {
+          setupCursorInstalling = false;
+          setupAddToCursorBtn.textContent = "Add to Cursor";
+          haptic.error();
+        });
+    } }, "Add to Cursor");
+
+    var setupCursorPane = h("div", { className: "wizard-editor-pane", style: "display:none" }, [
+      setupAddToCursorBtn,
+      h("div", { className: "wizard-help" }, "Creates an API key and opens Cursor with the server pre-configured."),
+      setupCursorKeyArea,
+      setupManualDetails
+    ]);
+
+    var setupClaudeTab = h("button", { className: "wizard-editor-tab active", onclick: function() { switchSetupEditor("claude-code"); } }, "Claude Code");
+    var setupCursorTab = h("button", { className: "wizard-editor-tab", onclick: function() { switchSetupEditor("cursor"); } }, "Cursor");
+    var setupEditorTabs = h("div", { className: "wizard-editor-tabs" }, [setupClaudeTab, setupCursorTab]);
+
+    function switchSetupEditor(editor) {
+      haptic.tap();
+      setupActiveEditor = editor;
+      setupClaudeTab.classList.toggle("active", editor === "claude-code");
+      setupCursorTab.classList.toggle("active", editor === "cursor");
+      setupClaudePane.style.display = editor === "claude-code" ? "" : "none";
+      setupCursorPane.style.display = editor === "cursor" ? "" : "none";
+    }
+
+    var setupSection = h("div", { className: "section" }, [
+      h("div", { className: "section-header" }, [
+        h("div", { className: "section-title" }, "Setup"),
+        h("div", { className: "section-subtitle" }, "Connect Entendi to your editor")
+      ]),
+      setupEditorTabs,
+      setupClaudePane,
+      setupCursorPane
+    ]);
+    area.appendChild(setupSection);
+
     // API Key Management
     var keySection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -1486,11 +1678,7 @@
       ]),
       h("div", { id: "key-reveal-area" }),
       h("div", { className: "key-list", id: "key-list" }),
-      h("div", { className: "key-new", id: "key-new-btn", onclick: generateKey }, "+ Generate new API key"),
-      h("div", { className: "setup-instructions" }, [
-        h("h4", null, "Setup"),
-        h("code", null, "claude plugin configure entendi --env ENTENDI_API_KEY=<your-key>")
-      ])
+      h("div", { className: "key-new", id: "key-new-btn", onclick: generateKey }, "+ Generate new API key")
     ]);
     area.appendChild(keySection);
 
@@ -2748,7 +2936,6 @@
         savedMsg
       ])
     ]);
-    area.appendChild(settingsSection);
 
     // Load current enforcement level
     fetch("/api/org/enforcement", { headers: getHeaders() })
@@ -2835,8 +3022,6 @@
       ghStatusEl,
       ghActionEl
     ]);
-    area.appendChild(ghSection);
-    loadGitHubStatus();
 
     var inviteSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -2853,7 +3038,6 @@
       h("div", { className: "error-text", id: "invite-error" }),
       h("div", { id: "invite-success" })
     ]);
-    area.appendChild(inviteSection);
 
     var pendingSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -2861,7 +3045,6 @@
       ]),
       h("div", { id: "pending-list" })
     ]);
-    area.appendChild(pendingSection);
 
     var membersSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -2869,7 +3052,6 @@
       ]),
       h("div", { id: "members-list" })
     ]);
-    area.appendChild(membersSection);
 
     var rankingsSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -2877,7 +3059,6 @@
       ]),
       h("div", { id: "rankings-area" })
     ]);
-    area.appendChild(rankingsSection);
 
     var integritySection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -2887,7 +3068,6 @@
       h("div", { className: "stats-row", id: "integrity-stats" }),
       h("div", { id: "integrity-flagged-area" })
     ]);
-    area.appendChild(integritySection);
 
     var dismissalsSection = h("div", { className: "section" }, [
       h("div", { className: "section-header" }, [
@@ -2898,11 +3078,34 @@
       h("div", { id: "dismissals-filters-area" }),
       h("div", { id: "dismissals-table-area" })
     ]);
-    area.appendChild(dismissalsSection);
 
-    // Custom Roles section
-    renderRolesSection(area);
+    // Group sections into logical categories
+    var teamGroup = h("div", { className: "org-group" }, [
+      h("div", { className: "org-group-title" }, "Team")
+    ]);
+    teamGroup.appendChild(inviteSection);
+    teamGroup.appendChild(pendingSection);
+    teamGroup.appendChild(membersSection);
 
+    var configGroup = h("div", { className: "org-group" }, [
+      h("div", { className: "org-group-title" }, "Configuration")
+    ]);
+    configGroup.appendChild(settingsSection);
+    configGroup.appendChild(ghSection);
+    renderRolesSection(configGroup);
+
+    var insightsGroup = h("div", { className: "org-group" }, [
+      h("div", { className: "org-group-title" }, "Insights")
+    ]);
+    insightsGroup.appendChild(rankingsSection);
+    insightsGroup.appendChild(integritySection);
+    insightsGroup.appendChild(dismissalsSection);
+
+    area.appendChild(teamGroup);
+    area.appendChild(configGroup);
+    area.appendChild(insightsGroup);
+
+    loadGitHubStatus();
     loadPendingInvites(org.id);
     loadMembers(org.id);
     loadRankings(org.id);
