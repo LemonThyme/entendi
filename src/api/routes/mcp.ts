@@ -1089,6 +1089,18 @@ mcpRoutes.get('/status', async (c) => {
 
   recentActivity.sort().reverse();
 
+  // Include individual concept states for the UI view
+  const conceptsList = allStates
+    .filter(s => s.assessmentCount > 0)
+    .map(s => ({
+      id: s.conceptId,
+      mu: s.mu,
+      sigma: s.sigma,
+      assessmentCount: s.assessmentCount,
+      lastAssessed: s.lastAssessed ? new Date(s.lastAssessed).toISOString() : null,
+    }))
+    .sort((a, b) => b.mu - a.mu);
+
   return c.json({
     overview: {
       totalConcepts: allConcepts.length,
@@ -1097,6 +1109,7 @@ mcpRoutes.get('/status', async (c) => {
       unknown: allConcepts.length - mastered - inProgress,
       recentActivity: recentActivity.slice(0, 5),
     },
+    concepts: conceptsList,
   });
 });
 
