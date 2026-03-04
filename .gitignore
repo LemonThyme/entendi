@@ -9,6 +9,7 @@ dist/
 /.mcp.json
 public/assets/
 src/dashboard/manifest.ts
+src/mcp/views/_app-bridge-bundle.ts
 
 # Brand naming exploration (not part of product)
 docs/brand-candidates-*.csv

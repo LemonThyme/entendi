@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { ServerNotification } from '@modelcontextprotocol/sdk/types.js';
+import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { execFile } from 'child_process';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir, platform } from 'os';
@@ -104,37 +105,30 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   if (authenticated) {
 
   // --- MCP App Resources (UI views for MCP Apps-compatible hosts) ---
-  const APP_MIME = 'text/html;profile=mcp-app';
-
-  mcpServer.registerResource(
-    'Entendi Status Dashboard',
-    'ui://entendi/status',
-    { mimeType: APP_MIME, description: 'Interactive mastery dashboard' },
+  registerAppResource(mcpServer, 'Entendi Status Dashboard', 'ui://entendi/status',
+    { description: 'Interactive mastery dashboard' },
     async () => ({
-      contents: [{ uri: 'ui://entendi/status', mimeType: APP_MIME, text: getStatusViewHtml() }],
+      contents: [{ uri: 'ui://entendi/status', mimeType: RESOURCE_MIME_TYPE, text: getStatusViewHtml() }],
     }),
   );
 
-  mcpServer.registerResource(
-    'Entendi ZPD Frontier',
-    'ui://entendi/frontier',
-    { mimeType: APP_MIME, description: 'Visual learning frontier' },
+  registerAppResource(mcpServer, 'Entendi ZPD Frontier', 'ui://entendi/frontier',
+    { description: 'Visual learning frontier' },
     async () => ({
-      contents: [{ uri: 'ui://entendi/frontier', mimeType: APP_MIME, text: getFrontierViewHtml() }],
+      contents: [{ uri: 'ui://entendi/frontier', mimeType: RESOURCE_MIME_TYPE, text: getFrontierViewHtml() }],
     }),
   );
 
-  mcpServer.registerResource(
-    'Entendi Probe',
-    'ui://entendi/probe',
-    { mimeType: APP_MIME, description: 'Interactive comprehension probe' },
+  registerAppResource(mcpServer, 'Entendi Probe', 'ui://entendi/probe',
+    { description: 'Interactive comprehension probe' },
     async () => ({
-      contents: [{ uri: 'ui://entendi/probe', mimeType: APP_MIME, text: getProbeViewHtml() }],
+      contents: [{ uri: 'ui://entendi/probe', mimeType: RESOURCE_MIME_TYPE, text: getProbeViewHtml() }],
     }),
   );
 
   // --- Tool 1: entendi_observe ---
-  mcpServer.registerTool(
+  registerAppTool(
+    mcpServer,
     'entendi_observe',
     {
       description: 'Report technical concepts the user is discussing or working with. The system decides whether to issue a comprehension probe. Call this after every substantive user message that involves technical concepts.',
@@ -158,7 +152,6 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       },
       _meta: {
         ui: { resourceUri: 'ui://entendi/probe' },
-        'ui/resourceUri': 'ui://entendi/probe',
       },
     },
     async (args, extra) => {
@@ -328,7 +321,8 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   registeredTools.push({ name: 'entendi_dismiss' });
 
   // --- Tool 6: entendi_get_status ---
-  mcpServer.registerTool(
+  registerAppTool(
+    mcpServer,
     'entendi_get_status',
     {
       description: 'Get the user\'s mastery status. Call without conceptId for an overview of all concepts, or with a conceptId for details on a specific concept.',
@@ -337,7 +331,6 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       },
       _meta: {
         ui: { resourceUri: 'ui://entendi/status' },
-        'ui/resourceUri': 'ui://entendi/status',
       },
     },
     async (args) => {
@@ -355,7 +348,8 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   registeredTools.push({ name: 'entendi_get_status' });
 
   // --- Tool 7: entendi_get_zpd_frontier ---
-  mcpServer.registerTool(
+  registerAppTool(
+    mcpServer,
     'entendi_get_zpd_frontier',
     {
       description: 'Get concepts the user is ready to learn next (Zone of Proximal Development). Returns concepts where prerequisites are met but mastery is low.',
@@ -369,7 +363,6 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       },
       _meta: {
         ui: { resourceUri: 'ui://entendi/frontier' },
-        'ui/resourceUri': 'ui://entendi/frontier',
       },
     },
     async (args) => {
