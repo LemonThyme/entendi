@@ -62,6 +62,43 @@
     return Math.floor(diff / 86400) + "d ago";
   }
 
+  // --- Haptic feedback ---
+  var haptic = (function() {
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    var iosEl = null;
+    function iosVibrate() {
+      if (!iosEl) {
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.setAttribute("switch", "");
+        cb.style.cssText = "position:fixed;opacity:0;pointer-events:none;top:-100px;";
+        var lbl = document.createElement("label");
+        lbl.style.cssText = "position:fixed;top:-100px;pointer-events:none;";
+        lbl.appendChild(cb);
+        document.body.appendChild(lbl);
+        iosEl = lbl;
+      }
+      iosEl.click();
+    }
+    function vibrate(ms) {
+      if (navigator.vibrate) { navigator.vibrate(ms); return; }
+      if (isIOS) iosVibrate();
+    }
+    return {
+      tap: function() { vibrate(10); },
+      impact: function() { vibrate(25); },
+      success: function() {
+        if (navigator.vibrate) { navigator.vibrate([20, 40, 20]); return; }
+        if (isIOS) { iosVibrate(); setTimeout(iosVibrate, 80); }
+      },
+      error: function() {
+        if (navigator.vibrate) { navigator.vibrate([40, 25, 40, 25, 40]); return; }
+        if (isIOS) { iosVibrate(); setTimeout(iosVibrate, 60); setTimeout(iosVibrate, 120); }
+      }
+    };
+  })();
+
   function statCard(value, label, colorCls) {
     return h("div", { className: "stat-card" }, [
       h("div", { className: "stat-value" + (colorCls ? " " + colorCls : "") }, String(value)),
@@ -99,7 +136,7 @@
   function initTabs() {
     var btns = document.querySelectorAll(".tab-btn");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].addEventListener("click", function() { switchTab(this); });
+      btns[i].addEventListener("click", function() { haptic.tap(); switchTab(this); });
       btns[i].addEventListener("keydown", function(e) {
         var allBtns = Array.from(document.querySelectorAll(".tab-btn"));
         var idx = allBtns.indexOf(this);
@@ -237,7 +274,8 @@
     function showCopyFeedback(btn, success) {
       var prev = btn.textContent;
       btn.textContent = success ? "Copied" : "Failed";
-      if (success) btn.classList.add("copied");
+      if (success) { btn.classList.add("copied"); haptic.success(); }
+      else { haptic.error(); }
       setTimeout(function() { btn.textContent = prev; btn.classList.remove("copied"); }, 2000);
     }
 
@@ -385,15 +423,19 @@
     }
 
     function renderInstall(wrapper) {
-      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard("claude plugin install entendi", copyBtn); } }, "Copy");
-      var terminal = h("div", { className: "wizard-terminal" }, [
-        h("code", null, "$ claude plugin install entendi"),
+      var cmds = "claude plugin marketplace add LemonThyme/entendi\nclaude plugin install entendi";
+      var copyBtn = h("button", { className: "copy-btn", onclick: function() { copyToClipboard(cmds, copyBtn); } }, "Copy");
+      var terminal = h("div", { className: "wizard-terminal wizard-terminal-multi" }, [
+        h("div", { className: "wizard-terminal-lines" }, [
+          h("code", null, "$ claude plugin marketplace add LemonThyme/entendi"),
+          h("code", null, "$ claude plugin install entendi")
+        ]),
         copyBtn
       ]);
 
       wrapper.appendChild(h("div", { className: "wizard-title" }, "Install the plugin"));
       wrapper.appendChild(terminal);
-      wrapper.appendChild(h("div", { className: "wizard-help" }, "This installs Entendi into Claude Code. It runs locally alongside your conversations."));
+      wrapper.appendChild(h("div", { className: "wizard-help" }, "This adds the Entendi marketplace and installs the plugin. It auto-updates on every session."));
       wrapper.appendChild(h("div", { className: "wizard-actions" }, [
         h("button", { className: "btn-primary", onclick: function() { goTo(2); } }, "I\u2019ve Installed It"),
         h("button", { className: "btn-link", onclick: function() { goTo(2); } }, "skip")
@@ -699,6 +741,7 @@
   }
 
   function setActive(activeBtn) {
+    haptic.tap();
     var btns = document.querySelectorAll(".filter-btn");
     for (var i = 0; i < btns.length; i++) btns[i].classList.remove("active");
     activeBtn.classList.add("active");
@@ -1541,6 +1584,7 @@
     var valueEl = h("div", { className: "key-reveal-value" }, fullKey);
     var copyBtn = h("button", { className: "btn-copy", onclick: function() {
       navigator.clipboard.writeText(fullKey).then(function() {
+        haptic.success();
         copyBtn.textContent = "Copied!";
         setTimeout(function() { copyBtn.textContent = "Copy"; }, 2000);
       });
@@ -2672,6 +2716,7 @@
         ])
       ]);
       el.addEventListener("click", function() {
+        haptic.tap();
         optionEls.forEach(function(o) { o.classList.remove("active"); });
         el.classList.add("active");
         fetch("/api/org/enforcement", {
@@ -4002,6 +4047,7 @@
 
     var toast = h("div", { className: "toast" }, msg);
     activeToast = toast;
+    haptic.impact();
     document.body.appendChild(toast);
     setTimeout(function() { toast.classList.add("show"); }, 10);
     setTimeout(function() {

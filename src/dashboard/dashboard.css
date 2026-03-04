@@ -486,6 +486,8 @@ body {
 .velocity-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
 
 /* Hero panels */
+.hero-panels { display: flex; gap: 16px; margin-bottom: 32px; }
+.hero-panels-col { flex: 1; min-width: 0; }
 .hero-panel { background: var(--bg-card); border-radius: 8px; padding: 20px; }
 .hero-panel-title { font-family: var(--font-display); font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
 .hero-concept { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -791,15 +793,78 @@ body {
   outline-offset: 2px;
 }
 
-/* Responsive */
-@media (max-width: 640px) {
+/* Responsive — tablet */
+@media (max-width: 768px) {
+  .container { padding: 1.5rem 1rem; }
+  .header { flex-wrap: wrap; gap: 0.25rem; }
+  .tabs { flex-wrap: wrap; gap: 0; }
+  .tab-btn { flex-shrink: 0; padding: 0.55rem 0.75rem; font-size: 0.75rem; }
+  .hero-panels { flex-direction: column; gap: 12px; }
+  .hero-panels-col { flex: unset; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
-  .concept-row { grid-template-columns: 1fr 80px; }
-  .concept-header { grid-template-columns: 1fr 80px; }
-  .confidence-cell, .assessments-cell, .concept-header > *:nth-child(3), .concept-header > *:nth-child(4) { display: none; }
-  .member-row { grid-template-columns: 1fr 80px; }
-  .member-row > *:nth-child(3), .member-row > *:nth-child(4) { display: none; }
   .event-panel { width: 100%; }
+  .org-form { flex-wrap: wrap; }
+  .org-form input, .org-form select { min-width: 0; }
+  .ranking-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+/* Responsive — mobile */
+@media (max-width: 640px) {
+  .container { padding: 1.25rem 0.75rem; }
+  .header h1 { font-size: 1.2rem; }
+  .header-meta { font-size: 0.7rem; }
+  .tab-btn { font-size: 0.7rem; padding: 0.5rem 0.6rem; }
+  .section { margin-bottom: 1.75rem; }
+  .section-header { flex-wrap: wrap; gap: 0.25rem; }
+
+  /* Stats */
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .stat-card { padding: 0.75rem; }
+  .stat-value { font-size: 1.4rem; }
+
+  /* Concept list */
+  .concept-row { grid-template-columns: 1fr 80px; gap: 0.5rem; padding: 0.6rem 0.75rem; }
+  .concept-header { grid-template-columns: 1fr 80px; padding: 0.45rem 0.75rem; }
+  .confidence-cell, .assessments-cell,
+  .concept-header > *:nth-child(3), .concept-header > *:nth-child(4) { display: none; }
+
+  /* Member list */
+  .member-row { grid-template-columns: 1fr 80px; gap: 0.5rem; padding: 0.6rem 0.75rem; }
+  .member-row > *:nth-child(3), .member-row > *:nth-child(4) { display: none; }
+
+  /* Activity table → horizontal scroll */
+  .activity-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+  .activity-table th, .activity-table td { padding: 0.4rem 0.6rem; font-size: 0.75rem; }
+
+  /* Hero panels */
+  .hero-panel { padding: 14px; }
+  .hero-concept-bar { width: 60px; }
+
+  /* Charts — reduce fixed heights */
+  #analytics-heatmap { height: 140px !important; }
+  #analytics-velocity { height: 240px !important; }
+  #analytics-radar { height: 280px !important; }
+
+  /* Event panel */
+  .event-panel { width: 100%; }
+  .event-panel-scores { grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+
+  /* Org form → stack */
+  .org-form { flex-direction: column; }
+  .org-form input, .org-form select { flex: unset; width: 100%; }
+
+  /* Codebase/syllabus cards */
+  .cb-card { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+  .cb-card-meta { flex-wrap: wrap; gap: 0.35rem; }
+
+  /* Key cards */
+  .key-card { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+
+  /* Modals */
+  .modal-dialog { max-width: 100%; }
+
+  /* Enforcement options */
+  .enforcement-option { padding: 0.6rem 0.75rem; }
 }
 
 /* Health banner */
@@ -888,6 +953,9 @@ body {
   font-family: var(--mono); font-size: 0.85rem; color: var(--text);
   word-break: break-all;
 }
+.wizard-terminal-multi { flex-direction: column; align-items: stretch; gap: 0; }
+.wizard-terminal-multi .wizard-terminal-lines { display: flex; flex-direction: column; gap: 0.35rem; }
+.wizard-terminal-multi .copy-btn { align-self: flex-end; margin-top: 0.5rem; }
 .wizard-terminal .copy-btn {
   background: none; border: 1px solid var(--border); border-radius: 4px;
   padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--text-secondary);
