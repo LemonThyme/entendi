@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { getViewRuntime } from '../../../src/mcp/views/runtime.js';
 
 describe('view runtime', () => {

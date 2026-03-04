@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createEntendiServer } from '../../../src/mcp/server.js';
 
 describe('MCP App resource registration', () => {

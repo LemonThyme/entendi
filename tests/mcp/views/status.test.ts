@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { getStatusViewHtml } from '../../../src/mcp/views/status.js';
 
 describe('status view HTML', () => {
