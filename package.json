@@ -8,7 +8,7 @@
     "entendi": "dist/cli/init.js"
   },
   "scripts": {
-    "build": "node -e \"const f='src/dashboard/manifest.ts';require('fs').existsSync(f)||require('fs').writeFileSync(f,'export const manifest: Record<string, string> = {};\\n')\" && npx tsc && node --import tsx esbuild.config.ts",
+    "build": "node --import tsx scripts/prebuild.ts && npx tsc && node --import tsx esbuild.config.ts",
     "build:hooks": "node --import tsx esbuild.config.ts",
     "plugin:reinstall": "npm run build && claude plugin install entendi",
     "lint": "biome check .",
