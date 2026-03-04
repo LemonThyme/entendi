@@ -6,7 +6,7 @@
     {
       "name": "entendi",
       "description": "Comprehension accountability layer for AI-assisted work",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "source": "./plugin",
       "category": "learning"
     }
