@@ -30636,270 +30636,6 @@ function getViewRuntime() {
 `;
 }
 
-// src/mcp/views/status.ts
-function getStatusViewHtml() {
-  const runtime = getViewRuntime();
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Entendi Status</title>
-<style>
-  :root {
-    color-scheme: light dark;
-    --color-background-primary: light-dark(#F6F4F1, #1a1917);
-    --color-background-secondary: light-dark(#EDEAE6, #252320);
-    --color-text-primary: light-dark(#2D2A26, #E8E5E1);
-    --color-text-secondary: light-dark(#6B6560, #9B9590);
-    --color-accent: light-dark(#C4704B, #D4845F);
-    --color-border: light-dark(#D9D4CF, #3A3733);
-    --color-green: light-dark(#4A9E6B, #5DB87E);
-    --color-orange: light-dark(#C4704B, #D4845F);
-    --color-red: light-dark(#C44B4B, #D46060);
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--color-background-primary);
-    color: var(--color-text-primary);
-    padding: 16px;
-    line-height: 1.5;
-  }
-  .header { text-align: center; margin-bottom: 16px; }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .header p { font-size: 13px; color: var(--color-text-secondary); }
-  #overall-mastery { display: flex; justify-content: center; margin-bottom: 16px; }
-  .ring-label { font-size: 24px; font-weight: 700; }
-  .stats-row {
-    display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;
-  }
-  .stat-card {
-    background: var(--color-background-secondary);
-    border-radius: 8px; padding: 8px 16px; text-align: center;
-    border: 1px solid var(--color-border);
-  }
-  .stat-card .count { font-size: 20px; font-weight: 700; }
-  .stat-card .label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; }
-  #concept-list { display: flex; flex-direction: column; gap: 8px; }
-  .concept-row {
-    display: flex; align-items: center; gap: 10px;
-    background: var(--color-background-secondary);
-    border-radius: 8px; padding: 10px 12px;
-    border: 1px solid var(--color-border);
-  }
-  .concept-name { flex: 1; font-size: 14px; font-weight: 500; }
-  .mastery-bar-bg {
-    width: 80px; height: 6px; border-radius: 3px;
-    background: var(--color-border);
-  }
-  .mastery-bar-fill { height: 100%; border-radius: 3px; }
-  .badge {
-    font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
-  }
-  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
-</style>
-</head>
-<body>
-<div class="header">
-  <h1>Mastery Status</h1>
-  <p>Your comprehension overview</p>
-</div>
-<div id="overall-mastery"></div>
-<div class="stats-row" id="stats-row"></div>
-<div id="concept-list"><div class="loading">Loading...</div></div>
-
-<script>
-${runtime}
-
-(function() {
-  'use strict';
-
-  function pMastery(mu) {
-    return 1 / (1 + Math.exp(-mu / 0.5));
-  }
-
-  function masteryColor(pct) {
-    if (pct >= 70) return 'var(--color-green)';
-    if (pct >= 40) return 'var(--color-orange)';
-    return 'var(--color-red)';
-  }
-
-  function badgeText(pct) {
-    if (pct >= 70) return 'Strong';
-    if (pct >= 40) return 'Growing';
-    return 'Weak';
-  }
-
-  function renderRing(container, pct) {
-    var size = 100;
-    var stroke = 8;
-    var radius = (size - stroke) / 2;
-    var circumference = 2 * Math.PI * radius;
-    var offset = circumference * (1 - pct / 100);
-
-    var ns = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('width', String(size));
-    svg.setAttribute('height', String(size));
-    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
-
-    var bgCircle = document.createElementNS(ns, 'circle');
-    bgCircle.setAttribute('cx', String(size / 2));
-    bgCircle.setAttribute('cy', String(size / 2));
-    bgCircle.setAttribute('r', String(radius));
-    bgCircle.setAttribute('fill', 'none');
-    bgCircle.setAttribute('stroke', 'var(--color-border)');
-    bgCircle.setAttribute('stroke-width', String(stroke));
-    svg.appendChild(bgCircle);
-
-    var fgCircle = document.createElementNS(ns, 'circle');
-    fgCircle.setAttribute('cx', String(size / 2));
-    fgCircle.setAttribute('cy', String(size / 2));
-    fgCircle.setAttribute('r', String(radius));
-    fgCircle.setAttribute('fill', 'none');
-    fgCircle.setAttribute('stroke', masteryColor(pct));
-    fgCircle.setAttribute('stroke-width', String(stroke));
-    fgCircle.setAttribute('stroke-dasharray', String(circumference));
-    fgCircle.setAttribute('stroke-dashoffset', String(offset));
-    fgCircle.setAttribute('stroke-linecap', 'round');
-    fgCircle.setAttribute('transform', 'rotate(-90 ' + size / 2 + ' ' + size / 2 + ')');
-    svg.appendChild(fgCircle);
-
-    var text = document.createElementNS(ns, 'text');
-    text.setAttribute('x', '50%');
-    text.setAttribute('y', '50%');
-    text.setAttribute('dominant-baseline', 'central');
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('fill', 'var(--color-text-primary)');
-    text.setAttribute('font-size', '24');
-    text.setAttribute('font-weight', '700');
-    text.textContent = Math.round(pct) + '%';
-    svg.appendChild(text);
-
-    container.appendChild(svg);
-  }
-
-  function renderStats(container, strong, growing, weak) {
-    var items = [
-      { count: strong, label: 'Strong', color: 'var(--color-green)' },
-      { count: growing, label: 'Growing', color: 'var(--color-orange)' },
-      { count: weak, label: 'Weak', color: 'var(--color-red)' }
-    ];
-    items.forEach(function(item) {
-      var card = document.createElement('div');
-      card.setAttribute('class', 'stat-card');
-      var countEl = document.createElement('div');
-      countEl.setAttribute('class', 'count');
-      countEl.setAttribute('style', 'color: ' + item.color);
-      countEl.textContent = String(item.count);
-      var labelEl = document.createElement('div');
-      labelEl.setAttribute('class', 'label');
-      labelEl.textContent = item.label;
-      card.appendChild(countEl);
-      card.appendChild(labelEl);
-      container.appendChild(card);
-    });
-  }
-
-  function renderConcepts(container, concepts) {
-    while (container.firstChild) container.removeChild(container.firstChild);
-    if (!concepts || concepts.length === 0) {
-      var empty = document.createElement('div');
-      empty.setAttribute('class', 'loading');
-      empty.textContent = 'No concepts tracked yet';
-      container.appendChild(empty);
-      return;
-    }
-    concepts.forEach(function(c) {
-      var pct = Math.round(pMastery(c.mu || 0) * 100);
-      var row = document.createElement('div');
-      row.setAttribute('class', 'concept-row');
-
-      var name = document.createElement('span');
-      name.setAttribute('class', 'concept-name');
-      name.textContent = c.name || c.conceptId || 'Unknown';
-      row.appendChild(name);
-
-      var barBg = document.createElement('div');
-      barBg.setAttribute('class', 'mastery-bar-bg');
-      var barFill = document.createElement('div');
-      barFill.setAttribute('class', 'mastery-bar-fill');
-      barFill.setAttribute('style', 'width: ' + pct + '%; background: ' + masteryColor(pct));
-      barBg.appendChild(barFill);
-      row.appendChild(barBg);
-
-      var badge = document.createElement('span');
-      badge.setAttribute('class', 'badge');
-      badge.setAttribute('style', 'color: ' + masteryColor(pct) + '; background: ' + masteryColor(pct) + '20');
-      badge.textContent = badgeText(pct);
-      row.appendChild(badge);
-
-      container.appendChild(row);
-    });
-  }
-
-  function handleStatusData(data) {
-    if (!data) return;
-    var concepts = data.concepts || [];
-    concepts.sort(function(a, b) { return (a.mu || 0) - (b.mu || 0); });
-
-    var totalMastery = 0;
-    var strong = 0, growing = 0, weak = 0;
-    concepts.forEach(function(c) {
-      var pct = pMastery(c.mu || 0) * 100;
-      totalMastery += pct;
-      if (pct >= 70) strong++;
-      else if (pct >= 40) growing++;
-      else weak++;
-    });
-    var avgMastery = concepts.length > 0 ? totalMastery / concepts.length : 0;
-
-    var ringEl = document.getElementById('overall-mastery');
-    while (ringEl.firstChild) ringEl.removeChild(ringEl.firstChild);
-    renderRing(ringEl, avgMastery);
-
-    var statsEl = document.getElementById('stats-row');
-    while (statsEl.firstChild) statsEl.removeChild(statsEl.firstChild);
-    renderStats(statsEl, strong, growing, weak);
-
-    renderConcepts(document.getElementById('concept-list'), concepts);
-  }
-
-  EntendiApp.onToolResult(function(params) {
-    if (params && params.result) {
-      try {
-        var content = params.result.content;
-        if (Array.isArray(content)) {
-          for (var i = 0; i < content.length; i++) {
-            if (content[i].type === 'text') {
-              handleStatusData(JSON.parse(content[i].text));
-              return;
-            }
-          }
-        }
-      } catch (e) { /* ignore parse errors */ }
-    }
-  });
-
-  EntendiApp.init('entendi-status', function() {
-    EntendiApp.callTool('entendi_get_status', {}).then(function(result) {
-      if (result && result.content) {
-        for (var i = 0; i < result.content.length; i++) {
-          if (result.content[i].type === 'text') {
-            try { handleStatusData(JSON.parse(result.content[i].text)); } catch(e) {}
-            return;
-          }
-        }
-      }
-    });
-  });
-})();
-</script>
-</body>
-</html>`;
-}
-
 // src/mcp/views/frontier.ts
 function getFrontierViewHtml() {
   const runtime = getViewRuntime();
@@ -31338,6 +31074,270 @@ ${runtime}
 </html>`;
 }
 
+// src/mcp/views/status.ts
+function getStatusViewHtml() {
+  const runtime = getViewRuntime();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entendi Status</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --color-background-primary: light-dark(#F6F4F1, #1a1917);
+    --color-background-secondary: light-dark(#EDEAE6, #252320);
+    --color-text-primary: light-dark(#2D2A26, #E8E5E1);
+    --color-text-secondary: light-dark(#6B6560, #9B9590);
+    --color-accent: light-dark(#C4704B, #D4845F);
+    --color-border: light-dark(#D9D4CF, #3A3733);
+    --color-green: light-dark(#4A9E6B, #5DB87E);
+    --color-orange: light-dark(#C4704B, #D4845F);
+    --color-red: light-dark(#C44B4B, #D46060);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    padding: 16px;
+    line-height: 1.5;
+  }
+  .header { text-align: center; margin-bottom: 16px; }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header p { font-size: 13px; color: var(--color-text-secondary); }
+  #overall-mastery { display: flex; justify-content: center; margin-bottom: 16px; }
+  .ring-label { font-size: 24px; font-weight: 700; }
+  .stats-row {
+    display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;
+  }
+  .stat-card {
+    background: var(--color-background-secondary);
+    border-radius: 8px; padding: 8px 16px; text-align: center;
+    border: 1px solid var(--color-border);
+  }
+  .stat-card .count { font-size: 20px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; }
+  #concept-list { display: flex; flex-direction: column; gap: 8px; }
+  .concept-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--color-background-secondary);
+    border-radius: 8px; padding: 10px 12px;
+    border: 1px solid var(--color-border);
+  }
+  .concept-name { flex: 1; font-size: 14px; font-weight: 500; }
+  .mastery-bar-bg {
+    width: 80px; height: 6px; border-radius: 3px;
+    background: var(--color-border);
+  }
+  .mastery-bar-fill { height: 100%; border-radius: 3px; }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Mastery Status</h1>
+  <p>Your comprehension overview</p>
+</div>
+<div id="overall-mastery"></div>
+<div class="stats-row" id="stats-row"></div>
+<div id="concept-list"><div class="loading">Loading...</div></div>
+
+<script>
+${runtime}
+
+(function() {
+  'use strict';
+
+  function pMastery(mu) {
+    return 1 / (1 + Math.exp(-mu / 0.5));
+  }
+
+  function masteryColor(pct) {
+    if (pct >= 70) return 'var(--color-green)';
+    if (pct >= 40) return 'var(--color-orange)';
+    return 'var(--color-red)';
+  }
+
+  function badgeText(pct) {
+    if (pct >= 70) return 'Strong';
+    if (pct >= 40) return 'Growing';
+    return 'Weak';
+  }
+
+  function renderRing(container, pct) {
+    var size = 100;
+    var stroke = 8;
+    var radius = (size - stroke) / 2;
+    var circumference = 2 * Math.PI * radius;
+    var offset = circumference * (1 - pct / 100);
+
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+
+    var bgCircle = document.createElementNS(ns, 'circle');
+    bgCircle.setAttribute('cx', String(size / 2));
+    bgCircle.setAttribute('cy', String(size / 2));
+    bgCircle.setAttribute('r', String(radius));
+    bgCircle.setAttribute('fill', 'none');
+    bgCircle.setAttribute('stroke', 'var(--color-border)');
+    bgCircle.setAttribute('stroke-width', String(stroke));
+    svg.appendChild(bgCircle);
+
+    var fgCircle = document.createElementNS(ns, 'circle');
+    fgCircle.setAttribute('cx', String(size / 2));
+    fgCircle.setAttribute('cy', String(size / 2));
+    fgCircle.setAttribute('r', String(radius));
+    fgCircle.setAttribute('fill', 'none');
+    fgCircle.setAttribute('stroke', masteryColor(pct));
+    fgCircle.setAttribute('stroke-width', String(stroke));
+    fgCircle.setAttribute('stroke-dasharray', String(circumference));
+    fgCircle.setAttribute('stroke-dashoffset', String(offset));
+    fgCircle.setAttribute('stroke-linecap', 'round');
+    fgCircle.setAttribute('transform', 'rotate(-90 ' + size / 2 + ' ' + size / 2 + ')');
+    svg.appendChild(fgCircle);
+
+    var text = document.createElementNS(ns, 'text');
+    text.setAttribute('x', '50%');
+    text.setAttribute('y', '50%');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('fill', 'var(--color-text-primary)');
+    text.setAttribute('font-size', '24');
+    text.setAttribute('font-weight', '700');
+    text.textContent = Math.round(pct) + '%';
+    svg.appendChild(text);
+
+    container.appendChild(svg);
+  }
+
+  function renderStats(container, strong, growing, weak) {
+    var items = [
+      { count: strong, label: 'Strong', color: 'var(--color-green)' },
+      { count: growing, label: 'Growing', color: 'var(--color-orange)' },
+      { count: weak, label: 'Weak', color: 'var(--color-red)' }
+    ];
+    items.forEach(function(item) {
+      var card = document.createElement('div');
+      card.setAttribute('class', 'stat-card');
+      var countEl = document.createElement('div');
+      countEl.setAttribute('class', 'count');
+      countEl.setAttribute('style', 'color: ' + item.color);
+      countEl.textContent = String(item.count);
+      var labelEl = document.createElement('div');
+      labelEl.setAttribute('class', 'label');
+      labelEl.textContent = item.label;
+      card.appendChild(countEl);
+      card.appendChild(labelEl);
+      container.appendChild(card);
+    });
+  }
+
+  function renderConcepts(container, concepts) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    if (!concepts || concepts.length === 0) {
+      var empty = document.createElement('div');
+      empty.setAttribute('class', 'loading');
+      empty.textContent = 'No concepts tracked yet';
+      container.appendChild(empty);
+      return;
+    }
+    concepts.forEach(function(c) {
+      var pct = Math.round(pMastery(c.mu || 0) * 100);
+      var row = document.createElement('div');
+      row.setAttribute('class', 'concept-row');
+
+      var name = document.createElement('span');
+      name.setAttribute('class', 'concept-name');
+      name.textContent = c.name || c.conceptId || 'Unknown';
+      row.appendChild(name);
+
+      var barBg = document.createElement('div');
+      barBg.setAttribute('class', 'mastery-bar-bg');
+      var barFill = document.createElement('div');
+      barFill.setAttribute('class', 'mastery-bar-fill');
+      barFill.setAttribute('style', 'width: ' + pct + '%; background: ' + masteryColor(pct));
+      barBg.appendChild(barFill);
+      row.appendChild(barBg);
+
+      var badge = document.createElement('span');
+      badge.setAttribute('class', 'badge');
+      badge.setAttribute('style', 'color: ' + masteryColor(pct) + '; background: ' + masteryColor(pct) + '20');
+      badge.textContent = badgeText(pct);
+      row.appendChild(badge);
+
+      container.appendChild(row);
+    });
+  }
+
+  function handleStatusData(data) {
+    if (!data) return;
+    var concepts = data.concepts || [];
+    concepts.sort(function(a, b) { return (a.mu || 0) - (b.mu || 0); });
+
+    var totalMastery = 0;
+    var strong = 0, growing = 0, weak = 0;
+    concepts.forEach(function(c) {
+      var pct = pMastery(c.mu || 0) * 100;
+      totalMastery += pct;
+      if (pct >= 70) strong++;
+      else if (pct >= 40) growing++;
+      else weak++;
+    });
+    var avgMastery = concepts.length > 0 ? totalMastery / concepts.length : 0;
+
+    var ringEl = document.getElementById('overall-mastery');
+    while (ringEl.firstChild) ringEl.removeChild(ringEl.firstChild);
+    renderRing(ringEl, avgMastery);
+
+    var statsEl = document.getElementById('stats-row');
+    while (statsEl.firstChild) statsEl.removeChild(statsEl.firstChild);
+    renderStats(statsEl, strong, growing, weak);
+
+    renderConcepts(document.getElementById('concept-list'), concepts);
+  }
+
+  EntendiApp.onToolResult(function(params) {
+    if (params && params.result) {
+      try {
+        var content = params.result.content;
+        if (Array.isArray(content)) {
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].type === 'text') {
+              handleStatusData(JSON.parse(content[i].text));
+              return;
+            }
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+  });
+
+  EntendiApp.init('entendi-status', function() {
+    EntendiApp.callTool('entendi_get_status', {}).then(function(result) {
+      if (result && result.content) {
+        for (var i = 0; i < result.content.length; i++) {
+          if (result.content[i].type === 'text') {
+            try { handleStatusData(JSON.parse(result.content[i].text)); } catch(e) {}
+            return;
+          }
+        }
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>`;
+}
+
 // src/mcp/server.ts
 var MCP_LOG_DIR = join3(homedir3(), ".entendi");
 var MCP_LOG_FILE = join3(MCP_LOG_DIR, "debug.log");
@@ -31435,23 +31435,23 @@ function createEntendiServer(options) {
     mcpServer.registerTool(
       "entendi_observe",
       {
-        description: "Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.",
+        description: "Report technical concepts the user is discussing or working with. The system decides whether to issue a comprehension probe. Call this after every substantive user message that involves technical concepts.",
         inputSchema: {
           concepts: external_exports3.preprocess(
             (v) => typeof v === "string" ? JSON.parse(v) : v,
             external_exports3.array(external_exports3.object({
-              id: external_exports3.string(),
-              source: external_exports3.enum(["package", "ast", "llm"])
-            }))
+              id: external_exports3.string().describe('Kebab-case concept identifier, e.g. "react-hooks", "sql-joins", "docker-compose"'),
+              source: external_exports3.enum(["package", "ast", "llm"]).describe('How the concept was detected: "llm" if you identified it from conversation')
+            })).describe("Array of concepts the user explicitly mentioned or is working with")
           ),
-          triggerContext: external_exports3.string(),
+          triggerContext: external_exports3.string().describe('Brief description of what the user is doing, e.g. "user asked about Redis caching strategies"'),
           primaryConceptId: external_exports3.preprocess(
             (v) => v === "" || v === null ? void 0 : v,
-            external_exports3.string().optional()
+            external_exports3.string().optional().describe('The single concept the user is most directly engaging with, e.g. "redis". Must match one of the concept ids above')
           ),
           repoUrl: external_exports3.preprocess(
             (v) => v === "" || v === null ? void 0 : v,
-            external_exports3.string().url().optional()
+            external_exports3.string().url().optional().describe("GitHub repo URL if the conversation is about a specific codebase")
           )
         },
         _meta: {
@@ -31495,13 +31495,13 @@ function createEntendiServer(options) {
     registeredTools.push({ name: "entendi_observe" });
     mcpServer.tool(
       "entendi_record_evaluation",
-      "Record the evaluation of a probe or tutor response. Updates the knowledge graph with Bayesian scoring.",
+      "Score the user's response to a comprehension probe. Call this after the user answers a probe question. Pass the probeToken exactly as received from entendi_observe.",
       {
-        conceptId: external_exports3.string(),
-        score: external_exports3.coerce.number().int().min(0).max(3),
-        confidence: external_exports3.coerce.number().min(0).max(1),
-        reasoning: external_exports3.string(),
-        eventType: external_exports3.enum(["probe", "tutor_phase1", "tutor_phase4"]),
+        conceptId: external_exports3.string().describe('Kebab-case concept that was probed, e.g. "react-hooks"'),
+        score: external_exports3.coerce.number().int().min(0).max(3).describe("Understanding score: 0=no understanding, 1=vague/partial, 2=correct with specifics, 3=deep/nuanced"),
+        confidence: external_exports3.coerce.number().min(0).max(1).describe("Your confidence in the score, 0.0 to 1.0"),
+        reasoning: external_exports3.string().describe("Brief explanation of why you assigned this score"),
+        eventType: external_exports3.enum(["probe", "tutor_phase1", "tutor_phase4"]).describe('Type of evaluation: "probe" for standard probes, "tutor_phase1" or "tutor_phase4" for tutor sessions'),
         probeToken: external_exports3.preprocess(
           (v) => typeof v === "string" ? JSON.parse(v) : v,
           external_exports3.object({
@@ -31513,9 +31513,9 @@ function createEntendiServer(options) {
             issuedAt: external_exports3.string(),
             expiresAt: external_exports3.string(),
             signature: external_exports3.string()
-          }).optional()
+          }).optional().describe("The full probeToken object from entendi_observe response. Pass it exactly as received, do not modify")
         ),
-        responseText: external_exports3.string().optional()
+        responseText: external_exports3.string().optional().describe("The user's raw response text, copied verbatim")
       },
       async (args) => {
         mcpLog("tool:entendi_record_evaluation called", args);
@@ -31540,10 +31540,10 @@ function createEntendiServer(options) {
     registeredTools.push({ name: "entendi_record_evaluation" });
     mcpServer.tool(
       "entendi_start_tutor",
-      "Start a 4-phase Socratic tutor session for a concept.",
+      'Start a 4-phase Socratic tutor session to teach the user a concept. The user typically requests this by saying "teach me about X".',
       {
-        conceptId: external_exports3.string(),
-        triggerScore: external_exports3.coerce.number().int().min(0).max(1).nullable().optional()
+        conceptId: external_exports3.string().describe('Kebab-case concept to teach, e.g. "react-hooks", "sql-joins", "docker-compose". Required.'),
+        triggerScore: external_exports3.coerce.number().int().min(0).max(1).nullable().optional().describe("The probe score that triggered tutoring: 0 or 1. Omit if user requested tutoring directly.")
       },
       async (args) => {
         mcpLog("tool:entendi_start_tutor called", args);
@@ -31563,14 +31563,14 @@ function createEntendiServer(options) {
     registeredTools.push({ name: "entendi_start_tutor" });
     mcpServer.tool(
       "entendi_advance_tutor",
-      "Advance a tutor session to the next phase after the user responds.",
+      "Advance an active tutor session to the next phase after the user responds. Call this each time the user replies during a tutor session.",
       {
-        sessionId: external_exports3.string(),
-        userResponse: external_exports3.string(),
-        score: external_exports3.coerce.number().int().min(0).max(3).optional(),
-        confidence: external_exports3.coerce.number().min(0).max(1).optional(),
-        reasoning: external_exports3.string().optional(),
-        misconception: external_exports3.string().optional()
+        sessionId: external_exports3.string().describe("The session ID returned by entendi_start_tutor"),
+        userResponse: external_exports3.string().describe("The user's response text, copied verbatim"),
+        score: external_exports3.coerce.number().int().min(0).max(3).optional().describe("Understanding score for this phase: 0=none, 1=vague, 2=correct, 3=deep. Only required for assessment phases."),
+        confidence: external_exports3.coerce.number().min(0).max(1).optional().describe("Your confidence in the score, 0.0 to 1.0"),
+        reasoning: external_exports3.string().optional().describe("Brief explanation of the score"),
+        misconception: external_exports3.string().optional().describe("Any misconception detected in the user's response")
       },
       async (args) => {
         mcpLog("tool:entendi_advance_tutor called", args);
@@ -31618,9 +31618,9 @@ function createEntendiServer(options) {
     mcpServer.registerTool(
       "entendi_get_status",
       {
-        description: "Query mastery state for a specific concept or get an overview of all concepts.",
+        description: "Get the user's mastery status. Call without conceptId for an overview of all concepts, or with a conceptId for details on a specific concept.",
         inputSchema: {
-          conceptId: external_exports3.string().optional()
+          conceptId: external_exports3.string().optional().describe('Kebab-case concept to check, e.g. "react-hooks". Omit for a full overview.')
         },
         _meta: {
           ui: { resourceUri: "ui://entendi/status" },
@@ -31643,7 +31643,7 @@ function createEntendiServer(options) {
     mcpServer.registerTool(
       "entendi_get_zpd_frontier",
       {
-        description: "Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.",
+        description: "Get concepts the user is ready to learn next (Zone of Proximal Development). Returns concepts where prerequisites are met but mastery is low.",
         inputSchema: {
           limit: external_exports3.coerce.number().int().min(1).max(100).optional().describe("Max concepts to return (default: 20)"),
           domain: external_exports3.string().optional().describe('Filter by domain (e.g. "frontend", "databases")'),

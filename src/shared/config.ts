@@ -8,6 +8,7 @@ const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 export interface EntendiConfig {
   apiUrl: string;
   apiKey?: string;
+  orgId?: string;
 }
 
 /**
@@ -27,6 +28,7 @@ export function loadConfig(): EntendiConfig {
     // Config file takes priority — it's written by entendi_login (canonical auth flow).
     // Env var is a fallback for manual setup or CI.
     apiKey: fileConfig.apiKey || process.env.ENTENDI_API_KEY || undefined,
+    orgId: (fileConfig as Record<string, unknown>).orgId as string | undefined,
   };
 }
 
@@ -43,6 +45,7 @@ export function saveConfig(config: Partial<EntendiConfig>): void {
 
   if (config.apiUrl) existing.apiUrl = config.apiUrl;
   if (config.apiKey) existing.apiKey = config.apiKey;
+  if (config.orgId !== undefined) existing.orgId = config.orgId || undefined;
 
   mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2) + '\n', { mode: 0o600 });

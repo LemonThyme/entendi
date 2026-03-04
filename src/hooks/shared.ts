@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import type { EntendiConfig } from '../shared/config.js';
 
 /** Read all stdin as a string (hooks receive JSON on stdin). */
 export async function readStdin(): Promise<string> {
@@ -44,4 +45,11 @@ export function log(component: string, message: string, data?: unknown): void {
   try {
     appendFileSync(LOG_FILE, `[${ts}] [${component}] ${message}${dataStr}\n`);
   } catch {}
+}
+
+/** Build standard API headers from config (includes X-Org-Id when set). */
+export function apiHeaders(config: EntendiConfig): Record<string, string> {
+  const headers: Record<string, string> = { 'x-api-key': config.apiKey! };
+  if (config.orgId) headers['X-Org-Id'] = config.orgId;
+  return headers;
 }

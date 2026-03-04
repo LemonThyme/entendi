@@ -2,8 +2,361 @@ import { config } from 'dotenv';
 
 config();
 
-import { describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
+import { describe, expect, it, vi } from 'vitest';
+import type { Env } from '../../../src/api/index.js';
 import { createApp } from '../../../src/api/index.js';
+
+// --- Unit test helpers (same pattern as codebases.test.ts) ---
+
+function createDbMock(resultQueues: { select?: any[][]; insert?: any[][]; update?: any[][]; delete?: any[][] } = {}) {
+  const selectQueue = [...(resultQueues.select ?? [])];
+  const insertQueue = [...(resultQueues.insert ?? [])];
+  const updateQueue = [...(resultQueues.update ?? [])];
+  const deleteQueue = [...(resultQueues.delete ?? [])];
+
+  const makeLink = (queue: any[][]): any => {
+    const link: any = {
+      from: vi.fn(() => makeLink(queue)),
+      where: vi.fn(() => makeLink(queue)),
+      set: vi.fn(() => makeLink(queue)),
+      values: vi.fn(() => makeLink(queue)),
+      returning: vi.fn(() => makeLink(queue)),
+      limit: vi.fn(() => Promise.resolve(queue.length > 0 ? queue.shift() : [])),
+      // biome-ignore lint/suspicious/noThenProperty: simulates Drizzle thenable query
+      then(resolve: any, reject?: any) {
+        return Promise.resolve(queue.length > 0 ? queue.shift() : []).then(resolve, reject);
+      },
+    };
+    return link;
+  };
+
+  return {
+    select: vi.fn(() => makeLink(selectQueue)),
+    insert: vi.fn(() => makeLink(insertQueue)),
+    update: vi.fn(() => makeLink(updateQueue)),
+    delete: vi.fn(() => makeLink(deleteQueue)),
+  };
+}
+
+function createTestApp(db: any, opts: { userId?: string; orgId?: string | null } = {}) {
+  const app = new Hono<Env>();
+  app.use('*', async (c, next) => {
+    c.set('db', db as any);
+    c.set('auth', {} as any);
+    c.set('user', { id: opts.userId ?? 'user-1', name: 'Test', email: 'test@test.com' });
+    c.set('session', {
+      id: 'sess-1',
+      userId: opts.userId ?? 'user-1',
+      activeOrganizationId: 'orgId' in opts ? opts.orgId : 'org-1',
+    });
+    await next();
+  });
+  return app;
+}
+
+async function mountSyllabi(app: Hono<Env>) {
+  const { syllabiRoutes } = await import('../../../src/api/routes/syllabi.js');
+  app.route('/syllabi', syllabiRoutes);
+  return app;
+}
+
+describe('Syllabi unit tests', () => {
+  // --- GET / (list) ---
+  it('GET /syllabi lists syllabi for active org', async () => {
+    const rows = [{ id: 's-1', name: 'Intro', orgId: 'org-1', status: 'active' }];
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }], // requireOrgMembership
+        rows,                  // syllabi for org
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi');
+    expect(res.status).toBe(200);
+    const body = await res.json() as any[];
+    expect(body).toHaveLength(1);
+    expect(body[0].name).toBe('Intro');
+  });
+
+  it('GET /syllabi returns 403 for non-org-member', async () => {
+    const db = createDbMock({
+      select: [
+        [], // requireOrgMembership: not a member
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi');
+    expect(res.status).toBe(403);
+  });
+
+  // --- GET /:id (detail) ---
+  it('GET /syllabi/:id returns detail', async () => {
+    const syllabus = { id: 's-1', name: 'Intro', orgId: 'org-1', status: 'active' };
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }], // requireOrgMembership
+        [syllabus],            // getSyllabusForOrg
+        [{ id: 'src-1' }],    // sources
+        [{ value: 3 }],       // concept count
+        [{ value: 2 }],       // enrollment count
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-1');
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.name).toBe('Intro');
+    expect(body.conceptCount).toBe(3);
+    expect(body.enrollmentCount).toBe(2);
+  });
+
+  it('GET /syllabi/:id returns 404 for cross-org access', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }], // requireOrgMembership (user is in org-1)
+        [],                    // getSyllabusForOrg: not found (syllabus is in org-2)
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org');
+    expect(res.status).toBe(404);
+  });
+
+  // --- PUT /:id (update) ---
+  it('PUT /syllabi/:id updates name', async () => {
+    const existing = { id: 's-1', name: 'Old', orgId: 'org-1', status: 'draft' };
+    const updated = { ...existing, name: 'New' };
+    const db = createDbMock({
+      select: [
+        [{ role: 'owner', roleId: null }], // requirePermission
+        [existing],                         // getSyllabusForOrg
+        [updated],                          // fetch updated
+      ],
+      update: [[]],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'New' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.name).toBe('New');
+  });
+
+  it('PUT /syllabi/:id returns 404 for cross-org access', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'owner', roleId: null }], // requirePermission (user is in org-1)
+        [],                                 // getSyllabusForOrg: not found (syllabus in org-2)
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Hacked' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  // --- DELETE /:id ---
+  it('DELETE /syllabi/:id deletes syllabus', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'owner', roleId: null }],           // requirePermission
+        [{ id: 's-1', orgId: 'org-1' }],             // getSyllabusForOrg
+      ],
+      delete: [[]],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-1', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.deleted).toBe(true);
+  });
+
+  it('DELETE /syllabi/:id returns 404 for cross-org access', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'owner', roleId: null }], // requirePermission
+        [],                                 // getSyllabusForOrg: not found
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org', { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+
+  // --- POST /:id/enroll ---
+  it('POST /syllabi/:id/enroll enrolls user (201)', async () => {
+    const enrollment = { syllabusId: 's-1', userId: 'user-1', enrolledAt: new Date() };
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }],              // requireOrgMembership
+        [{ id: 's-1', orgId: 'org-1' }],  // getSyllabusForOrg
+        [],                                 // existing enrollment check (none)
+      ],
+      insert: [[enrollment]],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-1/enroll', { method: 'POST' });
+    expect(res.status).toBe(201);
+    const body = await res.json() as any;
+    expect(body.syllabusId).toBe('s-1');
+  });
+
+  it('POST /syllabi/:id/enroll returns 404 for cross-org syllabus', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }], // requireOrgMembership (user is in org-1)
+        [],                    // getSyllabusForOrg: not found (syllabus in org-2)
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org/enroll', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /syllabi/:id/enroll rejects non-org-member (403)', async () => {
+    const db = createDbMock({
+      select: [
+        [], // requireOrgMembership: not a member
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-1/enroll', { method: 'POST' });
+    expect(res.status).toBe(403);
+  });
+
+  // --- GET /:id/progress ---
+  it('GET /syllabi/:id/progress returns own progress', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }],              // requireOrgMembership
+        [{ id: 's-1', orgId: 'org-1' }],  // getSyllabusForOrg
+        [{ syllabusId: 's-1', conceptId: 'c-1', importance: 'core', learningObjective: 'L1' }], // concepts
+        [{ mu: 2.0 }],                     // userConceptStates for c-1
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-1/progress');
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.syllabusId).toBe('s-1');
+    expect(body.concepts).toHaveLength(1);
+    expect(body.concepts[0].mastery).toBeCloseTo(0.88, 1);
+  });
+
+  it('GET /syllabi/:id/progress returns 404 for cross-org syllabus', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'member' }], // requireOrgMembership
+        [],                    // getSyllabusForOrg: not found
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org/progress');
+    expect(res.status).toBe(404);
+  });
+
+  // --- GET /:id/progress/:userId ---
+  it('GET /syllabi/:id/progress/:userId returns 404 for cross-org syllabus', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'admin', roleId: null }], // requirePermission
+        [],                                 // getSyllabusForOrg: not found
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org/progress/some-user');
+    expect(res.status).toBe(404);
+  });
+
+  // --- POST /:id/sources ---
+  it('POST /syllabi/:id/sources returns 404 for cross-org syllabus', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'owner', roleId: null }], // requirePermission
+        [],                                 // getSyllabusForOrg: not found
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org/sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceType: 'url', sourceUrl: 'https://evil.com' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  // --- POST /:id/concepts ---
+  it('POST /syllabi/:id/concepts returns 404 for cross-org syllabus', async () => {
+    const db = createDbMock({
+      select: [
+        [{ role: 'owner', roleId: null }], // requirePermission
+        [],                                 // getSyllabusForOrg: not found
+      ],
+    });
+
+    const app = createTestApp(db);
+    await mountSyllabi(app);
+
+    const res = await app.request('/syllabi/s-other-org/concepts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conceptId: 'c-1' }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
 
 const testDbUrl = process.env.DATABASE_URL;
 const testApiKey = process.env.ENTENDI_API_KEY;

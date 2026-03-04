@@ -48,6 +48,8 @@ export interface EntendiServerOptions {
   apiUrl: string;
   /** API key for authentication. When omitted, only entendi_login is available. */
   apiKey?: string;
+  /** Organization ID to scope all requests to. */
+  orgId?: string;
 }
 
 export interface EntendiServer {
@@ -92,6 +94,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   const api = new EntendiApiClient({
     apiUrl: options.apiUrl,
     apiKey: options.apiKey ?? '',
+    orgId: options.orgId,
   });
 
   const authenticated = !!options.apiKey;
@@ -134,23 +137,23 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   mcpServer.registerTool(
     'entendi_observe',
     {
-      description: 'Observe concepts detected after a tool use. Determines if a comprehension probe is appropriate.',
+      description: 'Report technical concepts the user is discussing or working with. The system decides whether to issue a comprehension probe. Call this after every substantive user message that involves technical concepts.',
       inputSchema: {
         concepts: z.preprocess(
           (v) => (typeof v === 'string' ? JSON.parse(v) : v),
           z.array(z.object({
-            id: z.string(),
-            source: z.enum(['package', 'ast', 'llm']),
-          })),
+            id: z.string().describe('Kebab-case concept identifier, e.g. "react-hooks", "sql-joins", "docker-compose"'),
+            source: z.enum(['package', 'ast', 'llm']).describe('How the concept was detected: "llm" if you identified it from conversation'),
+          })).describe('Array of concepts the user explicitly mentioned or is working with'),
         ),
-        triggerContext: z.string(),
+        triggerContext: z.string().describe('Brief description of what the user is doing, e.g. "user asked about Redis caching strategies"'),
         primaryConceptId: z.preprocess(
           (v) => (v === '' || v === null ? undefined : v),
-          z.string().optional(),
+          z.string().optional().describe('The single concept the user is most directly engaging with, e.g. "redis". Must match one of the concept ids above'),
         ),
         repoUrl: z.preprocess(
           (v) => (v === '' || v === null ? undefined : v),
-          z.string().url().optional(),
+          z.string().url().optional().describe('GitHub repo URL if the conversation is about a specific codebase'),
         ),
       },
       _meta: {
@@ -197,13 +200,13 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   // --- Tool 2: entendi_record_evaluation ---
   mcpServer.tool(
     'entendi_record_evaluation',
-    'Record the evaluation of a probe or tutor response. Updates the knowledge graph with Bayesian scoring.',
+    'Score the user\'s response to a comprehension probe. Call this after the user answers a probe question. Pass the probeToken exactly as received from entendi_observe.',
     {
-      conceptId: z.string(),
-      score: z.coerce.number().int().min(0).max(3),
-      confidence: z.coerce.number().min(0).max(1),
-      reasoning: z.string(),
-      eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']),
+      conceptId: z.string().describe('Kebab-case concept that was probed, e.g. "react-hooks"'),
+      score: z.coerce.number().int().min(0).max(3).describe('Understanding score: 0=no understanding, 1=vague/partial, 2=correct with specifics, 3=deep/nuanced'),
+      confidence: z.coerce.number().min(0).max(1).describe('Your confidence in the score, 0.0 to 1.0'),
+      reasoning: z.string().describe('Brief explanation of why you assigned this score'),
+      eventType: z.enum(['probe', 'tutor_phase1', 'tutor_phase4']).describe('Type of evaluation: "probe" for standard probes, "tutor_phase1" or "tutor_phase4" for tutor sessions'),
       probeToken: z.preprocess(
         (v) => (typeof v === 'string' ? JSON.parse(v) : v),
         z.object({
@@ -215,9 +218,9 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
           issuedAt: z.string(),
           expiresAt: z.string(),
           signature: z.string(),
-        }).optional(),
+        }).optional().describe('The full probeToken object from entendi_observe response. Pass it exactly as received, do not modify'),
       ),
-      responseText: z.string().optional(),
+      responseText: z.string().optional().describe('The user\'s raw response text, copied verbatim'),
     },
     async (args) => {
       mcpLog('tool:entendi_record_evaluation called', args);
@@ -244,10 +247,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   // --- Tool 3: entendi_start_tutor ---
   mcpServer.tool(
     'entendi_start_tutor',
-    'Start a 4-phase Socratic tutor session for a concept.',
+    'Start a 4-phase Socratic tutor session to teach the user a concept. The user typically requests this by saying "teach me about X".',
     {
-      conceptId: z.string(),
-      triggerScore: z.coerce.number().int().min(0).max(1).nullable().optional(),
+      conceptId: z.string().describe('Kebab-case concept to teach, e.g. "react-hooks", "sql-joins", "docker-compose". Required.'),
+      triggerScore: z.coerce.number().int().min(0).max(1).nullable().optional().describe('The probe score that triggered tutoring: 0 or 1. Omit if user requested tutoring directly.'),
     },
     async (args) => {
       mcpLog('tool:entendi_start_tutor called', args);
@@ -269,14 +272,14 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   // --- Tool 4: entendi_advance_tutor ---
   mcpServer.tool(
     'entendi_advance_tutor',
-    'Advance a tutor session to the next phase after the user responds.',
+    'Advance an active tutor session to the next phase after the user responds. Call this each time the user replies during a tutor session.',
     {
-      sessionId: z.string(),
-      userResponse: z.string(),
-      score: z.coerce.number().int().min(0).max(3).optional(),
-      confidence: z.coerce.number().min(0).max(1).optional(),
-      reasoning: z.string().optional(),
-      misconception: z.string().optional(),
+      sessionId: z.string().describe('The session ID returned by entendi_start_tutor'),
+      userResponse: z.string().describe('The user\'s response text, copied verbatim'),
+      score: z.coerce.number().int().min(0).max(3).optional().describe('Understanding score for this phase: 0=none, 1=vague, 2=correct, 3=deep. Only required for assessment phases.'),
+      confidence: z.coerce.number().min(0).max(1).optional().describe('Your confidence in the score, 0.0 to 1.0'),
+      reasoning: z.string().optional().describe('Brief explanation of the score'),
+      misconception: z.string().optional().describe('Any misconception detected in the user\'s response'),
     },
     async (args) => {
       mcpLog('tool:entendi_advance_tutor called', args);
@@ -328,9 +331,9 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   mcpServer.registerTool(
     'entendi_get_status',
     {
-      description: 'Query mastery state for a specific concept or get an overview of all concepts.',
+      description: 'Get the user\'s mastery status. Call without conceptId for an overview of all concepts, or with a conceptId for details on a specific concept.',
       inputSchema: {
-        conceptId: z.string().optional(),
+        conceptId: z.string().optional().describe('Kebab-case concept to check, e.g. "react-hooks". Omit for a full overview.'),
       },
       _meta: {
         ui: { resourceUri: 'ui://entendi/status' },
@@ -355,7 +358,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   mcpServer.registerTool(
     'entendi_get_zpd_frontier',
     {
-      description: 'Get the Zone of Proximal Development frontier: concepts the user is ready to learn next.',
+      description: 'Get concepts the user is ready to learn next (Zone of Proximal Development). Returns concepts where prerequisites are met but mastery is low.',
       inputSchema: {
         limit: z.coerce.number().int().min(1).max(100).optional()
           .describe('Max concepts to return (default: 20)'),
@@ -541,13 +544,14 @@ async function main() {
   const config = loadConfig();
   const apiUrl = config.apiUrl;
   const apiKey = config.apiKey;
+  const orgId = config.orgId;
 
   if (!apiKey) {
     process.stderr.write('[Entendi MCP] No API key found. Only entendi_login is available.\n');
     process.stderr.write('[Entendi MCP] Run entendi_login to link your account.\n');
   }
 
-  const server = createEntendiServer({ apiUrl, apiKey });
+  const server = createEntendiServer({ apiUrl, apiKey, orgId });
   const transport = new StdioServerTransport();
   await server.getMcpServer().connect(transport);
   process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl}, authenticated: ${!!apiKey})\n`);

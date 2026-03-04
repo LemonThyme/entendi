@@ -290,10 +290,12 @@ export function createApp(databaseUrl: string, authOptions?: { secret?: string; 
         .innerJoin(orgTable, eq(invitation.organizationId, orgTable.id))
         .where(and(eq(invitation.email, currentUser.email), eq(invitation.status, 'pending'))),
     ]);
+    const session = c.get('session');
     return c.json({
       user: { ...currentUser, onboardingCompletedAt: userRow[0]?.onboardingCompletedAt ?? null },
       hasApiKey: keys.length > 0,
       pendingInvitations: pendingInvites,
+      activeOrganizationId: session?.activeOrganizationId ?? null,
     });
   });
 

@@ -2,7 +2,7 @@ import { readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
-import { type HookInput, log, readStdin } from './shared.js';
+import { type HookInput, apiHeaders, log, readStdin } from './shared.js';
 
 export interface UserPromptSubmitOutput {
   hookSpecificOutput?: {
@@ -105,7 +105,7 @@ async function callObserve(concepts: Array<{ id: string; source: string }>): Pro
     const res = await fetch(`${config.apiUrl}/api/mcp/observe`, {
       method: 'POST',
       headers: {
-        'x-api-key': config.apiKey,
+        ...apiHeaders(config),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ concepts, primaryConceptId }),
@@ -152,7 +152,7 @@ async function fetchPendingAction(): Promise<PendingActionResult> {
   try {
     log('hook:user-prompt-submit', 'fetchPendingAction: calling API', { url: `${apiUrl}/api/mcp/pending-action` });
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
-      headers: { 'x-api-key': apiKey },
+      headers: apiHeaders(config),
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
@@ -181,7 +181,7 @@ async function retryPendingDismiss(): Promise<void> {
 
     const res = await fetch(`${config.apiUrl}/api/mcp/dismiss`, {
       method: 'POST',
-      headers: { 'x-api-key': config.apiKey, 'Content-Type': 'application/json' },
+      headers: { ...apiHeaders(config), 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: marker.reason ?? 'session_ended' }),
       signal: AbortSignal.timeout(5000),
     });
