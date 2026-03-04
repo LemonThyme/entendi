@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/LemonThyme/entendi/compare/entendi-v0.3.1...entendi-v0.4.0) (2026-03-04)
+
+
+### Features
+
+* **dashboard:** mobile responsive layout and haptic feedback ([#89](https://github.com/LemonThyme/entendi/issues/89)) ([46ea474](https://github.com/LemonThyme/entendi/commit/46ea474e6d0a592067577a5d8d62b7458a9a1470))
+* **dashboard:** Setup section in Settings, reorganize Organization tab ([#91](https://github.com/LemonThyme/entendi/issues/91)) ([199d5fd](https://github.com/LemonThyme/entendi/commit/199d5fda18c31f6ec519e99e4f7de47861414c72))
+* **mcp:** migrate views to ext-apps SDK ([#111](https://github.com/LemonThyme/entendi/issues/111)) ([657301b](https://github.com/LemonThyme/entendi/commit/657301bd7ab6f7c002adf0ed57b90f6a7cdf019b))
+
 ## [0.3.1](https://github.com/LemonThyme/entendi/compare/entendi-v0.3.0...entendi-v0.3.1) (2026-03-04)
 
 
