@@ -8,19 +8,19 @@ describe('view runtime', () => {
     expect(js.length).toBeGreaterThan(100);
   });
 
-  it('contains ui/initialize request', () => {
+  it('contains the ext-apps App class bundle', () => {
     const js = getViewRuntime();
-    expect(js).toContain('ui/initialize');
+    expect(js).toContain('McpApps');
   });
 
-  it('contains postMessage transport', () => {
+  it('contains EntendiApp wrapper', () => {
     const js = getViewRuntime();
-    expect(js).toContain('postMessage');
+    expect(js).toContain('EntendiApp');
   });
 
-  it('contains auto-resize observer', () => {
+  it('contains callServerTool bridge', () => {
     const js = getViewRuntime();
-    expect(js).toContain('ResizeObserver');
+    expect(js).toContain('callServerTool');
   });
 
   it('contains theme application', () => {

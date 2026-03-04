@@ -1,5 +1,5 @@
 import { loadConfig } from '../shared/config.js';
-import { log, readStdin } from './shared.js';
+import { apiHeaders, log, readStdin } from './shared.js';
 
 /**
  * Notification hook (idle_prompt) — checks for pending probes when user is idle.
@@ -16,7 +16,7 @@ async function checkPendingProbe(): Promise<string | null> {
 
   try {
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
-      headers: { 'x-api-key': apiKey },
+      headers: apiHeaders(config),
       signal: AbortSignal.timeout(5000),
     });
 

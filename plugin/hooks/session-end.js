@@ -21,7 +21,8 @@ function loadConfig() {
     apiUrl: process.env.ENTENDI_API_URL || fileConfig.apiUrl || "https://api.entendi.dev",
     // Config file takes priority — it's written by entendi_login (canonical auth flow).
     // Env var is a fallback for manual setup or CI.
-    apiKey: fileConfig.apiKey || process.env.ENTENDI_API_KEY || void 0
+    apiKey: fileConfig.apiKey || process.env.ENTENDI_API_KEY || void 0,
+    orgId: fileConfig.orgId
   };
 }
 
@@ -55,6 +56,11 @@ function log(component, message, data) {
   } catch {
   }
 }
+function apiHeaders(config) {
+  const headers = { "x-api-key": config.apiKey };
+  if (config.orgId) headers["X-Org-Id"] = config.orgId;
+  return headers;
+}
 
 // src/hooks/session-end.ts
 function writeDismissMarker(conceptId) {
@@ -78,7 +84,7 @@ async function cleanupSession() {
   let lastConceptId = "unknown";
   try {
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
-      headers: { "x-api-key": apiKey },
+      headers: apiHeaders(config),
       signal: AbortSignal.timeout(5e3)
     });
     if (!res.ok) {
@@ -97,7 +103,7 @@ async function cleanupSession() {
       const dismissRes = await fetch(`${apiUrl}/api/mcp/dismiss`, {
         method: "POST",
         headers: {
-          "x-api-key": apiKey,
+          ...apiHeaders(config),
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ reason: "session_ended" }),

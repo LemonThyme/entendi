@@ -46,6 +46,30 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown, c: Context<Env>): T |
   return result.data;
 }
 
+/** Verify user is a member of the active org. Returns orgId or error Response. */
+async function requireOrgMembership(c: Context<Env>): Promise<{ orgId: string } | Response> {
+  const orgId = await resolveOrgId(c);
+  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+
+  const db = c.get('db');
+  const user = c.get('user')!;
+  const [membership] = await db.select({ role: member.role })
+    .from(member)
+    .where(and(eq(member.userId, user.id), eq(member.organizationId, orgId)))
+    .limit(1);
+
+  if (!membership) return c.json({ error: 'Not a member of this organization' }, 403);
+  return { orgId };
+}
+
+/** Fetch a syllabus that belongs to the given org, or null. */
+async function getSyllabusForOrg(c: Context<Env>, syllabusId: string, orgId: string) {
+  const db = c.get('db');
+  const [syllabus] = await db.select().from(syllabi)
+    .where(and(eq(syllabi.id, syllabusId), eq(syllabi.orgId, orgId)));
+  return syllabus ?? null;
+}
+
 // --- POST / (create syllabus) ---
 syllabiRoutes.post('/', requirePermission('syllabi.create'), async (c) => {
   const db = c.get('db');
@@ -70,22 +94,26 @@ syllabiRoutes.post('/', requirePermission('syllabi.create'), async (c) => {
 
 // --- GET / (list syllabi for active org) ---
 syllabiRoutes.get('/', async (c) => {
-  const db = c.get('db');
-  const orgId = await resolveOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
+  const db = c.get('db');
   const rows = await db.select().from(syllabi).where(eq(syllabi.orgId, orgId));
   return c.json(rows);
 });
 
 // --- GET /:id (detail with sources, concept count, enrollment count) ---
 syllabiRoutes.get('/:id', async (c) => {
-  const db = c.get('db');
-  const id = c.req.param('id');
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
 
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, id));
+  const id = c.req.param('id');
+  const syllabus = await getSyllabusForOrg(c, id, orgId);
   if (!syllabus) return c.json({ error: 'Not found' }, 404);
 
+  const db = c.get('db');
   const sources = await db.select().from(syllabusSources).where(eq(syllabusSources.syllabusId, id));
   const [conceptCountRow] = await db.select({ value: count() }).from(syllabusConcepts).where(eq(syllabusConcepts.syllabusId, id));
   const [enrollmentCountRow] = await db.select({ value: count() }).from(syllabusEnrollments).where(eq(syllabusEnrollments.syllabusId, id));
@@ -100,16 +128,17 @@ syllabiRoutes.get('/:id', async (c) => {
 
 // --- PUT /:id (update syllabus) ---
 syllabiRoutes.put('/:id', requirePermission('syllabi.edit'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const id = c.req.param('id');
 
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, id));
+  const syllabus = await getSyllabusForOrg(c, id, orgId);
   if (!syllabus) return c.json({ error: 'Not found' }, 404);
 
   const raw = await c.req.json();
   const parsed = parseBody(updateSyllabusSchema, raw, c);
   if (parsed instanceof Response) return parsed;
 
+  const db = c.get('db');
   const updates: Record<string, unknown> = {};
   if (parsed.name !== undefined) updates.name = parsed.name;
   if (parsed.description !== undefined) updates.description = parsed.description;
@@ -125,24 +154,26 @@ syllabiRoutes.put('/:id', requirePermission('syllabi.edit'), async (c) => {
 
 // --- DELETE /:id (delete syllabus) ---
 syllabiRoutes.delete('/:id', requirePermission('syllabi.delete'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const id = c.req.param('id');
 
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, id));
+  const syllabus = await getSyllabusForOrg(c, id, orgId);
   if (!syllabus) return c.json({ error: 'Not found' }, 404);
 
+  const db = c.get('db');
   await db.delete(syllabi).where(eq(syllabi.id, id));
   return c.json({ deleted: true });
 });
 
 // --- POST /:id/sources (add source) ---
 syllabiRoutes.post('/:id/sources', requirePermission('syllabi.edit'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const syllabusId = c.req.param('id');
 
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, syllabusId));
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
   if (!syllabus) return c.json({ error: 'Not found' }, 404);
 
+  const db = c.get('db');
   const raw = await c.req.json();
   const parsed = parseBody(addSourceSchema, raw, c);
   if (parsed instanceof Response) return parsed;
@@ -163,8 +194,13 @@ syllabiRoutes.post('/:id/sources', requirePermission('syllabi.edit'), async (c) 
 
 // --- DELETE /:id/sources/:sourceId (remove source) ---
 syllabiRoutes.delete('/:id/sources/:sourceId', requirePermission('syllabi.edit'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const syllabusId = c.req.param('id');
+
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
+  if (!syllabus) return c.json({ error: 'Not found' }, 404);
+
+  const db = c.get('db');
   const sourceId = c.req.param('sourceId');
 
   const [source] = await db.select().from(syllabusSources).where(
@@ -178,12 +214,13 @@ syllabiRoutes.delete('/:id/sources/:sourceId', requirePermission('syllabi.edit')
 
 // --- POST /:id/concepts (add concept) ---
 syllabiRoutes.post('/:id/concepts', requirePermission('syllabi.edit'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const syllabusId = c.req.param('id');
 
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, syllabusId));
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
   if (!syllabus) return c.json({ error: 'Not found' }, 404);
 
+  const db = c.get('db');
   const raw = await c.req.json();
   const parsed = parseBody(addConceptSchema, raw, c);
   if (parsed instanceof Response) return parsed;
@@ -204,8 +241,13 @@ syllabiRoutes.post('/:id/concepts', requirePermission('syllabi.edit'), async (c)
 
 // --- DELETE /:id/concepts/:conceptId (remove concept) ---
 syllabiRoutes.delete('/:id/concepts/:conceptId', requirePermission('syllabi.edit'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const syllabusId = c.req.param('id');
+
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
+  if (!syllabus) return c.json({ error: 'Not found' }, 404);
+
+  const db = c.get('db');
   const conceptId = c.req.param('conceptId');
 
   const [sc] = await db.select().from(syllabusConcepts).where(
@@ -219,24 +261,18 @@ syllabiRoutes.delete('/:id/concepts/:conceptId', requirePermission('syllabi.edit
   return c.json({ deleted: true });
 });
 
-// --- POST /:id/enroll (self-enroll) ---
+// --- POST /:id/enroll (self-enroll, any org member) ---
 syllabiRoutes.post('/:id/enroll', async (c) => {
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
+
   const db = c.get('db');
   const user = c.get('user')!;
-  const orgId = await resolveOrgId(c);
-  if (!orgId) return c.json({ error: 'No active organization' }, 400);
-
   const syllabusId = c.req.param('id');
 
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, syllabusId));
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
   if (!syllabus) return c.json({ error: 'Not found' }, 404);
-
-  // Verify org membership
-  const [membership] = await db.select({ id: member.id })
-    .from(member)
-    .where(and(eq(member.userId, user.id), eq(member.organizationId, orgId)))
-    .limit(1);
-  if (!membership) return c.json({ error: 'Not a member of this organization' }, 403);
 
   // Check for duplicate enrollment
   const [existing] = await db.select().from(syllabusEnrollments).where(
@@ -254,17 +290,29 @@ syllabiRoutes.post('/:id/enroll', async (c) => {
 
 // --- GET /:id/progress (own progress) ---
 syllabiRoutes.get('/:id/progress', async (c) => {
-  const db = c.get('db');
+  const orgResult = await requireOrgMembership(c);
+  if (orgResult instanceof Response) return orgResult;
+  const { orgId } = orgResult;
+
   const user = c.get('user')!;
   const syllabusId = c.req.param('id');
 
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
+  if (!syllabus) return c.json({ error: 'Not found' }, 404);
+
+  const db = c.get('db');
   return getProgress(db, syllabusId, user.id, c);
 });
 
 // --- GET /:id/progress/:userId (member progress) ---
 syllabiRoutes.get('/:id/progress/:userId', requirePermission('syllabi.view_progress'), async (c) => {
-  const db = c.get('db');
+  const orgId = (await resolveOrgId(c))!;
   const syllabusId = c.req.param('id');
+
+  const syllabus = await getSyllabusForOrg(c, syllabusId, orgId);
+  if (!syllabus) return c.json({ error: 'Not found' }, 404);
+
+  const db = c.get('db');
   const userId = c.req.param('userId');
 
   return getProgress(db, syllabusId, userId, c);
@@ -278,9 +326,6 @@ const IMPORTANCE_THRESHOLDS: Record<string, number> = {
 };
 
 async function getProgress(db: any, syllabusId: string, userId: string, c: Context<Env>) {
-  const [syllabus] = await db.select().from(syllabi).where(eq(syllabi.id, syllabusId));
-  if (!syllabus) return c.json({ error: 'Not found' }, 404);
-
   const conceptRows = await db.select().from(syllabusConcepts).where(eq(syllabusConcepts.syllabusId, syllabusId));
 
   if (conceptRows.length === 0) {

@@ -127,6 +127,8 @@ export interface RetryOptions {
 export interface ApiClientOptions {
   apiUrl: string;
   apiKey: string;
+  /** Organization ID to send as X-Org-Id header on all requests. */
+  orgId?: string;
   retry?: RetryOptions;
   circuitBreaker?: CircuitBreakerOptions;
   /** TTL in ms for the read-only response cache (default: 60_000). */
@@ -163,6 +165,7 @@ function computeBackoffDelay(attempt: number, baseDelayMs: number, jitterFactor:
 export class EntendiApiClient {
   private apiUrl: string;
   private apiKey: string;
+  private orgId: string | undefined;
   private maxRetries: number;
   private baseDelayMs: number;
   private jitterFactor: number;
@@ -173,6 +176,7 @@ export class EntendiApiClient {
   constructor(options: ApiClientOptions) {
     this.apiUrl = options.apiUrl.replace(/\/$/, '');
     this.apiKey = options.apiKey;
+    this.orgId = options.orgId;
     this.maxRetries = options.retry?.maxRetries ?? 3;
     this.baseDelayMs = options.retry?.baseDelayMs ?? 1000;
     this.jitterFactor = options.retry?.jitterFactor ?? 0.25;
@@ -224,12 +228,16 @@ export class EntendiApiClient {
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+        };
+        if (this.orgId) {
+          headers['X-Org-Id'] = this.orgId;
+        }
         const init: RequestInit = {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': this.apiKey,
-          },
+          headers,
           signal: controller.signal,
         };
         if (body) {

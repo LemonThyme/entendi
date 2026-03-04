@@ -1,33 +1,18 @@
 /**
  * Shared MCP Apps view runtime.
- * Returns a JS string to be embedded in a <script> tag in each view.
- * Provides window.EntendiApp with init(), callTool(), onToolResult(),
- * getHostContext(), openLink(), sendNotification().
+ * Uses the official @modelcontextprotocol/ext-apps App class,
+ * pre-bundled as IIFE, with a thin EntendiApp wrapper for backward compatibility.
  */
+import { APP_BRIDGE_BUNDLE } from './_app-bridge-bundle.js';
+
 export function getViewRuntime(): string {
   return `
+${APP_BRIDGE_BUNDLE}
+
 (function() {
   'use strict';
 
-  var pending = {};
-  var nextId = 1;
-  var hostContext = {};
   var toolResultHandlers = [];
-  var readyCallback = null;
-
-  function sendRpc(method, params) {
-    var id = nextId++;
-    var msg = { jsonrpc: '2.0', id: id, method: method, params: params || {} };
-    window.parent.postMessage(msg, '*');
-    return new Promise(function(resolve, reject) {
-      pending[id] = { resolve: resolve, reject: reject };
-    });
-  }
-
-  function sendNotification(method, params) {
-    var msg = { jsonrpc: '2.0', method: method, params: params || {} };
-    window.parent.postMessage(msg, '*');
-  }
 
   function applyTheme(theme) {
     if (!theme) return;
@@ -41,84 +26,67 @@ export function getViewRuntime(): string {
       'border': '--color-border'
     };
     for (var key in map) {
-      if (theme[key]) {
-        root.setProperty(map[key], theme[key]);
-      }
+      if (theme[key]) root.setProperty(map[key], theme[key]);
     }
   }
 
-  window.addEventListener('message', function(event) {
-    var data = event.data;
-    if (!data || !data.jsonrpc) return;
+  var app = new McpApps.App(
+    { name: 'Entendi', version: '1.0.0' },
+    {}
+  );
 
-    // Response to our request
-    if (data.id && pending[data.id]) {
-      var p = pending[data.id];
-      delete pending[data.id];
-      if (data.error) {
-        p.reject(new Error(data.error.message || 'RPC error'));
-      } else {
-        p.resolve(data.result);
-      }
-      return;
+  app.ontoolinput = function(params) {
+    for (var i = 0; i < toolResultHandlers.length; i++) {
+      try { toolResultHandlers[i](params); } catch(e) {}
     }
+  };
 
-    // Notifications from host
-    if (data.method === 'ui/notifications/tool-result') {
-      for (var i = 0; i < toolResultHandlers.length; i++) {
-        toolResultHandlers[i](data.params);
-      }
-    } else if (data.method === 'ui/notifications/tool-input') {
-      for (var j = 0; j < toolResultHandlers.length; j++) {
-        toolResultHandlers[j](data.params);
-      }
-    } else if (data.method === 'ui/notifications/host-context-changed') {
-      hostContext = data.params || {};
-      applyTheme(hostContext.theme);
+  app.ontoolresult = function(params) {
+    for (var i = 0; i < toolResultHandlers.length; i++) {
+      try { toolResultHandlers[i](params); } catch(e) {}
     }
-  });
+  };
 
-  // Auto-resize observer with 50ms debounce
-  var resizeTimer = null;
-  var observer = new ResizeObserver(function(entries) {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function() {
-      var el = document.documentElement;
-      sendNotification('ui/notifications/size-changed', {
-        width: el.scrollWidth,
-        height: el.scrollHeight
-      });
-    }, 50);
-  });
-  observer.observe(document.documentElement);
+  app.onhostcontextchanged = function(ctx) {
+    applyTheme(ctx.theme);
+  };
 
   window.EntendiApp = {
     init: function(name, onReady) {
-      readyCallback = onReady;
-      sendRpc('ui/initialize', {
-        protocolVersion: '2026-01-26',
-        appName: name
-      }).then(function(result) {
-        if (result && result.hostContext) {
-          hostContext = result.hostContext;
-          applyTheme(hostContext.theme);
-        }
-        if (readyCallback) readyCallback(result);
+      var transport = new McpApps.PostMessageTransport(window.parent, window);
+      app.connect(transport).then(function() {
+        var ctx = app.getHostContext();
+        if (ctx && ctx.theme) applyTheme(ctx.theme);
+        if (onReady) onReady(ctx);
+      }).catch(function(err) {
+        console.error('[Entendi] App connect failed:', err);
+        if (onReady) onReady({});
       });
     },
     callTool: function(name, args) {
-      return sendRpc('tools/call', { name: name, arguments: args || {} });
+      return app.callServerTool({ name: name, arguments: args || {} });
     },
     onToolResult: function(fn) {
       toolResultHandlers.push(fn);
     },
     getHostContext: function() {
-      return hostContext;
+      return app.getHostContext() || {};
     },
     openLink: function(url) {
-      sendNotification('ui/notifications/open-link', { url: url });
+      app.openLink({ url: url }).catch(function() {});
     },
-    sendNotification: sendNotification
+    sendMessage: function(params) {
+      return app.sendMessage(params);
+    },
+    sendNotification: function(method, params) {
+      // Forward ui/message notifications to the host via sendMessage
+      if (method === 'ui/message' && params) {
+        return app.sendMessage({
+          role: 'user',
+          content: [{ type: 'text', text: JSON.stringify(params) }]
+        });
+      }
+    }
   };
 })();
 `;
