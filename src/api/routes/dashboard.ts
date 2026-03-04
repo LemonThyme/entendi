@@ -52,9 +52,9 @@ function getShellHTML(): string {
       </div>
 
       <div class="tab-content active" id="tab-overview" role="tabpanel" aria-labelledby="tabBtn-overview" tabindex="0">
-        <div style="display:flex;gap:16px;margin-bottom:32px;" id="hero-panels">
-          <div style="flex:1;" id="panel-strongest"></div>
-          <div style="flex:1;" id="panel-attention"></div>
+        <div class="hero-panels" id="hero-panels">
+          <div class="hero-panels-col" id="panel-strongest"></div>
+          <div class="hero-panels-col" id="panel-attention"></div>
         </div>
         <div class="section">
           <div class="section-header">
