@@ -2,7 +2,7 @@ import { writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
-import { log, readStdin } from './shared.js';
+import { apiHeaders, log, readStdin } from './shared.js';
 
 /**
  * SessionEnd hook — clean teardown when session terminates.
@@ -34,7 +34,7 @@ export async function cleanupSession(): Promise<void> {
   try {
     // Check for pending actions
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
-      headers: { 'x-api-key': apiKey },
+      headers: apiHeaders(config),
       signal: AbortSignal.timeout(5000),
     });
 
@@ -61,7 +61,7 @@ export async function cleanupSession(): Promise<void> {
       const dismissRes = await fetch(`${apiUrl}/api/mcp/dismiss`, {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
+          ...apiHeaders(config),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ reason: 'session_ended' }),

@@ -48,6 +48,8 @@ export interface EntendiServerOptions {
   apiUrl: string;
   /** API key for authentication. When omitted, only entendi_login is available. */
   apiKey?: string;
+  /** Organization ID to scope all requests to. */
+  orgId?: string;
 }
 
 export interface EntendiServer {
@@ -92,6 +94,7 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
   const api = new EntendiApiClient({
     apiUrl: options.apiUrl,
     apiKey: options.apiKey ?? '',
+    orgId: options.orgId,
   });
 
   const authenticated = !!options.apiKey;
@@ -541,13 +544,14 @@ async function main() {
   const config = loadConfig();
   const apiUrl = config.apiUrl;
   const apiKey = config.apiKey;
+  const orgId = config.orgId;
 
   if (!apiKey) {
     process.stderr.write('[Entendi MCP] No API key found. Only entendi_login is available.\n');
     process.stderr.write('[Entendi MCP] Run entendi_login to link your account.\n');
   }
 
-  const server = createEntendiServer({ apiUrl, apiKey });
+  const server = createEntendiServer({ apiUrl, apiKey, orgId });
   const transport = new StdioServerTransport();
   await server.getMcpServer().connect(transport);
   process.stderr.write(`[Entendi MCP] Server started on stdio (API: ${apiUrl}, authenticated: ${!!apiKey})\n`);

@@ -714,8 +714,21 @@
     bar.appendChild(userBar);
 
     initTabs();
+    loadFeatureFlags();
     loadData();
     connectSSE();
+  }
+
+  function loadFeatureFlags() {
+    fetch("/api/dashboard/features", { headers: getHeaders() })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(flags) {
+        if (!flags) return;
+        var codebasesBtn = document.getElementById("tabBtn-codebases");
+        var syllabiBtn = document.getElementById("tabBtn-syllabi");
+        if (codebasesBtn && !flags.codebasesVisible) codebasesBtn.style.display = "none";
+        if (syllabiBtn && !flags.syllabiVisible) syllabiBtn.style.display = "none";
+      });
   }
 
   function showDashboard() {

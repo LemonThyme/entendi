@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
-import { type HookInput, log, readStdin } from './shared.js';
+import { type HookInput, apiHeaders, log, readStdin } from './shared.js';
 import { findLastUserMessage, hasObserveCallInCurrentTurn } from './transcript.js';
 import { isTrivialMessage } from './trivial.js';
 
@@ -106,7 +106,7 @@ async function checkDanglingProbes(): Promise<void> {
   try {
     log('hook:stop', 'checking for dangling probes', { url: `${apiUrl}/api/mcp/pending-action` });
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
-      headers: { 'x-api-key': apiKey },
+      headers: apiHeaders(config),
       signal: AbortSignal.timeout(5000),
     });
 

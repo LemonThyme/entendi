@@ -1,9 +1,11 @@
 import { createHash } from 'crypto';
-import { desc } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { manifest } from '../../dashboard/manifest.js';
-import { pressMentions } from '../db/schema.js';
+import { codebases, member, orgRolePermissions, pressMentions, syllabi } from '../db/schema.js';
 import type { Env } from '../index.js';
+import { resolveOrgId } from '../lib/resolve-org.js';
+import { requireAuth } from '../middleware/auth.js';
 import { daysSinceLaunch, type PageMeta, publicShell } from './public-html.js';
 
 export const dashboardRoutes = new Hono<Env>();
@@ -460,6 +462,54 @@ function getTermsHTML(): string {
     twitterCard: 'summary',
   });
 }
+
+async function hasPermission(db: any, userId: string, orgId: string, permission: string): Promise<boolean> {
+  const [membership] = await db.select({
+    role: member.role,
+    roleId: member.roleId,
+  }).from(member).where(
+    and(eq(member.userId, userId), eq(member.organizationId, orgId))
+  ).limit(1);
+
+  if (!membership) return false;
+  if (membership.role === 'owner' || membership.role === 'admin') return true;
+  if (!membership.roleId) return false;
+
+  const perms = await db.select({ permission: orgRolePermissions.permission })
+    .from(orgRolePermissions)
+    .where(eq(orgRolePermissions.roleId, membership.roleId));
+
+  return perms.some((p: { permission: string }) => p.permission === permission);
+}
+
+dashboardRoutes.get('/api/dashboard/features', requireAuth, async (c) => {
+  const user = c.get('user')!;
+  const db = c.get('db');
+  const orgId = await resolveOrgId(c);
+
+  if (!orgId) {
+    return c.json({ codebasesVisible: false, syllabiVisible: false });
+  }
+
+  const [[cbCount], [syCount]] = await Promise.all([
+    db.select({ value: count() }).from(codebases).where(eq(codebases.orgId, orgId)),
+    db.select({ value: count() }).from(syllabi).where(eq(syllabi.orgId, orgId)),
+  ]);
+
+  const codebasesExist = cbCount.value > 0;
+  const syllabiExist = syCount.value > 0;
+
+  // Only check permissions if no items exist (optimization)
+  const [canCreateCodebases, canCreateSyllabi] = await Promise.all([
+    codebasesExist ? true : hasPermission(db, user.id, orgId, 'codebases.create'),
+    syllabiExist ? true : hasPermission(db, user.id, orgId, 'syllabi.create'),
+  ]);
+
+  return c.json({
+    codebasesVisible: codebasesExist || canCreateCodebases,
+    syllabiVisible: syllabiExist || canCreateSyllabi,
+  });
+});
 
 dashboardRoutes.get('/privacy', (c) => {
   return c.html(getPrivacyHTML());
