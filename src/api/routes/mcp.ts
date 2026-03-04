@@ -16,7 +16,7 @@ import { type GRMItemParams, pMastery, type RubricScore } from '../../schemas/ty
 import type { Database } from '../db/connection.js';
 import {assessmentEvents,codebaseConcepts, codebases, conceptEdges,
   concepts, dismissalEvents, pendingActions,probeSessions,
-  probeTokens, responseProfiles, tutorExchanges,
+  probeTokens, responseProfiles, syllabi, syllabusConcepts, tutorExchanges,
   tutorSessions, userConceptStates,
 } from '../db/schema.js';
 import type { Env } from '../index.js';
@@ -211,6 +211,9 @@ mcpRoutes.post('/observe', async (c) => {
     }
   }
 
+  // Resolve org context (used for both repoUrl scoping and org-context boosting)
+  const orgId = await resolveOrgId(c);
+
   // Codebase/syllabus probe scoping: boost urgency for concepts in enrolled codebases/syllabi
   if (body.repoUrl) {
     const repoMatch = body.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
@@ -218,7 +221,6 @@ mcpRoutes.post('/observe', async (c) => {
       const [, repoOwner, repoName] = repoMatch;
       const cleanName = repoName.replace(/\.git$/, '');
       // Look up codebase by repo owner/name within user's org
-      const orgId = await resolveOrgId(c);
       if (orgId) {
         const [codebase] = await db.select({ id: codebases.id }).from(codebases)
           .where(and(
@@ -239,6 +241,32 @@ mcpRoutes.post('/observe', async (c) => {
             }
           }
         }
+      }
+    }
+  }
+
+  // Org-context boosting: boost urgency for concepts linked to active org's codebases/syllabi
+  if (orgId) {
+    const [orgCbConcepts, orgSylConcepts] = await Promise.all([
+      db.select({ conceptId: codebaseConcepts.conceptId })
+        .from(codebaseConcepts)
+        .innerJoin(codebases, eq(codebaseConcepts.codebaseId, codebases.id))
+        .where(eq(codebases.orgId, orgId)),
+      db.select({ conceptId: syllabusConcepts.conceptId })
+        .from(syllabusConcepts)
+        .innerJoin(syllabi, eq(syllabusConcepts.syllabusId, syllabi.id))
+        .where(eq(syllabi.orgId, orgId)),
+    ]);
+
+    const orgConceptIds = new Set([
+      ...orgCbConcepts.map(c => c.conceptId),
+      ...orgSylConcepts.map(c => c.conceptId),
+    ]);
+
+    // Boost urgency by 0.2 for candidates that match org concepts
+    for (const candidate of candidates) {
+      if (orgConceptIds.has(candidate.conceptId)) {
+        candidate.urgency = Math.min(1.0, candidate.urgency + 0.2);
       }
     }
   }
