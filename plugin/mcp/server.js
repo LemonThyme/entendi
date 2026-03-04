@@ -36961,36 +36961,64 @@ ${APP_BRIDGE_BUNDLE}
     {}
   );
 
+  var _log = function(msg, data) {
+    try { console.log('[Entendi] ' + msg, data !== undefined ? data : ''); } catch(e) {}
+  };
+
+  // Wrap SDK notification params to match the format views expect:
+  // Views read params.result.content, params.arguments
+  // SDK ontoolinput gives { arguments }, ontoolresult gives { content, isError }
   app.ontoolinput = function(params) {
+    _log('ontoolinput', params);
+    var wrapped = { arguments: params.arguments };
     for (var i = 0; i < toolResultHandlers.length; i++) {
-      try { toolResultHandlers[i](params); } catch(e) {}
+      try { toolResultHandlers[i](wrapped); } catch(e) {}
     }
   };
 
   app.ontoolresult = function(params) {
+    _log('ontoolresult', params);
+    var wrapped = { result: { content: params.content, isError: params.isError } };
     for (var i = 0; i < toolResultHandlers.length; i++) {
-      try { toolResultHandlers[i](params); } catch(e) {}
+      try { toolResultHandlers[i](wrapped); } catch(e) {}
     }
   };
 
   app.onhostcontextchanged = function(ctx) {
+    _log('hostcontextchanged', ctx);
     applyTheme(ctx.theme);
   };
 
+  // Listen for raw postMessage events as fallback diagnostic
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.jsonrpc) {
+      _log('raw postMessage', { method: event.data.method, id: event.data.id, hasResult: !!event.data.result });
+    }
+  });
+
   window.EntendiApp = {
     init: function(name, onReady) {
+      _log('init called', name);
       var transport = new McpApps.PostMessageTransport(window.parent, window);
       app.connect(transport).then(function() {
+        _log('connected', { hostCaps: app.getHostCapabilities(), hostInfo: app.getHostVersion() });
         var ctx = app.getHostContext();
         if (ctx && ctx.theme) applyTheme(ctx.theme);
         if (onReady) onReady(ctx);
       }).catch(function(err) {
-        console.error('[Entendi] App connect failed:', err);
+        _log('connect FAILED', String(err));
         if (onReady) onReady({});
       });
     },
     callTool: function(name, args) {
-      return app.callServerTool({ name: name, arguments: args || {} });
+      _log('callTool', { name: name, args: args });
+      return app.callServerTool({ name: name, arguments: args || {} }).then(function(result) {
+        _log('callTool result', result);
+        return result;
+      }).catch(function(err) {
+        _log('callTool FAILED', String(err));
+        throw err;
+      });
     },
     onToolResult: function(fn) {
       toolResultHandlers.push(fn);
@@ -37824,13 +37852,21 @@ function createEntendiServer(options) {
         description: "Report technical concepts the user is discussing or working with. The system decides whether to issue a comprehension probe. Call this after every substantive user message that involves technical concepts.",
         inputSchema: {
           concepts: external_exports3.preprocess(
-            (v) => typeof v === "string" ? JSON.parse(v) : v,
+            (v) => {
+              if (v === void 0 || v === null) return [];
+              if (typeof v === "string") try {
+                return JSON.parse(v);
+              } catch {
+                return [];
+              }
+              return v;
+            },
             external_exports3.array(external_exports3.object({
               id: external_exports3.string().describe('Kebab-case concept identifier, e.g. "react-hooks", "sql-joins", "docker-compose"'),
-              source: external_exports3.enum(["package", "ast", "llm"]).describe('How the concept was detected: "llm" if you identified it from conversation')
-            })).describe("Array of concepts the user explicitly mentioned or is working with")
+              source: external_exports3.enum(["package", "ast", "llm"]).default("llm").describe('How the concept was detected: "llm" if you identified it from conversation')
+            })).default([]).describe("Array of concepts the user explicitly mentioned or is working with")
           ),
-          triggerContext: external_exports3.string().describe('Brief description of what the user is doing, e.g. "user asked about Redis caching strategies"'),
+          triggerContext: external_exports3.string().default("(not provided)").describe('Brief description of what the user is doing, e.g. "user asked about Redis caching strategies"'),
           primaryConceptId: external_exports3.preprocess(
             (v) => v === "" || v === null ? void 0 : v,
             external_exports3.string().optional().describe('The single concept the user is most directly engaging with, e.g. "redis". Must match one of the concept ids above')
@@ -37846,6 +37882,10 @@ function createEntendiServer(options) {
       },
       async (args, extra) => {
         mcpLog("tool:entendi_observe called", args);
+        if (!args.concepts || args.concepts.length === 0) {
+          mcpLog("tool:entendi_observe skipped (no concepts)");
+          return { content: [{ type: "text", text: JSON.stringify({ shouldProbe: false, conceptsObserved: 0 }) }] };
+        }
         const progressToken = extra._meta?.progressToken;
         try {
           const result = await api.observe({
