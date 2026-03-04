@@ -134,13 +134,17 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
       description: 'Report technical concepts the user is discussing or working with. The system decides whether to issue a comprehension probe. Call this after every substantive user message that involves technical concepts.',
       inputSchema: {
         concepts: z.preprocess(
-          (v) => (typeof v === 'string' ? JSON.parse(v) : v),
+          (v) => {
+            if (v === undefined || v === null) return [];
+            if (typeof v === 'string') try { return JSON.parse(v); } catch { return []; }
+            return v;
+          },
           z.array(z.object({
             id: z.string().describe('Kebab-case concept identifier, e.g. "react-hooks", "sql-joins", "docker-compose"'),
-            source: z.enum(['package', 'ast', 'llm']).describe('How the concept was detected: "llm" if you identified it from conversation'),
-          })).describe('Array of concepts the user explicitly mentioned or is working with'),
+            source: z.enum(['package', 'ast', 'llm']).default('llm').describe('How the concept was detected: "llm" if you identified it from conversation'),
+          })).default([]).describe('Array of concepts the user explicitly mentioned or is working with'),
         ),
-        triggerContext: z.string().describe('Brief description of what the user is doing, e.g. "user asked about Redis caching strategies"'),
+        triggerContext: z.string().default('(not provided)').describe('Brief description of what the user is doing, e.g. "user asked about Redis caching strategies"'),
         primaryConceptId: z.preprocess(
           (v) => (v === '' || v === null ? undefined : v),
           z.string().optional().describe('The single concept the user is most directly engaging with, e.g. "redis". Must match one of the concept ids above'),
@@ -156,6 +160,10 @@ export function createEntendiServer(options: EntendiServerOptions): EntendiServe
     },
     async (args, extra) => {
       mcpLog('tool:entendi_observe called', args);
+      if (!args.concepts || args.concepts.length === 0) {
+        mcpLog('tool:entendi_observe skipped (no concepts)');
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ shouldProbe: false, conceptsObserved: 0 }) }] };
+      }
       const progressToken = extra._meta?.progressToken;
       try {
         const result = await api.observe({
