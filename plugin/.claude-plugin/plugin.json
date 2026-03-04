@@ -1,7 +1,7 @@
 {
   "name": "entendi",
   "description": "Comprehension accountability layer for AI-assisted work",
-  "version": "entendi-v0.4.1",
+  "version": "entendi-v0.5.0",
   "author": {
     "name": "TK"
   },
