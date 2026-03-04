@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/LemonThyme/entendi/compare/entendi-v0.5.0...entendi-v0.5.1) (2026-03-04)
+
+
+### Bug Fixes
+
+* **mcp:** fix PostMessageTransport source and include concept data in status ([#120](https://github.com/LemonThyme/entendi/issues/120)) ([f9ed3df](https://github.com/LemonThyme/entendi/commit/f9ed3df51281cabab9f365b08c4e9b3cafa90593))
+
 ## [0.5.0](https://github.com/LemonThyme/entendi/compare/entendi-v0.4.1...entendi-v0.5.0) (2026-03-04)
 
 
