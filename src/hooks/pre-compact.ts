@@ -1,5 +1,5 @@
 import { loadConfig } from '../shared/config.js';
-import { log, readStdin } from './shared.js';
+import { apiHeaders, log, readStdin } from './shared.js';
 
 /**
  * PreCompact hook — preserves critical probe/tutor state before context compaction.
@@ -16,7 +16,7 @@ async function fetchPendingState(): Promise<string | null> {
 
   try {
     const res = await fetch(`${apiUrl}/api/mcp/pending-action`, {
-      headers: { 'x-api-key': apiKey },
+      headers: apiHeaders(config),
       signal: AbortSignal.timeout(5000),
     });
 
