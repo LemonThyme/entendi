@@ -11,19 +11,26 @@ describe('status view HTML', () => {
   it('includes the shared runtime', () => {
     const html = getStatusViewHtml();
     expect(html).toContain('EntendiApp');
-    expect(html).toContain('ui/initialize');
   });
 
-  it('contains mastery display elements', () => {
+  it('has sigma overlay elements', () => {
     const html = getStatusViewHtml();
-    expect(html).toContain('overall-mastery');
-    expect(html).toContain('concept-list');
+    expect(html).toContain('sigma-overlay');
   });
 
-  it('has host theme fallback variables', () => {
+  it('has urgency-based rendering', () => {
     const html = getStatusViewHtml();
-    expect(html).toContain('--color-background-primary');
-    expect(html).toContain('--color-text-primary');
+    expect(html).toContain('urgency');
+  });
+
+  it('has weekly activity in header', () => {
+    const html = getStatusViewHtml();
+    expect(html).toContain('weeklyActivity');
+  });
+
+  it('has summary footer', () => {
+    const html = getStatusViewHtml();
+    expect(html).toContain('footer');
   });
 
   it('uses safe DOM construction', () => {
@@ -31,5 +38,11 @@ describe('status view HTML', () => {
     expect(html).toContain('createElement');
     expect(html).toContain('textContent');
     expect(html).not.toContain('innerHTML');
+  });
+
+  it('has host theme fallback variables', () => {
+    const html = getStatusViewHtml();
+    expect(html).toContain('--color-background-primary');
+    expect(html).toContain('--color-text-primary');
   });
 });
