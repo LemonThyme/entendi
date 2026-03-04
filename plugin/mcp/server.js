@@ -37644,7 +37644,7 @@ ${runtime}
 
       var name = document.createElement('span');
       name.setAttribute('class', 'concept-name');
-      name.textContent = c.name || c.conceptId || 'Unknown';
+      name.textContent = (c.name || c.id || c.conceptId || 'Unknown').replace(/-/g, ' ');
       row.appendChild(name);
 
       var barBg = document.createElement('div');
