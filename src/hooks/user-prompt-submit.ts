@@ -2,7 +2,7 @@ import { readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
-import { type HookInput, apiHeaders, log, readStdin } from './shared.js';
+import { apiHeaders, type HookInput, log, readStdin } from './shared.js';
 
 export interface UserPromptSubmitOutput {
   hookSpecificOutput?: {

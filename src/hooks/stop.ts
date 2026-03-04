@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { loadConfig } from '../shared/config.js';
-import { type HookInput, apiHeaders, log, readStdin } from './shared.js';
+import { apiHeaders, type HookInput, log, readStdin } from './shared.js';
 import { findLastUserMessage, hasObserveCallInCurrentTurn } from './transcript.js';
 import { isTrivialMessage } from './trivial.js';
 
