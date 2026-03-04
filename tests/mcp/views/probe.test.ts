@@ -13,29 +13,50 @@ describe('probe view HTML', () => {
     expect(html).toContain('EntendiApp');
   });
 
-  it('contains probe question area', () => {
+  it('is a display-only card with no input fields', () => {
     const html = getProbeViewHtml();
-    expect(html).toContain('probe-question');
+    expect(html).not.toContain('<textarea');
+    expect(html).not.toContain('<input');
+    expect(html).not.toContain('submit-btn');
   });
 
-  it('contains answer input', () => {
+  it('has mastery bar elements', () => {
     const html = getProbeViewHtml();
-    expect(html).toContain('probe-answer');
+    expect(html).toContain('mastery-bar');
+    expect(html).toContain('mastery-pct');
   });
 
-  it('contains dismiss interaction', () => {
+  it('has decay indicator element', () => {
     const html = getProbeViewHtml();
-    expect(html).toContain('entendi_dismiss');
+    expect(html).toContain('decay-indicator');
   });
 
-  it('handles no-probe state', () => {
+  it('has context line element', () => {
     const html = getProbeViewHtml();
-    expect(html).toContain('no-probe');
+    expect(html).toContain('context-line');
+  });
+
+  it('listens to ontoolresult for record_evaluation updates', () => {
+    const html = getProbeViewHtml();
+    expect(html).toContain('onToolResult');
+    expect(html).toContain('previousMastery');
+  });
+
+  it('animates mastery bar on update', () => {
+    const html = getProbeViewHtml();
+    expect(html).toContain('transition');
   });
 
   it('uses safe DOM construction', () => {
     const html = getProbeViewHtml();
     expect(html).toContain('createElement');
+    expect(html).toContain('textContent');
     expect(html).not.toContain('innerHTML');
+  });
+
+  it('has host theme fallback variables', () => {
+    const html = getProbeViewHtml();
+    expect(html).toContain('--color-background-primary');
+    expect(html).toContain('--color-text-primary');
   });
 });

@@ -2,7 +2,8 @@ import { getViewRuntime } from './runtime.js';
 
 /**
  * Status Dashboard MCP App view.
- * Shows overall mastery ring, stats row, and concept list sorted weakest-first.
+ * Shows concept rows with mastery bars + sigma confidence intervals,
+ * sorted by urgency. Header shows weekly activity. Footer shows summary counts.
  * All DOM construction uses createElement/textContent/setAttribute — no innerHTML.
  */
 export function getStatusViewHtml(): string {
@@ -23,9 +24,10 @@ export function getStatusViewHtml(): string {
     --color-text-secondary: light-dark(#6B6560, #9B9590);
     --color-accent: light-dark(#C4704B, #D4845F);
     --color-border: light-dark(#D9D4CF, #3A3733);
-    --color-green: light-dark(#4A9E6B, #5DB87E);
+    --color-green: light-dark(#2D7D46, #4CAF6A);
     --color-orange: light-dark(#C4704B, #D4845F);
-    --color-red: light-dark(#C44B4B, #D46060);
+    --color-red: light-dark(#B54040, #D45050);
+    --sigma-overlay: rgba(128, 128, 128, 0.15);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -35,48 +37,55 @@ export function getStatusViewHtml(): string {
     padding: 16px;
     line-height: 1.5;
   }
-  .header { text-align: center; margin-bottom: 16px; }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .header p { font-size: 13px; color: var(--color-text-secondary); }
-  #overall-mastery { display: flex; justify-content: center; margin-bottom: 16px; }
-  .ring-label { font-size: 24px; font-weight: 700; }
-  .stats-row {
-    display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;
+  .header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 14px;
   }
-  .stat-card {
-    background: var(--color-background-secondary);
-    border-radius: 8px; padding: 8px 16px; text-align: center;
-    border: 1px solid var(--color-border);
-  }
-  .stat-card .count { font-size: 20px; font-weight: 700; }
-  .stat-card .label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; }
-  #concept-list { display: flex; flex-direction: column; gap: 8px; }
+  .header h1 { font-size: 16px; font-weight: 600; }
+  .header-meta { font-size: 12px; color: var(--color-text-secondary); }
+  #concept-list { display: flex; flex-direction: column; gap: 6px; }
   .concept-row {
     display: flex; align-items: center; gap: 10px;
-    background: var(--color-background-secondary);
-    border-radius: 8px; padding: 10px 12px;
-    border: 1px solid var(--color-border);
+    padding: 6px 0;
   }
-  .concept-name { flex: 1; font-size: 14px; font-weight: 500; }
-  .mastery-bar-bg {
-    width: 80px; height: 6px; border-radius: 3px;
-    background: var(--color-border);
+  .concept-name {
+    flex: 0 0 120px; font-size: 13px; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .mastery-bar-fill { height: 100%; border-radius: 3px; }
-  .badge {
-    font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  .bar-container {
+    flex: 1; height: 8px; border-radius: 4px;
+    background: var(--color-border); position: relative; overflow: hidden;
   }
-  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+  .sigma-overlay {
+    position: absolute; top: 0; height: 100%;
+    background: var(--sigma-overlay); border-radius: 4px;
+  }
+  .mastery-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    border-radius: 4px; z-index: 1;
+  }
+  .mastery-pct {
+    font-size: 12px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 32px; text-align: right;
+  }
+  .footer {
+    margin-top: 14px; padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+    font-size: 11px; color: var(--color-text-secondary);
+    text-align: center;
+  }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; font-size: 13px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Mastery Status</h1>
-  <p>Your comprehension overview</p>
+  <h1>Mastery</h1>
+  <span class="header-meta" id="header-meta"></span>
 </div>
-<div id="overall-mastery"></div>
-<div class="stats-row" id="stats-row"></div>
 <div id="concept-list"><div class="loading">Loading...</div></div>
+<div id="footer" class="footer hidden"></div>
 
 <script>
 ${runtime}
@@ -94,81 +103,10 @@ ${runtime}
     return 'var(--color-red)';
   }
 
-  function badgeText(pct) {
-    if (pct >= 70) return 'Strong';
-    if (pct >= 40) return 'Growing';
-    return 'Weak';
-  }
-
-  function renderRing(container, pct) {
-    var size = 100;
-    var stroke = 8;
-    var radius = (size - stroke) / 2;
-    var circumference = 2 * Math.PI * radius;
-    var offset = circumference * (1 - pct / 100);
-
-    var ns = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('width', String(size));
-    svg.setAttribute('height', String(size));
-    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
-
-    var bgCircle = document.createElementNS(ns, 'circle');
-    bgCircle.setAttribute('cx', String(size / 2));
-    bgCircle.setAttribute('cy', String(size / 2));
-    bgCircle.setAttribute('r', String(radius));
-    bgCircle.setAttribute('fill', 'none');
-    bgCircle.setAttribute('stroke', 'var(--color-border)');
-    bgCircle.setAttribute('stroke-width', String(stroke));
-    svg.appendChild(bgCircle);
-
-    var fgCircle = document.createElementNS(ns, 'circle');
-    fgCircle.setAttribute('cx', String(size / 2));
-    fgCircle.setAttribute('cy', String(size / 2));
-    fgCircle.setAttribute('r', String(radius));
-    fgCircle.setAttribute('fill', 'none');
-    fgCircle.setAttribute('stroke', masteryColor(pct));
-    fgCircle.setAttribute('stroke-width', String(stroke));
-    fgCircle.setAttribute('stroke-dasharray', String(circumference));
-    fgCircle.setAttribute('stroke-dashoffset', String(offset));
-    fgCircle.setAttribute('stroke-linecap', 'round');
-    fgCircle.setAttribute('transform', 'rotate(-90 ' + size / 2 + ' ' + size / 2 + ')');
-    svg.appendChild(fgCircle);
-
-    var text = document.createElementNS(ns, 'text');
-    text.setAttribute('x', '50%');
-    text.setAttribute('y', '50%');
-    text.setAttribute('dominant-baseline', 'central');
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('fill', 'var(--color-text-primary)');
-    text.setAttribute('font-size', '24');
-    text.setAttribute('font-weight', '700');
-    text.textContent = Math.round(pct) + '%';
-    svg.appendChild(text);
-
-    container.appendChild(svg);
-  }
-
-  function renderStats(container, strong, growing, weak) {
-    var items = [
-      { count: strong, label: 'Strong', color: 'var(--color-green)' },
-      { count: growing, label: 'Growing', color: 'var(--color-orange)' },
-      { count: weak, label: 'Weak', color: 'var(--color-red)' }
-    ];
-    items.forEach(function(item) {
-      var card = document.createElement('div');
-      card.setAttribute('class', 'stat-card');
-      var countEl = document.createElement('div');
-      countEl.setAttribute('class', 'count');
-      countEl.setAttribute('style', 'color: ' + item.color);
-      countEl.textContent = String(item.count);
-      var labelEl = document.createElement('div');
-      labelEl.setAttribute('class', 'label');
-      labelEl.textContent = item.label;
-      card.appendChild(countEl);
-      card.appendChild(labelEl);
-      container.appendChild(card);
-    });
+  function sigmaRange(mu, sigma) {
+    var lo = pMastery(mu - 2 * sigma) * 100;
+    var hi = pMastery(mu + 2 * sigma) * 100;
+    return { lo: Math.max(0, lo), hi: Math.min(100, hi) };
   }
 
   function renderConcepts(container, concepts) {
@@ -180,29 +118,48 @@ ${runtime}
       container.appendChild(empty);
       return;
     }
+
     concepts.forEach(function(c) {
       var pct = Math.round(pMastery(c.mu || 0) * 100);
+      var range = sigmaRange(c.mu || 0, c.sigma || 0.5);
+      var color = masteryColor(pct);
+      var urgency = c.urgency || 0;
+
       var row = document.createElement('div');
       row.setAttribute('class', 'concept-row');
 
-      var name = document.createElement('span');
-      name.setAttribute('class', 'concept-name');
-      name.textContent = (c.name || c.id || c.conceptId || 'Unknown').replace(/-/g, ' ');
-      row.appendChild(name);
+      // Name
+      var nameEl = document.createElement('span');
+      nameEl.setAttribute('class', 'concept-name');
+      nameEl.textContent = (c.id || c.name || 'Unknown').replace(/-/g, ' ');
+      // Warm tint for high-urgency concepts
+      if (urgency > 0.6) {
+        nameEl.setAttribute('style', 'color: ' + color);
+      }
+      row.appendChild(nameEl);
 
-      var barBg = document.createElement('div');
-      barBg.setAttribute('class', 'mastery-bar-bg');
-      var barFill = document.createElement('div');
-      barFill.setAttribute('class', 'mastery-bar-fill');
-      barFill.setAttribute('style', 'width: ' + pct + '%; background: ' + masteryColor(pct));
-      barBg.appendChild(barFill);
-      row.appendChild(barBg);
+      // Bar with sigma overlay
+      var barContainer = document.createElement('div');
+      barContainer.setAttribute('class', 'bar-container');
 
-      var badge = document.createElement('span');
-      badge.setAttribute('class', 'badge');
-      badge.setAttribute('style', 'color: ' + masteryColor(pct) + '; background: ' + masteryColor(pct) + '20');
-      badge.textContent = badgeText(pct);
-      row.appendChild(badge);
+      var sigmaEl = document.createElement('div');
+      sigmaEl.setAttribute('class', 'sigma-overlay');
+      sigmaEl.setAttribute('style', 'left: ' + range.lo + '%; width: ' + (range.hi - range.lo) + '%');
+      barContainer.appendChild(sigmaEl);
+
+      var fill = document.createElement('div');
+      fill.setAttribute('class', 'mastery-fill');
+      fill.setAttribute('style', 'width: ' + pct + '%; background: ' + color);
+      barContainer.appendChild(fill);
+
+      row.appendChild(barContainer);
+
+      // Percentage
+      var pctEl = document.createElement('span');
+      pctEl.setAttribute('class', 'mastery-pct');
+      pctEl.setAttribute('style', 'color: ' + color);
+      pctEl.textContent = pct + '%';
+      row.appendChild(pctEl);
 
       container.appendChild(row);
     });
@@ -211,28 +168,30 @@ ${runtime}
   function handleStatusData(data) {
     if (!data) return;
     var concepts = data.concepts || [];
-    concepts.sort(function(a, b) { return (a.mu || 0) - (b.mu || 0); });
 
-    var totalMastery = 0;
-    var strong = 0, growing = 0, weak = 0;
-    concepts.forEach(function(c) {
-      var pct = pMastery(c.mu || 0) * 100;
-      totalMastery += pct;
-      if (pct >= 70) strong++;
-      else if (pct >= 40) growing++;
-      else weak++;
-    });
-    var avgMastery = concepts.length > 0 ? totalMastery / concepts.length : 0;
-
-    var ringEl = document.getElementById('overall-mastery');
-    while (ringEl.firstChild) ringEl.removeChild(ringEl.firstChild);
-    renderRing(ringEl, avgMastery);
-
-    var statsEl = document.getElementById('stats-row');
-    while (statsEl.firstChild) statsEl.removeChild(statsEl.firstChild);
-    renderStats(statsEl, strong, growing, weak);
+    // Sort by urgency descending (already sorted by API, but ensure)
+    concepts.sort(function(a, b) { return (b.urgency || 0) - (a.urgency || 0); });
 
     renderConcepts(document.getElementById('concept-list'), concepts);
+
+    // Header meta
+    var meta = document.getElementById('header-meta');
+    if (data.overview && data.overview.weeklyActivity != null) {
+      meta.textContent = data.overview.weeklyActivity + ' assessments this week';
+    }
+
+    // Footer
+    var footer = document.getElementById('footer');
+    var total = concepts.length;
+    var strong = 0, weak = 0;
+    concepts.forEach(function(c) {
+      var pct = pMastery(c.mu || 0) * 100;
+      if (pct >= 70) strong++;
+      else if (pct < 40) weak++;
+    });
+    footer.textContent = total + ' concept' + (total !== 1 ? 's' : '') +
+      ' \\u00b7 ' + strong + ' mastered \\u00b7 ' + weak + ' weak';
+    footer.setAttribute('class', 'footer');
   }
 
   EntendiApp.onToolResult(function(params) {
@@ -247,7 +206,7 @@ ${runtime}
             }
           }
         }
-      } catch (e) { /* ignore parse errors */ }
+      } catch (e) { /* ignore */ }
     }
   });
 

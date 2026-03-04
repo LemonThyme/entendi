@@ -1,8 +1,9 @@
 import { getViewRuntime } from './runtime.js';
 
 /**
- * ZPD Frontier MCP App view.
- * Shows learning frontier concepts sorted by readiness, with "Start Learning" buttons.
+ * Learning Frontier MCP App view.
+ * Shows top concepts the user is ready to learn, sorted by info-gain.
+ * "Start Learning" injects a chat message via sendMessage.
  * All DOM construction uses createElement/textContent/setAttribute — no innerHTML.
  */
 export function getFrontierViewHtml(): string {
@@ -23,8 +24,7 @@ export function getFrontierViewHtml(): string {
     --color-text-secondary: light-dark(#6B6560, #9B9590);
     --color-accent: light-dark(#C4704B, #D4845F);
     --color-border: light-dark(#D9D4CF, #3A3733);
-    --color-green: light-dark(#4A9E6B, #5DB87E);
-    --color-orange: light-dark(#C4704B, #D4845F);
+    --color-green: light-dark(#2D7D46, #4CAF6A);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -34,46 +34,52 @@ export function getFrontierViewHtml(): string {
     padding: 16px;
     line-height: 1.5;
   }
-  .header { margin-bottom: 16px; }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .header p { font-size: 13px; color: var(--color-text-secondary); }
-  #frontier-list { display: flex; flex-direction: column; gap: 10px; }
+  .header { margin-bottom: 14px; }
+  .header h1 { font-size: 16px; font-weight: 600; }
+  .header p { font-size: 12px; color: var(--color-text-secondary); }
+  #frontier-list { display: flex; flex-direction: column; gap: 8px; }
   .frontier-card {
     background: var(--color-background-secondary);
     border: 1px solid var(--color-border);
-    border-radius: 10px; padding: 14px;
-    display: flex; align-items: center; gap: 12px;
+    border-radius: 10px; padding: 12px 14px;
   }
-  .card-info { flex: 1; }
-  .card-name { font-size: 15px; font-weight: 600; }
-  .card-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  .importance-tag {
-    font-size: 11px; padding: 2px 8px; border-radius: 10px;
-    font-weight: 600; text-transform: capitalize;
+  .card-top { display: flex; justify-content: space-between; align-items: center; }
+  .card-name { font-size: 14px; font-weight: 600; }
+  .card-meta {
+    font-size: 11px; color: var(--color-text-secondary);
+    margin-top: 4px;
   }
-  .readiness { font-size: 12px; color: var(--color-text-secondary); }
+  .info-gain {
+    font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px;
+  }
   .start-btn {
-    background: var(--color-accent); color: #fff;
-    border: none; border-radius: 8px;
-    padding: 8px 16px; font-size: 13px; font-weight: 600;
-    cursor: pointer; white-space: nowrap;
-    transition: opacity 0.15s;
+    display: inline-block; margin-top: 8px;
+    background: none; color: var(--color-accent);
+    border: none; font-size: 13px; font-weight: 600;
+    cursor: pointer; padding: 0;
   }
-  .start-btn:hover { opacity: 0.85; }
-  .start-btn:disabled { opacity: 0.5; cursor: default; }
+  .start-btn:hover { text-decoration: underline; }
+  .start-btn:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+  #more-count {
+    margin-top: 10px; font-size: 12px;
+    color: var(--color-text-secondary); text-align: center;
+  }
   .empty-state {
-    text-align: center; padding: 40px 16px;
-    color: var(--color-text-secondary); font-size: 14px;
+    text-align: center; padding: 32px 16px;
+    color: var(--color-text-secondary); font-size: 13px;
   }
-  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; }
+  .loading { text-align: center; color: var(--color-text-secondary); padding: 40px; font-size: 13px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Learning Frontier</h1>
-  <p>Concepts you are ready to learn next</p>
+  <h1>Ready to Learn</h1>
+  <p>Concepts with the highest learning potential</p>
 </div>
 <div id="frontier-list"><div class="loading">Loading...</div></div>
+<div id="more-count" class="hidden"></div>
 
 <script>
 ${runtime}
@@ -81,10 +87,12 @@ ${runtime}
 (function() {
   'use strict';
 
-  function importanceColor(importance) {
-    if (importance === 'core') return 'var(--color-accent)';
-    if (importance === 'supporting') return 'var(--color-orange)';
-    return 'var(--color-text-secondary)';
+  var MAX_SHOWN = 5;
+
+  function infoGainLevel(fisherInfo) {
+    if (fisherInfo > 0.5) return { label: 'High info-gain', color: 'var(--color-green)' };
+    if (fisherInfo > 0.2) return { label: 'Medium gain', color: 'var(--color-accent)' };
+    return { label: 'Low gain', color: 'var(--color-text-secondary)' };
   }
 
   function renderFrontier(container, concepts) {
@@ -93,69 +101,79 @@ ${runtime}
     if (!concepts || concepts.length === 0) {
       var empty = document.createElement('div');
       empty.setAttribute('class', 'empty-state');
-      empty.textContent = 'No frontier concepts available. Keep working to discover new topics!';
+      empty.textContent = 'No frontier concepts available. Keep learning!';
       container.appendChild(empty);
       return;
     }
 
-    concepts.forEach(function(c) {
+    var shown = concepts.slice(0, MAX_SHOWN);
+    var remaining = concepts.length - shown.length;
+
+    shown.forEach(function(c) {
       var card = document.createElement('div');
       card.setAttribute('class', 'frontier-card');
 
-      var info = document.createElement('div');
-      info.setAttribute('class', 'card-info');
+      var top = document.createElement('div');
+      top.setAttribute('class', 'card-top');
 
-      var name = document.createElement('div');
-      name.setAttribute('class', 'card-name');
-      name.textContent = c.name || c.conceptId || 'Unknown';
-      info.appendChild(name);
+      var nameEl = document.createElement('span');
+      nameEl.setAttribute('class', 'card-name');
+      nameEl.textContent = (c.conceptId || '').replace(/-/g, ' ');
+      top.appendChild(nameEl);
 
-      var meta = document.createElement('div');
-      meta.setAttribute('class', 'card-meta');
+      var gainInfo = infoGainLevel(c.fisherInfo || 0);
+      var gainEl = document.createElement('span');
+      gainEl.setAttribute('class', 'info-gain');
+      gainEl.setAttribute('style', 'color: ' + gainInfo.color + '; background: ' + gainInfo.color + '15');
+      gainEl.textContent = gainInfo.label;
+      top.appendChild(gainEl);
 
-      if (c.importance) {
-        var tag = document.createElement('span');
-        tag.setAttribute('class', 'importance-tag');
-        var tagColor = importanceColor(c.importance);
-        tag.setAttribute('style', 'color: ' + tagColor + '; background: ' + tagColor + '20');
-        tag.textContent = c.importance;
-        meta.appendChild(tag);
+      card.appendChild(top);
+
+      // Meta line
+      var metaEl = document.createElement('div');
+      metaEl.setAttribute('class', 'card-meta');
+      var parts = [];
+      if (c.assessmentCount > 0) {
+        parts.push('Assessed ' + c.assessmentCount + '\\u00d7');
+      } else {
+        parts.push('Not yet assessed');
       }
+      if (c.domain) {
+        parts.push(c.domain);
+      }
+      metaEl.textContent = parts.join(' \\u00b7 ');
+      card.appendChild(metaEl);
 
-      var readiness = document.createElement('span');
-      readiness.setAttribute('class', 'readiness');
-      var readinessPct = Math.round((c.readiness || 0) * 100);
-      readiness.textContent = readinessPct + '% ready';
-      meta.appendChild(readiness);
-
-      info.appendChild(meta);
-      card.appendChild(info);
-
+      // Start Learning link
       var btn = document.createElement('button');
       btn.setAttribute('class', 'start-btn');
-      btn.textContent = 'Start Learning';
+      btn.textContent = 'Start Learning \\u2192';
       btn.addEventListener('click', function() {
         btn.disabled = true;
         btn.textContent = 'Starting...';
-        EntendiApp.callTool('entendi_start_tutor', {
-          conceptId: c.conceptId || c.id
-        }).then(function() {
-          btn.textContent = 'Started!';
-        }).catch(function() {
-          btn.disabled = false;
-          btn.textContent = 'Start Learning';
+        EntendiApp.sendMessage({
+          role: 'user',
+          content: [{ type: 'text', text: 'Teach me about ' + (c.conceptId || '').replace(/-/g, ' ') }]
         });
       });
       card.appendChild(btn);
 
       container.appendChild(card);
     });
+
+    // Show remaining count
+    if (remaining > 0) {
+      var moreEl = document.getElementById('more-count');
+      moreEl.textContent = remaining + ' more concept' + (remaining !== 1 ? 's' : '') + ' available';
+      moreEl.setAttribute('class', '');
+    }
   }
 
   function handleFrontierData(data) {
     if (!data) return;
     var concepts = data.frontier || data.concepts || [];
-    concepts.sort(function(a, b) { return (b.readiness || 0) - (a.readiness || 0); });
+    // Already sorted by API (assessed first, then by Fisher info desc)
     renderFrontier(document.getElementById('frontier-list'), concepts);
   }
 
@@ -171,7 +189,7 @@ ${runtime}
             }
           }
         }
-      } catch (e) { /* ignore parse errors */ }
+      } catch (e) { /* ignore */ }
     }
   });
 
