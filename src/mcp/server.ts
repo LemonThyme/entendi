@@ -8,9 +8,9 @@ import { join } from 'path';
 import { z } from 'zod';
 import { loadConfig, saveConfig } from '../shared/config.js';
 import { EntendiApiClient } from './api-client.js';
-import { getStatusViewHtml } from './views/status.js';
 import { getFrontierViewHtml } from './views/frontier.js';
 import { getProbeViewHtml } from './views/probe.js';
+import { getStatusViewHtml } from './views/status.js';
 
 const MCP_LOG_DIR = join(homedir(), '.entendi');
 const MCP_LOG_FILE = join(MCP_LOG_DIR, 'debug.log');

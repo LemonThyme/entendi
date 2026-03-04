@@ -976,7 +976,6 @@ body {
 }
 .wizard-editor-tab:hover { color: var(--text); }
 .wizard-editor-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.wizard-editor-pane { }
 .btn-cursor-install {
   display: block; text-align: center; padding: 0.65rem 1.5rem;
   background: var(--accent); color: #fff; border-radius: 6px;
@@ -984,7 +983,6 @@ body {
   font-family: var(--font-body); transition: opacity 0.15s;
 }
 .btn-cursor-install:hover { opacity: 0.85; }
-.wizard-key-reveal { }
 .wizard-key-box { margin-top: 0.75rem; }
 .wizard-key-value { font-size: 0.8rem; word-break: break-all; }
 .wizard-manual-setup { margin-top: 0.75rem; }
